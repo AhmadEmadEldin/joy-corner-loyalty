@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "joycornerapp",
+  "private_key_id": "7f45c9e924bf7224b6fb020f8ddcfa87119cc4af",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCjrsvhCkJE4ba/\nJqj7lvO69IR36prVCRlAuwgLOaZoHqEnYnkyOuiiZ/LVF5ShVxNiBSqJ6zYMlNqm\nagGPSFR3yB8GNRAoW88m5mM8PCZC8CxDKjhpAlAplv18K7n1PGNHLJFcWypC1pw+\nwApGjKidcateGkIsNDcG49Rc2D8UjdEMc9GUltz/afUvdvccgvYBHWDkolur0nzh\nojAbW2PCp+jlcKSGvuqBZd8d6G2AwmbiSMYFGbsSxBmErVIrBh9snHC2hIyeASy5\npfIxrBLFY51GrHoVgL10HQLZjxm2AW27t7LcOJv6KtjW9WiovDnjfFofZ8+BS2Qu\nnGDPOHZRAgMBAAECggEARb5Cj+JTp073k44w/XZt5rCuSvwzOee1E2A+Bq5rSb0X\nVJVAZ9cy7ZRWI1b3VSGpmB/0ZqzKrGS2n6bWgEtE9n7WPUpZ1qB77SrIiM9mTCpS\n6dFxFMlQB9CWtJRbGXPAJ4EFdPFBWhZgn9oq5rGjXOakqqWMoZIkCjMEdwULJ8Gx\nHCOwMN1sOdJwB9n2M+XGuY7vT4AaNgSyiBNNHvq6ELcj9A9aj3jXYCg6n5G3XiJN\nxN0SIB+Ik+y5urrtC01Ut/7KSZxvA27rfqKZgKHAWwZ5gsS+Fde5eaNvMp8FZnH5\ns/5gFE85b+jm/I/8Ip3kjhlvp584zeFI7sHFmWteKwKBgQDR4fjOpwPUtDtlYfe+\nGjVKdlAwPW1FNBL6+O1svzQZ74EyHyWEi/o/V3WsmCE71ysKeH++AGFMPnDoDfZW\nBGuOuTyPwgC0sMFoP08Dz5oDMsSGRv/nyp9pwRkmz9DI1Kp85NiXJsBwjA7exEwo\nXeomYoZj4T54S7rHL9v4vVCtGwKBgQDHpg1YifjfygEwKyJ5TESBh1k1KNxSHZFF\nNBHYJRb+GxGouTMIC2wK3masBbaOMAcRnQm/+4BAjnJpeAdmgsx0etoMP/sAovgr\nXEq/B8pe2Ml8JstfC4LUSPOdt2OaQgDxZhrifzVUx3xHUuTe4/JGled5i37m/0YQ\nclWjPYU9AwKBgQCF9Fe8bVRAmZefKVvZdRi2IbUkVNA87vN+Qwol8hLqyrYGq2Ji\nqoRZkRSFx8LOUpIh6K5/MfbnlqKxONgUJlYPjaJdjlCtAnMuedmQcRu3FtvfZ8lE\nw0njUV8gKlrzEuiNNfIW5qDENF/5Rgfla6taPF/Rt50LYiofnygiJZIsKQKBgQCC\nNcuofjwCAOaresZ+I/7eF99Xq3GeYMhZQS+OMAqB6jenOjqNOZ3arNh7wzIgJDTI\nCQrN2oL4F6+JGA6DjjU4ltNVf/j9nkyLQyNA2hzjpTIrtcWYFJLcT0QMDgp5Fik1\nR+mq5VpsE7r7bZX1xOdDoAsbG57Fm6IfoeI2mC4o7wKBgQCxioviJElfQZT0pnqA\ny372ngNPzVB26Ael8SMTggM8oV0eldYPjFIgrFQqie7t2rq9bYGlB/HUuRjVQux3\n9UNSvjngdR4LFRvicN2N0dx8IsqcyeLt2uoxkm8NDd+tDfo4sFhN1yiyYWG78w5s\n5V5R4Z7cdejfu207INMqBRuW5w==\n-----END PRIVATE KEY-----\n",
+  "client_email": "sheets-backend-local@joycornerapp.iam.gserviceaccount.com",
+  "client_id": "111643685768739819699",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/sheets-backend-local%40joycornerapp.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
