@@ -1,29 +1,23 @@
-# Joy Corner Apps Script Backend
+# Joy Corner Apps Script Notes
 
-This folder contains the Google Apps Script backend for the Joy Corner React staff app. It connects the frontend to Google Sheets.
+The Joy Corner app now runs as a standalone React/Vercel app.
 
-## Files
+Current live backend:
 
-- `Code.gs` - backend actions and JSON API connected to the Google Sheet.
+- Vercel function entry: `api/index.js`
+- Google Sheets/Firebase backend: `server/googleSheetsBackend.ts`
+- Frontend: `src/app.tsx`
 
-## Deploy
+Apps Script deployment is no longer required for the live Vercel app.
 
-1. Open your Apps Script project.
-2. Replace the current `Code.gs` content with `apps-script/Code.gs`.
-3. Deploy as **Web app**.
-4. Set **Execute as** to your account.
-5. Set **Who has access** to the staff access level you want.
-6. Copy the deployed `/exec` URL into `GOOGLE_APPS_SCRIPT_WEB_APP_URL` in the root `.env` file.
+## What To Keep Here
 
-The API URL works like this:
+This folder may still contain local, ignored service-account JSON files on your
+computer. They are for local development only and must not be committed to Git.
 
-```text
-https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?action=appData
-```
+## If You Still Have An Old Apps Script Deployment
 
-The `appData` action returns dashboard, customers, orders, menu, rewards,
-winners, vouchers, unpaid tracker, payments, and redemptions.
+You can leave it alone, but the Vercel app does not use it. If you want to avoid
+confusion, open Apps Script and disable/delete the old web app deployment.
 
-## Frontend Choice
-
-Use the React app from VS Code as the main staff interface. Apps Script remains only the backend that reads and writes Google Sheets. This avoids maintaining two different screens and fixes the mismatch between the VS Code viewer and the deployed Script page.
+Do not paste service-account JSON into Apps Script for this Vercel version.
