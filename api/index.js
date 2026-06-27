@@ -6,11 +6,13 @@ module.exports = async (request, response) => {
     const payload = request.method === "GET"
       ? { ...(request.query || {}) }
       : request.body || {};
+    payload.authorization = request.headers.authorization || "";
     const action = String(payload.action || "appData").trim();
 
     response.status(200).json(await handleAction(action, payload));
   } catch (error) {
-    response.status(400).json({
+    console.error("API action failed", error instanceof Error ? error.message : String(error));
+    response.status(error?.statusCode || 400).json({
       success: false,
       message: error instanceof Error ? error.message : String(error),
     });

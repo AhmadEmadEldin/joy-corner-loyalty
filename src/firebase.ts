@@ -98,7 +98,7 @@ export async function signUpStaff(
 ) {
   if (!auth) throw new Error("Firebase is not configured yet.");
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  return await ensureStaffProfile(credential.user, displayName, requestedRole);
+  return await ensureStaffProfile(credential.user, displayName, requestedRole, true);
 }
 
 export async function signOutStaff() {
@@ -110,10 +110,11 @@ async function ensureStaffProfile(
   user: User,
   displayName = "",
   requestedRole: StaffRole = "waiter",
+  createMissing = false,
 ) {
   if (!db) throw new Error("Firestore is not configured yet.");
 
-  const profileRef = doc(db, "staffUsers", user.uid);
+  const profileRef = doc(db, "users", user.uid);
   const snapshot = await getDoc(profileRef);
   const email = user.email || "";
 
@@ -135,11 +136,15 @@ async function ensureStaffProfile(
     uid: user.uid,
   };
 
-  await setDoc(profileRef, {
-    ...profile,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  if (createMissing) {
+    await setDoc(profileRef, {
+      active: true,
+      name: profile.displayName,
+      ...profile,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   return profile;
 }

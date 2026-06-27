@@ -394,6 +394,7 @@ export function App() {
         setStatus(`Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`);
       }
     } catch (error) {
+      console.error("Failed to load app data", error);
       if (!data) {
         setData(ensureConnectedData(demoData));
       }
@@ -425,6 +426,7 @@ export function App() {
       setData(nextData);
       setStatus(`${message} ${dataSummary(nextData)}`);
     } catch (error) {
+      console.error(`Action ${action} failed`, error);
       setStatus(errorMessage(error));
     } finally {
       setLoading(false);
@@ -2344,6 +2346,9 @@ async function callServer(
           devUid: staffProfile.uid,
         }
       : {};
+  const headers = {
+    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+  };
   const response =
     action === "appData" || action === "getAppData"
       ? await fetch(
@@ -2354,15 +2359,23 @@ async function callServer(
               Object.entries(authPayload).map(([key, value]) => [key, String(value)]),
             ),
           }).toString()}`,
+          { headers },
         )
       : await fetch(API_BASE_URL, {
           body: JSON.stringify({ action, idToken, ...authPayload, ...payload }),
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          headers: { "Content-Type": "text/plain;charset=utf-8", ...headers },
           method: "POST",
         });
 
   if (!response.ok) {
-    throw new Error(`API failed with status ${response.status}.`);
+    let message = `API failed with status ${response.status}.`;
+    try {
+      const errorJson = (await response.clone().json()) as ApiResponse;
+      message = errorJson.message || message;
+    } catch {
+      // Keep the status fallback when the server does not return JSON.
+    }
+    throw new Error(message);
   }
 
   const json = (await response.json()) as ApiResponse & AppData;

@@ -9,9 +9,7 @@ import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config();
 
-const SPREADSHEET_ID =
-  process.env.GOOGLE_SHEETS_SPREADSHEET_ID ||
-  "1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8";
+const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "";
 
 const SHEETS = {
   dashboard: "Dashboard",
@@ -46,6 +44,7 @@ const ROLE_ACTIONS: Record<string, string[]> = {
   cashier: [
     "appData",
     "getAppData",
+    "debugSheets",
     "addCustomer",
     "addOrder",
     "addReceipt",
@@ -67,10 +66,28 @@ const ROLE_ACTIONS: Record<string, string[]> = {
 
 const REWARD_THRESHOLD = 5;
 const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 3001);
+const VALID_ROLES = new Set(Object.keys(ROLE_ACTIONS));
 
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
-type Actor = { displayName?: string; email: string; role: string; uid: string };
+type Actor = {
+  active?: boolean;
+  displayName?: string;
+  email: string;
+  profileFound?: boolean;
+  role: string;
+  uid: string;
+};
+
+class ApiError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
 
 let sheetsClientPromise: Promise<sheets_v4.Sheets> | null = null;
 
@@ -95,7 +112,7 @@ function firebaseCredential() {
     process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
 
   if (json) {
-    return cert(JSON.parse(json));
+    return cert(parseServiceAccountJson_(json, "FIREBASE_SERVICE_ACCOUNT_JSON"));
   }
 
   if (file) {
@@ -111,15 +128,28 @@ function googleServiceAccount() {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  if (json) return JSON.parse(json);
+  if (!SPREADSHEET_ID) {
+    throw new ApiError("Missing GOOGLE_SHEETS_SPREADSHEET_ID.", 500);
+  }
+
+  if (json) return parseServiceAccountJson_(json, "GOOGLE_SERVICE_ACCOUNT_JSON");
   if (file) return JSON.parse(readFileSync(file, "utf8"));
   if (clientEmail && privateKey) {
     return { client_email: clientEmail, private_key: privateKey };
   }
 
-  throw new Error(
-    "Google Sheets credentials are missing. Set GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SERVICE_ACCOUNT_KEY_FILE, or GOOGLE_CLIENT_EMAIL/GOOGLE_PRIVATE_KEY.",
+  throw new ApiError(
+    "Missing GOOGLE_SERVICE_ACCOUNT_JSON.",
+    500,
   );
+}
+
+function parseServiceAccountJson_(json: string, name: string) {
+  try {
+    return JSON.parse(json);
+  } catch {
+    throw new ApiError(`${name} is not valid JSON.`, 500);
+  }
 }
 
 async function getSheetsClient() {
@@ -155,11 +185,21 @@ function columnLetter(index: number) {
 
 async function getSheetValues(sheetName: string) {
   const sheets = await getSheetsClient();
-  const response = await sheets.spreadsheets.values.get({
-    range: `${quotedSheet(sheetName)}!A:ZZ`,
-    spreadsheetId: SPREADSHEET_ID,
-    valueRenderOption: "FORMATTED_VALUE",
-  });
+  let response;
+
+  try {
+    response = await sheets.spreadsheets.values.get({
+      range: `${quotedSheet(sheetName)}!A:ZZ`,
+      spreadsheetId: SPREADSHEET_ID,
+      valueRenderOption: "FORMATTED_VALUE",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Unable to parse range|not found|Unable to parse/i.test(message)) {
+      throw new ApiError(`Google Sheet tab missing: ${sheetName}`, 500);
+    }
+    throw new ApiError(`Google Sheet read failed for ${sheetName}.`, 500);
+  }
 
   return (response.data.values || []).map((row) =>
     row.map((value) => clean_(value)),
@@ -263,6 +303,22 @@ async function writeObjectRow(sheetName: string, record: Payload) {
 }
 
 export async function handleAction(action: string, payload: Payload) {
+  if (action === "debugAuth") {
+    const actor = await authorizeAction("appData", payload);
+    return success_({
+      uid: actor.uid,
+      email: actor.email,
+      profileFound: Boolean(actor.profileFound),
+      role: actor.role,
+      active: actor.active !== false,
+    });
+  }
+
+  if (action === "debugSheets") {
+    await authorizeAction("debugSheets", payload);
+    return await debugSheets();
+  }
+
   const actor = await authorizeAction(action, payload);
 
   switch (action) {
@@ -312,7 +368,7 @@ export async function handleAction(action: string, payload: Payload) {
 }
 
 async function authorizeAction(action: string, payload: Payload): Promise<Actor> {
-  const idToken = clean_(payload.idToken);
+  const idToken = tokenFromPayload_(payload);
   const localDevAuth = clean_(process.env.LOCAL_DEV_AUTH).toLowerCase() === "true";
 
   if (!idToken && localDevAuth) {
@@ -324,23 +380,33 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
     }
 
     return {
+      active: true,
       email: clean_(payload.devEmail || "local@joycorner.local"),
+      profileFound: true,
       role,
       uid: clean_(payload.devUid || "local-dev"),
     };
   }
 
-  if (!idToken) throw new Error("Firebase sign-in is required.");
+  if (!idToken) throw new ApiError("Missing Firebase token", 401);
 
   initFirebaseAdmin();
-  const decoded = await getAuth().verifyIdToken(idToken);
+  let decoded;
+
+  try {
+    decoded = await getAuth().verifyIdToken(idToken);
+  } catch (error) {
+    safeServerError_("Invalid Firebase token", error);
+    throw new ApiError("Invalid Firebase token", 401);
+  }
+
   const email = clean_(decoded.email).toLowerCase();
   const uid = clean_(decoded.uid);
   const actor = await staffActorForUser(uid, email);
   const allowed = ROLE_ACTIONS[actor.role] || [];
 
   if (!allowed.includes("*") && !allowed.includes(action)) {
-    throw new Error(`Role ${actor.role} cannot run action ${action}.`);
+    throw new ApiError("Role not allowed", 403);
   }
 
   return actor;
@@ -352,18 +418,46 @@ async function staffActorForUser(uid: string, email: string): Promise<Actor> {
     .map((value) => clean_(value).toLowerCase())
     .filter(Boolean);
 
-  if (ownerEmails.includes(email)) return { email, role: "owner", uid };
+  if (ownerEmails.includes(email)) {
+    return { active: true, email, profileFound: true, role: "owner", uid };
+  }
+
+  const firestoreProfile = await staffProfileFromFirestore(uid, email);
+  if (firestoreProfile) return { email, uid, ...firestoreProfile };
 
   const sheetProfile = await staffProfileFromSheet(uid, email);
   if (sheetProfile) return { email, uid, ...sheetProfile };
 
+  throw new ApiError("No staff profile found. Contact owner.", 403);
+}
+
+async function staffProfileFromFirestore(uid: string, email: string) {
   try {
-    const snapshot = await getFirestore().collection("staffUsers").doc(uid).get();
-    const role = snapshot.exists ? snapshot.data()?.role : "";
-    const displayName = snapshot.exists ? clean_(snapshot.data()?.displayName) : "";
-    return { displayName, email, role: normalizeRole_(role), uid };
-  } catch {
-    return { email, role: "waiter", uid };
+    const snapshot = await getFirestore().collection("users").doc(uid).get();
+    if (!snapshot.exists) return null;
+
+    const data = snapshot.data() || {};
+    const profileEmail = clean_(data.email || email).toLowerCase();
+    const active = activeValue_(data.active);
+    const role = clean_(data.role).toLowerCase();
+
+    if (profileEmail && profileEmail !== email) {
+      throw new ApiError("Staff profile email does not match signed-in user.", 403);
+    }
+
+    if (!active) throw new ApiError("Staff account inactive.", 403);
+    if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.", 403);
+
+    return {
+      active,
+      displayName: clean_(data.name || data.displayName || profileEmail),
+      profileFound: true,
+      role,
+    };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    safeServerError_("Firestore staff profile read failed", error);
+    return null;
   }
 }
 
@@ -386,14 +480,17 @@ async function staffProfileFromSheet(uid: string, email: string) {
 
   if (!row) return null;
 
-  const status = clean_(row.active || row.status || row.enabled || "Yes").toLowerCase();
-  if (["no", "false", "disabled", "inactive", "blocked"].includes(status)) {
-    throw new Error("This staff account is disabled.");
-  }
+  const active = activeValue_(row.active ?? row.status ?? row.enabled ?? true);
+  if (!active) throw new ApiError("Staff account inactive.", 403);
+
+  const role = clean_(row.role || row.staffRole || row.accessRole).toLowerCase();
+  if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.", 403);
 
   return {
+    active,
     displayName: staffDisplayName_(row) || email,
-    role: normalizeRole_(row.role || row.staffRole || row.accessRole),
+    profileFound: true,
+    role,
   };
 }
 
@@ -1029,6 +1126,46 @@ async function customerHistory(customerId: string) {
 async function historyDays() {
   const data = await buildAppData();
   return buildHistory_(data.orders || [], data.payments || [], data.redemptions || []).days;
+}
+
+async function debugSheets() {
+  const sheets = await getSheetsClient();
+  const metadata = await sheets.spreadsheets.get({
+    fields: "sheets.properties.title",
+    spreadsheetId: SPREADSHEET_ID,
+  });
+  const sheetTabsFound = (metadata.data.sheets || [])
+    .map((sheet) => clean_(sheet.properties?.title))
+    .filter(Boolean);
+  const rowsCountByTab: Record<string, number> = {};
+
+  for (const sheetName of [
+    SHEETS.menu,
+    SHEETS.customers,
+    SHEETS.orders,
+    SHEETS.payments,
+    SHEETS.rewards,
+    SHEETS.loyaltyWinners,
+    SHEETS.staffUsers,
+  ]) {
+    if (!sheetTabsFound.includes(sheetName)) {
+      rowsCountByTab[sheetName] = -1;
+      continue;
+    }
+    rowsCountByTab[sheetName] = Math.max(0, (await getSheetValues(sheetName)).length - 1);
+  }
+
+  return success_({
+    spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
+    serviceAccountPresent: Boolean(
+      process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+        process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
+        (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
+    ),
+    spreadsheetId: maskId_(SPREADSHEET_ID),
+    sheetTabsFound,
+    rowsCountByTab,
+  });
 }
 
 async function dayHistory(dateKey: string) {
@@ -2266,6 +2403,41 @@ function normalizeRole_(role: unknown) {
   return ROLE_ACTIONS[value] ? value : "waiter";
 }
 
+function tokenFromPayload_(payload: Payload) {
+  const direct = clean_(payload.idToken || payload.token);
+  if (direct) return direct;
+
+  const authorization = clean_(
+    payload.authorization || payload.Authorization || payload.authHeader,
+  );
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match ? clean_(match[1]) : "";
+}
+
+function activeValue_(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = clean_(value).toLowerCase();
+  if (!normalized) return false;
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
+}
+
+function maskId_(value: string) {
+  return value ? `...${value.slice(-6)}` : "";
+}
+
+function statusCodeForError_(error: unknown) {
+  return error instanceof ApiError ? error.statusCode : 400;
+}
+
+function safeErrorMessage_(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeServerError_(label: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(label, message.replace(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g, "[redacted private key]"));
+}
+
 function clean_(value: unknown) {
   return String(value == null ? "" : value).trim();
 }
@@ -2348,29 +2520,37 @@ app.get("/api/history/:dateKey", async (request, response) => {
 });
 
 app.get("/api", async (request, response) => {
-  const payload = { ...request.query };
+  const payload: Payload = {
+    ...request.query,
+    authorization: request.header("authorization"),
+  };
   const action = clean_(payload.action || "appData");
 
   try {
     response.json(await handleAction(action, payload));
   } catch (error) {
-    response.status(400).json({
+    safeServerError_("API GET failed", error);
+    response.status(statusCodeForError_(error)).json({
       success: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage_(error),
     });
   }
 });
 
 app.post("/api", async (request, response) => {
-  const payload = request.body || {};
+  const payload: Payload = {
+    ...(request.body || {}),
+    authorization: request.header("authorization"),
+  };
   const action = clean_(payload.action);
 
   try {
     response.json(await handleAction(action, payload));
   } catch (error) {
-    response.status(400).json({
+    safeServerError_("API POST failed", error);
+    response.status(statusCodeForError_(error)).json({
       success: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage_(error),
     });
   }
 });
@@ -2391,9 +2571,10 @@ async function routeAction(
   try {
     response.json(await handleAction(action, payload));
   } catch (error) {
-    response.status(400).json({
+    safeServerError_(`API action ${action} failed`, error);
+    response.status(statusCodeForError_(error)).json({
       success: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage_(error),
     });
   }
 }
@@ -2407,9 +2588,10 @@ async function routeDataSlice(
     await authorizeAction("appData", payload);
     response.json(success_(selector(await buildAppData())));
   } catch (error) {
-    response.status(400).json({
+    safeServerError_("API data slice failed", error);
+    response.status(statusCodeForError_(error)).json({
       success: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage_(error),
     });
   }
 }
