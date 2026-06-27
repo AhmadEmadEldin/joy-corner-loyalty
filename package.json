@@ -26,7 +26,8 @@
     "firebase-admin": "^14.1.0",
     "googleapis": "^173.0.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "tsx": "4.22.4"
   },
   "devDependencies": {
     "@ngrok/ngrok": "1.5.2",
@@ -70,7 +71,6 @@
     "tree-kill": "1.2.2",
     "ts-jest": "29.4.1",
     "ts-loader": "9.5.4",
-    "tsx": "4.22.4",
     "typescript": "5.9.2",
     "url-loader": "4.1.1",
     "webpack": "5.105.2",
