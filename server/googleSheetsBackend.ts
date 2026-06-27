@@ -27,6 +27,16 @@ const SHEETS = {
   dayHistory: "Day History",
 } as const;
 
+const SHEET_ALIASES: Record<string, string[]> = {
+  [SHEETS.customers]: ["Customers", "Customer", "Clients", "Guests"],
+  [SHEETS.staffUsers]: ["Staff Users", "Staff", "Users", "Team"],
+  [SHEETS.generatedVouchers]: ["Generated Vouchers", "Vouchers", "Generated Voucher"],
+  [SHEETS.rewardRedemptions]: ["Reward Redemptions", "Redemptions"],
+  [SHEETS.loyaltyWinners]: ["Loyalty Winners", "Winners"],
+  [SHEETS.unpaidTracker]: ["Unpaid Tracker", "Unpaid"],
+  [SHEETS.dayHistory]: ["Day History", "History"],
+};
+
 const ROLE_ACTIONS: Record<string, string[]> = {
   barista: ["appData", "getAppData", "historyDays", "dayHistory", "markReceiptDone"],
   waiter: [
@@ -90,6 +100,7 @@ class ApiError extends Error {
 }
 
 let sheetsClientPromise: Promise<sheets_v4.Sheets> | null = null;
+let sheetTitlesPromise: Promise<string[]> | null = null;
 
 function initFirebaseAdmin() {
   if (getApps().length) return;
@@ -170,6 +181,51 @@ function quotedSheet(name: string) {
   return `'${name.replace(/'/g, "''")}'`;
 }
 
+function normalizeSheetTitle_(value: unknown) {
+  return clean_(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+async function getSheetTitles() {
+  if (!sheetTitlesPromise) {
+    sheetTitlesPromise = (async () => {
+      const sheets = await getSheetsClient();
+      const metadata = await sheets.spreadsheets.get({
+        fields: "sheets.properties.title",
+        spreadsheetId: SPREADSHEET_ID,
+      });
+      return (metadata.data.sheets || [])
+        .map((sheet) => clean_(sheet.properties?.title))
+        .filter(Boolean);
+    })();
+  }
+
+  return await sheetTitlesPromise;
+}
+
+async function resolveSheetName(sheetName: string) {
+  const titles = await getSheetTitles();
+  const wanted = [sheetName, ...(SHEET_ALIASES[sheetName] || [])];
+  const exact = wanted
+    .map((name) => titles.find((title) => title === name))
+    .find(Boolean);
+
+  if (exact) return exact;
+
+  const normalizedTitles = new Map(
+    titles.map((title) => [normalizeSheetTitle_(title), title]),
+  );
+  const normalized = wanted
+    .map((name) => normalizedTitles.get(normalizeSheetTitle_(name)))
+    .find(Boolean);
+
+  if (normalized) return normalized;
+
+  throw new ApiError(
+    `Google Sheet tab missing: ${sheetName}. Tabs found: ${titles.join(", ") || "none"}`,
+    500,
+  );
+}
+
 function columnLetter(index: number) {
   let value = index + 1;
   let letters = "";
@@ -185,18 +241,23 @@ function columnLetter(index: number) {
 
 async function getSheetValues(sheetName: string) {
   const sheets = await getSheetsClient();
+  const resolvedSheetName = await resolveSheetName(sheetName);
   let response;
 
   try {
     response = await sheets.spreadsheets.values.get({
-      range: `${quotedSheet(sheetName)}!A:ZZ`,
+      range: `${quotedSheet(resolvedSheetName)}!A:ZZ`,
       spreadsheetId: SPREADSHEET_ID,
       valueRenderOption: "FORMATTED_VALUE",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/Unable to parse range|not found|Unable to parse/i.test(message)) {
-      throw new ApiError(`Google Sheet tab missing: ${sheetName}`, 500);
+      const titles = await getSheetTitles();
+      throw new ApiError(
+        `Google Sheet tab missing: ${sheetName}. Tabs found: ${titles.join(", ") || "none"}`,
+        500,
+      );
     }
     throw new ApiError(`Google Sheet read failed for ${sheetName}.`, 500);
   }
@@ -208,8 +269,9 @@ async function getSheetValues(sheetName: string) {
 
 async function setCell(sheetName: string, row: number, columnIndex: number, value: unknown) {
   const sheets = await getSheetsClient();
+  const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.update({
-    range: `${quotedSheet(sheetName)}!${columnLetter(columnIndex)}${row}`,
+    range: `${quotedSheet(resolvedSheetName)}!${columnLetter(columnIndex)}${row}`,
     requestBody: { values: [[valueForSheet_(value)]] },
     spreadsheetId: SPREADSHEET_ID,
     valueInputOption: "USER_ENTERED",
@@ -218,16 +280,17 @@ async function setCell(sheetName: string, row: number, columnIndex: number, valu
 
 async function deleteSheetRow(sheetName: string, row: number) {
   const sheets = await getSheetsClient();
+  const resolvedSheetName = await resolveSheetName(sheetName);
   const metadata = await sheets.spreadsheets.get({
     fields: "sheets.properties",
     spreadsheetId: SPREADSHEET_ID,
   });
   const sheet = metadata.data.sheets?.find(
-    (item) => item.properties?.title === sheetName,
+    (item) => item.properties?.title === resolvedSheetName,
   );
   const sheetId = sheet?.properties?.sheetId;
 
-  if (sheetId == null) throw new Error(`${sheetName} sheet was not found.`);
+  if (sheetId == null) throw new Error(`${resolvedSheetName} sheet was not found.`);
 
   await sheets.spreadsheets.batchUpdate({
     requestBody: {
@@ -250,9 +313,10 @@ async function deleteSheetRow(sheetName: string, row: number) {
 
 async function appendRow(sheetName: string, rowValues: unknown[]) {
   const sheets = await getSheetsClient();
+  const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.append({
     insertDataOption: "INSERT_ROWS",
-    range: `${quotedSheet(sheetName)}!A:ZZ`,
+    range: `${quotedSheet(resolvedSheetName)}!A:ZZ`,
     requestBody: { values: [rowValues.map(valueForSheet_)] },
     spreadsheetId: SPREADSHEET_ID,
     valueInputOption: "USER_ENTERED",
