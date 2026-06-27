@@ -49,6 +49,7 @@ type AppData = {
   menu?: Row[];
   lists?: Record<string, string[]>;
   historyDays?: Row[];
+  staffProfile?: StaffProfile;
 };
 
 type ApiResponse = {
@@ -378,6 +379,17 @@ export function App() {
       const nextData = response.data || response;
       const connected = ensureConnectedData(nextData);
       setData(connected);
+      if (connected.staffProfile) {
+        setStaffProfile((current) =>
+          current
+            ? {
+                ...current,
+                ...connected.staffProfile,
+                uid: connected.staffProfile?.uid || current.uid,
+              }
+            : connected.staffProfile || current,
+        );
+      }
       if (!options.silent) {
         setStatus(`Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`);
       }

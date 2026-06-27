@@ -70,7 +70,7 @@ const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 30
 
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
-type Actor = { email: string; role: string; uid: string };
+type Actor = { displayName?: string; email: string; role: string; uid: string };
 
 let sheetsClientPromise: Promise<sheets_v4.Sheets> | null = null;
 
@@ -268,7 +268,12 @@ export async function handleAction(action: string, payload: Payload) {
   switch (action) {
     case "appData":
     case "getAppData":
-      return success_({ data: await buildAppDataForRole(actor.role) });
+      return success_({
+        data: {
+          ...(await buildAppDataForRole(actor.role)),
+          staffProfile: actor,
+        },
+      });
     case "addCustomer":
       return await addCustomer(payload);
     case "removeCustomer":
@@ -331,31 +336,65 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
   const decoded = await getAuth().verifyIdToken(idToken);
   const email = clean_(decoded.email).toLowerCase();
   const uid = clean_(decoded.uid);
-  const role = await staffRoleForUser(uid, email);
-  const allowed = ROLE_ACTIONS[role] || [];
+  const actor = await staffActorForUser(uid, email);
+  const allowed = ROLE_ACTIONS[actor.role] || [];
 
   if (!allowed.includes("*") && !allowed.includes(action)) {
-    throw new Error(`Role ${role} cannot run action ${action}.`);
+    throw new Error(`Role ${actor.role} cannot run action ${action}.`);
   }
 
-  return { email, role, uid };
+  return actor;
 }
 
-async function staffRoleForUser(uid: string, email: string) {
+async function staffActorForUser(uid: string, email: string): Promise<Actor> {
   const ownerEmails = clean_(process.env.FIREBASE_OWNER_EMAILS)
     .split(",")
     .map((value) => clean_(value).toLowerCase())
     .filter(Boolean);
 
-  if (ownerEmails.includes(email)) return "owner";
+  if (ownerEmails.includes(email)) return { email, role: "owner", uid };
+
+  const sheetProfile = await staffProfileFromSheet(uid, email);
+  if (sheetProfile) return { email, uid, ...sheetProfile };
 
   try {
     const snapshot = await getFirestore().collection("staffUsers").doc(uid).get();
     const role = snapshot.exists ? snapshot.data()?.role : "";
-    return normalizeRole_(role);
+    const displayName = snapshot.exists ? clean_(snapshot.data()?.displayName) : "";
+    return { displayName, email, role: normalizeRole_(role), uid };
   } catch {
-    return "waiter";
+    return { email, role: "waiter", uid };
   }
+}
+
+async function staffProfileFromSheet(uid: string, email: string) {
+  let rows: Row[] = [];
+
+  try {
+    rows = await sheetToObjects(SHEETS.staffUsers);
+  } catch {
+    return null;
+  }
+
+  const row = rows.find((staff) => {
+    const staffEmail = clean_(
+      staff.email || staff.staffEmail || staff.userEmail || staff.firebaseEmail,
+    ).toLowerCase();
+    const staffUid = clean_(staff.uid || staff.firebaseUid || staff.userId);
+    return (staffEmail && staffEmail === email) || (staffUid && staffUid === uid);
+  });
+
+  if (!row) return null;
+
+  const status = clean_(row.active || row.status || row.enabled || "Yes").toLowerCase();
+  if (["no", "false", "disabled", "inactive", "blocked"].includes(status)) {
+    throw new Error("This staff account is disabled.");
+  }
+
+  return {
+    displayName: staffDisplayName_(row) || email,
+    role: normalizeRole_(row.role || row.staffRole || row.accessRole),
+  };
 }
 
 async function addCustomer(payload: Payload) {
@@ -896,6 +935,7 @@ async function buildAppData() {
     .filter((row) => row.itemId && row.active !== "No")
     .map(enrichMenuItem_);
   const lists = await listOptions();
+  lists.staff = await staffOptions_(lists.staff || []);
   lists.orderPlace = buildOrderPlaceOptions_(orders, lists);
   const unpaid = buildUnpaidTracker_(realCustomers, orders);
   const customers = enrichCustomers_(realCustomers, orders, unpaid);
@@ -2129,6 +2169,36 @@ function getFavoriteDrink_(customer: Row | Record<string, unknown>) {
       customer.preferredDrink ||
       customer.drink,
   );
+}
+
+function staffDisplayName_(staff: Row | Record<string, unknown>) {
+  return clean_(
+    staff.displayName ||
+      staff.staffName ||
+      staff.fullName ||
+      staff.name ||
+      staff.email ||
+      staff.staffEmail,
+  );
+}
+
+async function staffOptions_(fallback: string[]) {
+  try {
+    const staffUsers = await sheetToObjects(SHEETS.staffUsers);
+    const sheetStaff = staffUsers
+      .filter((staff) => {
+        const status = clean_(
+          staff.active || staff.status || staff.enabled || "Yes",
+        ).toLowerCase();
+        return !["no", "false", "disabled", "inactive", "blocked"].includes(status);
+      })
+      .map(staffDisplayName_)
+      .filter(Boolean);
+
+    return uniqueStrings_([...sheetStaff, ...fallback]);
+  } catch {
+    return fallback;
+  }
 }
 
 function parsePrice_(priceText: unknown) {
