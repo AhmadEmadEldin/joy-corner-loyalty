@@ -262,7 +262,7 @@ async function writeObjectRow(sheetName: string, record: Payload) {
   );
 }
 
-async function handleAction(action: string, payload: Payload) {
+export async function handleAction(action: string, payload: Payload) {
   const actor = await authorizeAction(action, payload);
 
   switch (action) {

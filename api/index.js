@@ -1,23 +1,19 @@
 require("tsx/cjs");
 
-const { app } = require("../server/googleSheetsBackend.ts");
+const { handleAction } = require("../server/googleSheetsBackend.ts");
 
-module.exports = (request, response) => {
-  const fail = (error) => {
-    if (response.headersSent) return;
-    response.status(500).json({
+module.exports = async (request, response) => {
+  try {
+    const payload = request.method === "GET"
+      ? { ...(request.query || {}) }
+      : request.body || {};
+    const action = String(payload.action || "appData").trim();
+
+    response.status(200).json(await handleAction(action, payload));
+  } catch (error) {
+    response.status(400).json({
       success: false,
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? String(error.stack).split("\n").slice(0, 6) : [],
     });
-  };
-
-  process.once("uncaughtException", fail);
-  process.once("unhandledRejection", fail);
-
-  try {
-    return app(request, response);
-  } catch (error) {
-    return fail(error);
   }
 };
