@@ -1,9 +1,8 @@
 require("tsx/cjs");
 
-const { handleAction } = require("../server/googleSheetsBackend.ts");
-
 module.exports = async (request, response) => {
   try {
+    const { handleAction } = require("../server/googleSheetsBackend.ts");
     const payload = request.method === "GET"
       ? { ...(request.query || {}) }
       : request.body || {};
