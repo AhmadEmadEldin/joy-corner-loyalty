@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import express from "express";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
 import { readFileSync } from "node:fs";
 import { schemaForSheet } from "./sheetSchema";
@@ -93,6 +94,7 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = {
 
 const REWARD_THRESHOLD = 5;
 const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 3001);
+const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
 type Actor = {
@@ -132,12 +134,8 @@ function initFirebaseAdmin() {
 }
 
 function firebaseCredential() {
-  const json =
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const file =
-    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
+  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const file = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
 
   if (json) {
     return cert(parseServiceAccountJson_(json, "FIREBASE_SERVICE_ACCOUNT_JSON"));
@@ -512,23 +510,63 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
 }
 
 async function staffActorForUser(uid: string, email: string): Promise<Actor> {
-  const ownerEmails = clean_(process.env.FIREBASE_OWNER_EMAILS)
-    .split(",")
-    .map((value) => clean_(value).toLowerCase())
-    .filter(Boolean);
+  const firestoreProfile = await staffProfileFromFirestore(uid, email);
+  if (firestoreProfile) return { email, uid, ...firestoreProfile };
 
-  if (ownerEmails.includes(email)) {
+  throw new ApiError("No staff profile found. Contact owner.", 403, {
+    email,
+    profileFound: false,
+    uid,
+  });
+}
+
+async function staffProfileFromFirestore(uid: string, email: string) {
+  try {
+    const snapshot = await getFirestore().collection("users").doc(uid).get();
+    if (!snapshot.exists) return null;
+
+    const data = snapshot.data() || {};
+    const profileEmail = clean_(data.email || email).toLowerCase();
+    const active = activeValue_(data.active);
+    const role = clean_(data.role).toLowerCase();
+
+    if (profileEmail && profileEmail !== email) {
+      throw new ApiError("Staff profile email does not match signed-in user.", 403, {
+        email,
+        profileFound: true,
+        uid,
+      });
+    }
+
+    if (!active) {
+      throw new ApiError("Staff account inactive.", 403, {
+        active: false,
+        email: profileEmail || email,
+        profileFound: true,
+        uid,
+      });
+    }
+
+    if (!VALID_ROLES.has(role)) {
+      throw new ApiError("Invalid staff role. Contact owner.", 403, {
+        email: profileEmail || email,
+        profileFound: true,
+        role,
+        uid,
+      });
+    }
+
     return {
-      active: true,
-      displayName: email,
-      email,
+      active,
+      displayName: clean_(data.name || data.displayName || profileEmail),
       profileFound: true,
-      role: "owner",
-      uid,
+      role,
     };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    safeServerError_("Firestore staff profile read failed", error);
+    return null;
   }
-
-  throw new ApiError("This email is not allowed. Add it to FIREBASE_OWNER_EMAILS.", 403);
 }
 
 async function addCustomer(payload: Payload) {
@@ -2458,6 +2496,13 @@ function tokenFromPayload_(payload: Payload) {
   return match ? clean_(match[1]) : "";
 }
 
+function activeValue_(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = clean_(value).toLowerCase();
+  if (!normalized) return false;
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
+}
+
 function maskId_(value: string) {
   return value ? `...${value.slice(-6)}` : "";
 }
@@ -2609,6 +2654,44 @@ app.post("/api", async (request, response) => {
   }
 });
 
+app.get("/", async (request, response) => {
+  const payload: Payload = {
+    ...request.query,
+    authorization: request.header("authorization"),
+  };
+  const action = clean_(payload.action || "appData");
+
+  try {
+    response.json(await handleAction(action, payload));
+  } catch (error) {
+    safeServerError_("API GET failed", error);
+    response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
+      success: false,
+      message: safeErrorMessage_(error),
+    });
+  }
+});
+
+app.post("/", async (request, response) => {
+  const payload: Payload = {
+    ...(request.body || {}),
+    authorization: request.header("authorization"),
+  };
+  const action = clean_(payload.action);
+
+  try {
+    response.json(await handleAction(action, payload));
+  } catch (error) {
+    safeServerError_("API POST failed", error);
+    response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
+      success: false,
+      message: safeErrorMessage_(error),
+    });
+  }
+});
+
 app.get("/health", (_request, response) => {
   response.json({
     success: true,
@@ -2652,7 +2735,7 @@ async function routeDataSlice(
   }
 }
 
-if (process.env.VERCEL !== "1") {
+if (process.env.VERCEL !== "1" && process.env.FIREBASE_FUNCTIONS !== "1") {
   app.listen(PORT, () => {
     console.log(`Joy Corner backend listening on http://localhost:${PORT}`);
   });

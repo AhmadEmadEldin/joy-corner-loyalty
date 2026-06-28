@@ -285,7 +285,7 @@ export function App() {
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
-      ? "Sign in with the owner account."
+      ? "Sign in with your staff account."
       : "Firebase is not configured yet. Use the local owner password to preview the app.",
   );
   const [authLoading, setAuthLoading] = useState(firebaseReady);
@@ -856,7 +856,7 @@ function AuthScreen({
           </div>
           <div>
             <h1>Joy Corner Loyalty</h1>
-            <p className="muted">Owner sign-in for the Google Sheets staff app</p>
+            <p className="muted">Staff sign-in for the Google Sheets app</p>
           </div>
         </div>
         <img className="auth-signature" alt="" src={joyYourTimeUrl} />
@@ -872,7 +872,7 @@ function AuthScreen({
           <div className="muted auth-note">
             <p>
               Firebase sign-in is configured. The backend allows only emails
-              listed in FIREBASE_OWNER_EMAILS.
+              with an active Firestore staff profile.
             </p>
             <p>Local owner: owner@joycorner.local / owner123</p>
           </div>

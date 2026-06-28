@@ -94,7 +94,7 @@ async function ensureStaffProfile(
     active: true,
     displayName: displayName || email,
     email,
-    role: "owner",
+    role: "barista",
     uid: user.uid,
   };
 }
