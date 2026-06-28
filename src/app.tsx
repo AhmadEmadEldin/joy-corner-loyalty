@@ -6,7 +6,6 @@ import {
   firebaseReady,
   signInStaff,
   signOutStaff,
-  signUpStaff,
   watchStaffAuth,
 } from "./firebase";
 
@@ -119,27 +118,6 @@ const localStaffAccounts: Array<StaffProfile & { password: string }> = [
     password: "owner123",
     role: "owner",
     uid: "local-owner",
-  },
-  {
-    displayName: "Joy Corner Waiter",
-    email: "waiter@joycorner.local",
-    password: "waiter123",
-    role: "waiter",
-    uid: "local-waiter",
-  },
-  {
-    displayName: "Joy Corner Cashier",
-    email: "cashier@joycorner.local",
-    password: "cashier123",
-    role: "cashier",
-    uid: "local-cashier",
-  },
-  {
-    displayName: "Joy Corner Barista",
-    email: "barista@joycorner.local",
-    password: "barista123",
-    role: "barista",
-    uid: "local-barista",
   },
 ];
 
@@ -305,11 +283,10 @@ export function App() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [autoScroll, setAutoScroll] = useState(false);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
-      ? "Sign in with your staff account."
-      : "Firebase is not configured yet. Use local staff passwords to preview roles.",
+      ? "Sign in with the owner account."
+      : "Firebase is not configured yet. Use the local owner password to preview the app.",
   );
   const [authLoading, setAuthLoading] = useState(firebaseReady);
 
@@ -608,53 +585,29 @@ export function App() {
     const payload = formObject(form);
     const email = stringValue(payload.email);
     const password = stringValue(payload.password);
-    const passwordConfirm = stringValue(payload.passwordConfirm);
-    const displayName = stringValue(payload.displayName);
-    const requestedRole = normalizeRequestedRole(payload.role);
-
-    if (authMode === "signup") {
-      if (password.length < 6) {
-        setAuthStatus("Password must be at least 6 characters.");
-        return;
-      }
-
-      if (password !== passwordConfirm) {
-        setAuthStatus("Passwords do not match.");
-        return;
-      }
-    }
 
     try {
       setAuthLoading(true);
-      setAuthStatus(authMode === "signin" ? "Signing in..." : "Creating staff password...");
+      setAuthStatus("Signing in...");
 
       if (!firebaseReady) {
-        const profile =
-          authMode === "signin"
-            ? localSignInStaff(email, password)
-            : localCreateStaff(email, password, displayName, requestedRole);
+        const profile = localSignInStaff(email, password);
         setStaffProfile(profile);
         setAuthStatus(`Signed in as ${profile.displayName || profile.email}.`);
         form.reset();
         return;
       }
 
-      const profile =
-        authMode === "signin"
-          ? await signInStaff(email, password)
-          : await signUpStaff(email, password, displayName, requestedRole);
+      const profile = await signInStaff(email, password);
       setStaffProfile(profile);
       setAuthStatus(`Signed in as ${profile.displayName || profile.email}.`);
       form.reset();
     } catch (error) {
       if (isFirebaseAuthConfigurationError(error)) {
-        const profile =
-          authMode === "signin"
-            ? localSignInStaff(email, password)
-            : localCreateStaff(email, password, displayName, requestedRole);
+        const profile = localSignInStaff(email, password);
         setStaffProfile(profile);
         setAuthStatus(
-          "Firebase Email/Password is not enabled yet, so local staff rules are active.",
+          "Firebase Email/Password is not enabled yet, so local owner access is active.",
         );
         form.reset();
         return;
@@ -688,9 +641,7 @@ export function App() {
     return (
       <AuthScreen
         authLoading={authLoading}
-        authMode={authMode}
         authStatus={authStatus}
-        onModeChange={setAuthMode}
         onSubmit={submitAuthForm}
       />
     );
@@ -880,15 +831,11 @@ export function App() {
 
 function AuthScreen({
   authLoading,
-  authMode,
   authStatus,
-  onModeChange,
   onSubmit,
 }: {
   authLoading: boolean;
-  authMode: "signin" | "signup";
   authStatus: string;
-  onModeChange: (mode: "signin" | "signup") => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -909,68 +856,30 @@ function AuthScreen({
           </div>
           <div>
             <h1>Joy Corner Loyalty</h1>
-            <p className="muted">Staff app sign-in for owner, waiter, cashier, and barista</p>
+            <p className="muted">Owner sign-in for the Google Sheets staff app</p>
           </div>
         </div>
         <img className="auth-signature" alt="" src={joyYourTimeUrl} />
-        <div className="auth-switch">
-          <button
-            className={authMode === "signin" ? "primary" : "secondary"}
-            onClick={() => onModeChange("signin")}
-            type="button"
-          >
-            Sign In
-          </button>
-          <button
-            className={authMode === "signup" ? "primary" : "secondary"}
-            onClick={() => onModeChange("signup")}
-            type="button"
-          >
-            Sign Up
-          </button>
-        </div>
         <form className="auth-form" onSubmit={onSubmit}>
-          {authMode === "signup" && (
-            <>
-              <Field label="Staff Name" name="displayName" placeholder="Ahmed, Mona..." required />
-              <label>
-                Staff Role
-                <select defaultValue="waiter" name="role">
-                  <option value="waiter">Waiter</option>
-                  <option value="cashier">Cashier</option>
-                  <option value="barista">Barista</option>
-                </select>
-              </label>
-            </>
-          )}
-          <Field label="Email" name="email" placeholder="staff@joycorner.com" required type="email" />
+          <Field label="Owner Email" name="email" placeholder="owner@joycorner.com" required type="email" />
           <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
-          {authMode === "signup" && (
-            <Field label="Confirm Password" name="passwordConfirm" required type="password" />
-          )}
           <button className="primary" disabled={authLoading} type="submit">
-            {authMode === "signin" ? "Sign In" : "Create Staff Password"}
+            Sign In
           </button>
         </form>
         <p className="status">{authStatus}</p>
         {firebaseReady ? (
           <div className="muted auth-note">
             <p>
-              Firebase sign-in is configured. If Firebase Email/Password is not
-              enabled yet, use the local staff access below.
+              Firebase sign-in is configured. The backend allows only emails
+              listed in FIREBASE_OWNER_EMAILS.
             </p>
             <p>Local owner: owner@joycorner.local / owner123</p>
-            <p>Local waiter: waiter@joycorner.local / waiter123</p>
-            <p>Local cashier: cashier@joycorner.local / cashier123</p>
-            <p>Local barista: barista@joycorner.local / barista123</p>
           </div>
         ) : (
           <div className="muted auth-note">
-            <p>Local preview passwords:</p>
+            <p>Local owner preview password:</p>
             <p>owner@joycorner.local / owner123</p>
-            <p>waiter@joycorner.local / waiter123</p>
-            <p>cashier@joycorner.local / cashier123</p>
-            <p>barista@joycorner.local / barista123</p>
           </div>
         )}
       </section>
@@ -3057,11 +2966,6 @@ function roleLabel(role: StaffRole) {
   return labels[role];
 }
 
-function normalizeRequestedRole(value: unknown): StaffRole {
-  const role = stringValue(value).toLowerCase();
-  return role === "barista" || role === "cashier" ? role : "waiter";
-}
-
 function localSignInStaff(email: string, password: string): StaffProfile {
   const account = localStaffAccounts.find(
     (staff) =>
@@ -3074,23 +2978,6 @@ function localSignInStaff(email: string, password: string): StaffProfile {
   }
 
   return withoutPassword(account);
-}
-
-function localCreateStaff(
-  email: string,
-  password: string,
-  displayName: string,
-  role: StaffRole,
-): StaffProfile {
-  if (!email) throw new Error("Email is required.");
-  if (!password) throw new Error("Password is required.");
-
-  return {
-    displayName: displayName || email,
-    email,
-    role,
-    uid: `local-${Date.now()}`,
-  };
 }
 
 function withoutPassword(account: StaffProfile & { password: string }): StaffProfile {

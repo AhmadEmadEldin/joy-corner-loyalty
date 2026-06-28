@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import express from "express";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
 import { readFileSync } from "node:fs";
 import { schemaForSheet } from "./sheetSchema";
@@ -94,8 +93,6 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = {
 
 const REWARD_THRESHOLD = 5;
 const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 3001);
-const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
-
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
 type Actor = {
@@ -515,40 +512,23 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
 }
 
 async function staffActorForUser(uid: string, email: string): Promise<Actor> {
-  const firestoreProfile = await staffProfileFromFirestore(uid, email);
-  if (firestoreProfile) return { email, uid, ...firestoreProfile };
+  const ownerEmails = clean_(process.env.FIREBASE_OWNER_EMAILS)
+    .split(",")
+    .map((value) => clean_(value).toLowerCase())
+    .filter(Boolean);
 
-  throw new ApiError("No staff profile found. Contact owner.", 403);
-}
-
-async function staffProfileFromFirestore(uid: string, email: string) {
-  try {
-    const snapshot = await getFirestore().collection("users").doc(uid).get();
-    if (!snapshot.exists) return null;
-
-    const data = snapshot.data() || {};
-    const profileEmail = clean_(data.email || email).toLowerCase();
-    const active = activeValue_(data.active);
-    const role = clean_(data.role).toLowerCase();
-
-    if (profileEmail && profileEmail !== email) {
-      throw new ApiError("Staff profile email does not match signed-in user.", 403);
-    }
-
-    if (!active) throw new ApiError("Staff account inactive.", 403);
-    if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.", 403);
-
+  if (ownerEmails.includes(email)) {
     return {
-      active,
-      displayName: clean_(data.name || data.displayName || profileEmail),
+      active: true,
+      displayName: email,
+      email,
       profileFound: true,
-      role,
+      role: "owner",
+      uid,
     };
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    safeServerError_("Firestore staff profile read failed", error);
-    return null;
   }
+
+  throw new ApiError("This email is not allowed. Add it to FIREBASE_OWNER_EMAILS.", 403);
 }
 
 async function addCustomer(payload: Payload) {
@@ -2476,13 +2456,6 @@ function tokenFromPayload_(payload: Payload) {
   );
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   return match ? clean_(match[1]) : "";
-}
-
-function activeValue_(value: unknown) {
-  if (typeof value === "boolean") return value;
-  const normalized = clean_(value).toLowerCase();
-  if (!normalized) return false;
-  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
 }
 
 function maskId_(value: string) {

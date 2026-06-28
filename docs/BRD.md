@@ -4,7 +4,14 @@
 
 Joy Corner Loyalty is a staff web app for running a cafe loyalty and order workflow. The app lets staff sign in, create customer receipts, track unpaid balances, manage rewards, generate and redeem vouchers, and view daily dashboard data from Google Sheets.
 
-The app is deployed on Vercel and uses Firebase Authentication for staff login, Firestore for staff profiles and roles, and Google Sheets as the operational database.
+The app is deployed on Vercel and currently uses Firebase Authentication plus an owner email allow-list for login while the Google Sheets workflow is stabilized. Google Sheets is the operational database.
+
+Temporary auth mode:
+
+- Only emails listed in `FIREBASE_OWNER_EMAILS` can use the live app.
+- Allowed owner emails receive full owner access.
+- Cashier, waiter, and barista role authentication is paused until the sheet workflow is stable.
+- Firestore staff-role authentication will be rebuilt later.
 
 ## 2. Current Architecture
 
@@ -27,13 +34,13 @@ The app is deployed on Vercel and uses Firebase Authentication for staff login, 
 ### External Services
 
 - Firebase Authentication: signs in staff users.
-- Firestore: stores staff role profiles in `users/{uid}`.
+- Firestore: not currently used for staff access in the temporary owner-only mode.
 - Google Sheets: stores cafe business data.
 - Vercel: hosts frontend and serverless API.
 
 ## 3. Staff Login Logic
 
-1. Staff signs in with Firebase email/password.
+1. Owner signs in with Firebase email/password.
 2. Frontend receives the Firebase user.
 3. Frontend calls `await user.getIdToken()`.
 4. Frontend sends the token to `/api` using:
@@ -43,21 +50,15 @@ Authorization: Bearer <Firebase ID token>
 ```
 
 5. Backend verifies the token using Firebase Admin.
-6. Backend reads Firestore document:
-
-```text
-users/{uid}
-```
-
-7. Backend checks:
-
-- profile exists
-- `active` is `true`
-- `role` is valid
-
-8. Backend returns data filtered for the staff role.
+6. Backend checks the signed-in email against `FIREBASE_OWNER_EMAILS`.
+7. If the email is allowed, the backend grants temporary owner access.
+8. Backend reads/writes Google Sheets and returns the owner dashboard data.
 
 ## 4. Firestore Staff Profile
+
+Paused for now.
+
+The previous planned role model was:
 
 Collection:
 
@@ -89,10 +90,12 @@ Allowed roles:
 - `waiter`
 - `barista`
 
-If no staff profile exists, the API returns:
+In the current temporary owner-only mode, this Firestore profile is not required.
+
+If the signed-in email is not listed in `FIREBASE_OWNER_EMAILS`, the API returns:
 
 ```json
-{ "success": false, "message": "No staff profile found. Contact owner." }
+{ "success": false, "message": "This email is not allowed. Add it to FIREBASE_OWNER_EMAILS." }
 ```
 
 If the staff account is inactive, the API returns:
@@ -392,4 +395,3 @@ The app is considered working when:
 5. Google Sheets data loads without local preview fallback.
 6. Orders, customers, payments, rewards, vouchers, and unpaid flows work.
 7. Missing profile, inactive account, missing env vars, or missing sheet tabs return clear errors.
-

@@ -2,19 +2,11 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import {
   User,
-  createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  doc,
-  getDoc,
-  getFirestore,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
 
 declare const __FIREBASE_CONFIG__: {
   apiKey: string;
@@ -52,7 +44,6 @@ export const firebaseReady = requiredFirebaseKeys.every(
 const app = firebaseReady ? initializeApp(__FIREBASE_CONFIG__) : null;
 
 export const auth = app ? getAuth(app) : null;
-export const db = app ? getFirestore(app) : null;
 
 if (app) {
   void isSupported().then((supported) => {
@@ -89,17 +80,6 @@ export async function signInStaff(email: string, password: string) {
   return await ensureStaffProfile(credential.user);
 }
 
-export async function signUpStaff(
-  email: string,
-  password: string,
-  displayName: string,
-  requestedRole: StaffRole = "waiter",
-) {
-  if (!auth) throw new Error("Firebase is not configured yet.");
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
-  return await ensureStaffProfile(credential.user, displayName, requestedRole, true);
-}
-
 export async function signOutStaff() {
   if (!auth) return;
   await signOut(auth);
@@ -108,84 +88,15 @@ export async function signOutStaff() {
 async function ensureStaffProfile(
   user: User,
   displayName = "",
-  requestedRole: StaffRole = "waiter",
-  createMissing = false,
-) {
-  if (!db) throw new Error("Firestore is not configured yet.");
-
-  const profileRef = doc(db, "users", user.uid);
-  const snapshot = await getDoc(profileRef);
+): Promise<StaffProfile> {
   const email = user.email || "";
-
-  if (snapshot.exists()) {
-    const data = snapshot.data() as Partial<StaffProfile>;
-    const profileEmail = (data.email || email).toLowerCase();
-    const role = normalizeRole(data.role);
-
-    if (profileEmail && profileEmail !== email.toLowerCase()) {
-      throw new Error("Staff profile email does not match this signed-in user.");
-    }
-
-    if (!activeValue(data.active)) {
-      throw new Error("Staff account inactive.");
-    }
-
-    return {
-      ...data,
-      active: true,
-      displayName: data.displayName || displayName || email,
-      email: profileEmail || email,
-      role,
-      uid: user.uid,
-    };
-  }
-
-  const profile: StaffProfile = {
+  return {
+    active: true,
     displayName: displayName || email,
     email,
-    role: initialRoleForEmail(email, requestedRole),
+    role: "owner",
     uid: user.uid,
   };
-
-  if (createMissing) {
-    await setDoc(profileRef, {
-      active: true,
-      name: profile.displayName,
-      ...profile,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    return { ...profile, active: true };
-  }
-
-  throw new Error("No staff profile found. Contact owner.");
-}
-
-function initialRoleForEmail(_email: string, requestedRole: StaffRole): StaffRole {
-  return requestedRole === "barista" || requestedRole === "cashier"
-    ? requestedRole
-    : "waiter";
-}
-
-function normalizeRole(role: unknown): StaffRole {
-  if (
-    role === "barista" ||
-    role === "cashier" ||
-    role === "owner" ||
-    role === "waiter"
-  ) {
-    return role;
-  }
-
-  throw new Error("Invalid staff role.");
-}
-
-function activeValue(value: unknown) {
-  if (typeof value === "boolean") return value;
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (!normalized) return false;
-  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
 }
 
 function errorMessage(error: unknown) {
