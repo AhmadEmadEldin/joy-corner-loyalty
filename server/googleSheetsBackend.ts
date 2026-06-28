@@ -465,6 +465,7 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
   const localDevAuth =
     clean_(process.env.LOCAL_DEV_AUTH).toLowerCase() === "true" &&
     process.env.VERCEL !== "1" &&
+    process.env.NETLIFY_FUNCTIONS !== "1" &&
     process.env.NODE_ENV !== "production";
 
   if (!idToken && localDevAuth) {
@@ -2735,7 +2736,11 @@ async function routeDataSlice(
   }
 }
 
-if (process.env.VERCEL !== "1" && process.env.FIREBASE_FUNCTIONS !== "1") {
+if (
+  process.env.VERCEL !== "1" &&
+  process.env.FIREBASE_FUNCTIONS !== "1" &&
+  process.env.NETLIFY_FUNCTIONS !== "1"
+) {
   app.listen(PORT, () => {
     console.log(`Joy Corner backend listening on http://localhost:${PORT}`);
   });

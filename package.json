@@ -5,6 +5,7 @@
   "scripts": {
     "backend": "tsx ./server/googleSheetsBackend.ts",
     "build": "webpack --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts",
+    "deploy:netlify": "npm run build && netlify deploy --prod --dir=dist --functions=netlify/functions",
     "dev": "concurrently \"npm run backend\" \"npm run start\"",
     "format": "prettier '**/*.{css,ts,tsx}' --no-config --write",
     "format:check": "prettier '**/*.{css,ts,tsx}' --no-config --check --ignore-path",

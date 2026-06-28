@@ -4,7 +4,7 @@
 
 Joy Corner Loyalty is a staff web app for running a cafe loyalty and order workflow. The app lets staff sign in, create customer receipts, track unpaid balances, manage rewards, generate and redeem vouchers, and view daily dashboard data from Google Sheets.
 
-The app code is pushed from the laptop to GitHub, then Vercel deploys the frontend and `/api` backend from GitHub. It uses Firebase Authentication for login, Firestore staff profiles for role access, and Google Sheets as the operational database.
+The app code is pushed from the laptop to GitHub, then Netlify or Vercel deploys the frontend and `/api` backend from GitHub. It uses Firebase Authentication for login, Firestore staff profiles for role access, and Google Sheets as the operational database.
 
 ## 2. Current Architecture
 
@@ -15,11 +15,12 @@ The app code is pushed from the laptop to GitHub, then Vercel deploys the fronte
 - Styles: `src/app.css`
 - Static assets: `public/assets`
 - Built with Webpack.
-- Deployed by Vercel from GitHub.
+- Deployed by Netlify or Vercel from GitHub.
 
 ### API
 
 - Vercel API entry: `api/index.js`
+- Netlify API entry: `netlify/functions/api.js`
 - Backend logic: `server/googleSheetsBackend.ts`
 - Sheet schema helpers: `server/sheetSchema.ts`
 
@@ -28,8 +29,8 @@ The app code is pushed from the laptop to GitHub, then Vercel deploys the fronte
 - Firebase Authentication: signs in staff users.
 - Firestore: stores staff profiles and roles in `users/{uid}`.
 - Google Sheets: stores cafe business data.
-- GitHub: stores the source code and triggers Vercel deploys.
-- Vercel: hosts the React frontend and `/api` serverless backend.
+- GitHub: stores the source code and triggers Netlify or Vercel deploys.
+- Netlify or Vercel: hosts the React frontend and `/api` serverless backend.
 
 ## 3. Staff Login Logic
 
@@ -42,7 +43,7 @@ The app code is pushed from the laptop to GitHub, then Vercel deploys the fronte
 Authorization: Bearer <Firebase ID token>
 ```
 
-5. Vercel `/api` verifies the token using Firebase Admin.
+5. Netlify/Vercel `/api` verifies the token using Firebase Admin.
 6. Backend reads Firestore document:
 
 ```text
