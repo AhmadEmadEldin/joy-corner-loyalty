@@ -30,6 +30,9 @@ const firebaseConfig = {
 };
 
 const appApiBaseUrl = process.env.APP_API_BASE_URL || "/api";
+const allowLocalPreviewFallback =
+  process.env.ALLOW_LOCAL_PREVIEW_FALLBACK === "true" ||
+  (process.env.NODE_ENV !== "production" && process.env.ALLOW_LOCAL_PREVIEW_FALLBACK !== "false");
 
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
@@ -63,8 +66,8 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   plugins: [
     new webpack.DefinePlugin({
       __FIREBASE_CONFIG__: JSON.stringify(firebaseConfig),
-      __FIREBASE_OWNER_EMAILS__: JSON.stringify(process.env.FIREBASE_OWNER_EMAILS || ""),
       __APP_API_BASE_URL__: JSON.stringify(appApiBaseUrl),
+      __ALLOW_LOCAL_PREVIEW_FALLBACK__: JSON.stringify(allowLocalPreviewFallback),
     }),
   ],
   devServer: {

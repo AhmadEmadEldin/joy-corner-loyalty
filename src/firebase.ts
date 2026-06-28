@@ -26,8 +26,6 @@ declare const __FIREBASE_CONFIG__: {
   storageBucket: string;
 };
 
-declare const __FIREBASE_OWNER_EMAILS__: string;
-
 export type StaffRole = "barista" | "waiter" | "cashier" | "owner";
 
 export type StaffProfile = {
@@ -164,13 +162,7 @@ async function ensureStaffProfile(
   throw new Error("No staff profile found. Contact owner.");
 }
 
-function initialRoleForEmail(email: string, requestedRole: StaffRole): StaffRole {
-  const ownerEmails = __FIREBASE_OWNER_EMAILS__
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (ownerEmails.includes(email.toLowerCase())) return "owner";
+function initialRoleForEmail(_email: string, requestedRole: StaffRole): StaffRole {
   return requestedRole === "barista" || requestedRole === "cashier"
     ? requestedRole
     : "waiter";

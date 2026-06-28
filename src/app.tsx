@@ -16,8 +16,10 @@ const joyCornerMarkUrl = "/assets/joy-corner-logo.svg";
 const joyYourTimeUrl = "/assets/joy-your-time.svg";
 
 declare const __APP_API_BASE_URL__: string;
+declare const __ALLOW_LOCAL_PREVIEW_FALLBACK__: boolean;
 
 const API_BASE_URL = __APP_API_BASE_URL__ || "/api";
+const ALLOW_LOCAL_PREVIEW_FALLBACK = Boolean(__ALLOW_LOCAL_PREVIEW_FALLBACK__);
 
 type Row = Record<string, unknown>;
 
@@ -55,6 +57,7 @@ type AppData = {
 type ApiResponse = {
   success?: boolean;
   data?: AppData;
+  staff?: StaffProfile;
   message?: string;
 };
 
@@ -378,16 +381,17 @@ export function App() {
       const response = await callServer("appData", {}, staffProfile);
       const nextData = response.data || response;
       const connected = ensureConnectedData(nextData);
+      const liveStaffProfile = response.staff || connected.staffProfile;
       setData(connected);
-      if (connected.staffProfile) {
+      if (liveStaffProfile) {
         setStaffProfile((current) =>
           current
             ? {
                 ...current,
-                ...connected.staffProfile,
-                uid: connected.staffProfile?.uid || current.uid,
+                ...liveStaffProfile,
+                uid: liveStaffProfile.uid || current.uid,
               }
-            : connected.staffProfile || current,
+            : liveStaffProfile || current,
         );
       }
       if (!options.silent) {
@@ -395,13 +399,15 @@ export function App() {
       }
     } catch (error) {
       console.error("Failed to load app data", error);
-      if (!data) {
+      if (!data && ALLOW_LOCAL_PREVIEW_FALLBACK) {
         setData(ensureConnectedData(demoData));
       }
       setStatus(
         data
           ? `${errorMessage(error)} Keeping the last loaded sheet data.`
-          : `${errorMessage(error)} Loaded local preview data so the app stays usable.`,
+          : ALLOW_LOCAL_PREVIEW_FALLBACK
+            ? `${errorMessage(error)} Live Google Sheets failed. Loaded local preview data.`
+            : errorMessage(error),
       );
     } finally {
       setLoading(false);
@@ -795,6 +801,7 @@ export function App() {
               void setReceiptPayment(payload, paymentStatus)
             }
             onDone={(payload) => void markReceiptDone(payload)}
+            role={currentRole}
             onSubmitReceipt={submitReceipt}
           />
         )}
@@ -1210,6 +1217,7 @@ function OrdersView({
   onRemoveItem,
   onSetPayment,
   onSubmitReceipt,
+  role,
 }: {
   customers: Row[];
   dashboardOrders: Row[];
@@ -1224,6 +1232,7 @@ function OrdersView({
   onRemoveItem: (index: number) => void;
   onSetPayment: (payload: string, paymentStatus: string) => void;
   onSubmitReceipt: (form: HTMLFormElement) => Promise<void>;
+  role: StaffRole;
 }) {
   const [category, setCategory] = useState("All");
   const [selectedItemId, setSelectedItemId] = useState("");
@@ -1571,6 +1580,7 @@ function OrdersView({
                 onSetPayment={onSetPayment}
                 showPickupAction={false}
                 showPickupStrike={false}
+                showPaymentActions={role !== "waiter"}
               />
             ))}
           </div>
@@ -2977,35 +2987,63 @@ function tabsForRole(role: StaffRole) {
   return tabs;
 }
 
+const rolePermissions: Record<StaffRole, Set<string>> = {
+  owner: new Set([
+    "appData",
+    "getAppData",
+    "addCustomer",
+    "removeCustomer",
+    "addReceipt",
+    "collectUnpaidPayment",
+    "updateReceiptPayment",
+    "markReceiptDone",
+    "generateVoucher",
+    "redeemVoucher",
+    "resetDay",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
+  cashier: new Set([
+    "appData",
+    "getAppData",
+    "addCustomer",
+    "removeCustomer",
+    "addReceipt",
+    "collectUnpaidPayment",
+    "updateReceiptPayment",
+    "markReceiptDone",
+    "generateVoucher",
+    "redeemVoucher",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
+  waiter: new Set([
+    "appData",
+    "getAppData",
+    "addReceipt",
+    "customerSearch",
+    "customerHistory",
+    "markReceiptDone",
+    "debugAuth",
+  ]),
+  barista: new Set([
+    "appData",
+    "getAppData",
+    "markReceiptDone",
+    "debugAuth",
+  ]),
+};
+
 function canRunAction(role: StaffRole, action: string) {
-  if (role === "owner") return true;
-
-  if (role === "barista") {
-    return [
-      "appData",
-      "getAppData",
-      "historyDays",
-      "dayHistory",
-      "markReceiptDone",
-    ].includes(action);
-  }
-
-  if (role === "waiter") {
-    return [
-      "appData",
-      "getAppData",
-      "addOrder",
-      "addReceipt",
-      "customerSearch",
-      "customerHistory",
-      "historyDays",
-      "dayHistory",
-      "updateReceiptPayment",
-      "markReceiptDone",
-    ].includes(action);
-  }
-
-  return action !== "resetDay";
+  return rolePermissions[role]?.has(action) === true;
 }
 
 function roleLabel(role: StaffRole) {

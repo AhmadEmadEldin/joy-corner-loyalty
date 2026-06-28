@@ -37,46 +37,64 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.dayHistory]: ["Day History", "History"],
 };
 
-const ROLE_ACTIONS: Record<string, string[]> = {
-  barista: ["appData", "getAppData", "historyDays", "dayHistory", "markReceiptDone"],
-  waiter: [
+const ROLE_PERMISSIONS: Record<string, Set<string>> = {
+  owner: new Set([
     "appData",
     "getAppData",
-    "addOrder",
-    "addReceipt",
-    "customerSearch",
-    "customerHistory",
-    "historyDays",
-    "dayHistory",
-    "updateReceiptPayment",
-    "markReceiptDone",
-  ],
-  cashier: [
-    "appData",
-    "getAppData",
-    "debugSheets",
     "addCustomer",
-    "addOrder",
+    "removeCustomer",
     "addReceipt",
-    "addPayment",
-    "customerSearch",
-    "customerHistory",
-    "historyDays",
-    "dayHistory",
     "collectUnpaidPayment",
     "updateReceiptPayment",
     "markReceiptDone",
     "generateVoucher",
     "redeemVoucher",
+    "resetDay",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
+  cashier: new Set([
+    "appData",
+    "getAppData",
+    "addCustomer",
     "removeCustomer",
-    "updateVoucherCanvaLink",
-  ],
-  owner: ["*"],
+    "addReceipt",
+    "collectUnpaidPayment",
+    "updateReceiptPayment",
+    "markReceiptDone",
+    "generateVoucher",
+    "redeemVoucher",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
+  waiter: new Set([
+    "appData",
+    "getAppData",
+    "addReceipt",
+    "customerSearch",
+    "customerHistory",
+    "markReceiptDone",
+    "debugAuth",
+  ]),
+  barista: new Set([
+    "appData",
+    "getAppData",
+    "markReceiptDone",
+    "debugAuth",
+  ]),
 };
 
 const REWARD_THRESHOLD = 5;
 const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 3001);
-const VALID_ROLES = new Set(Object.keys(ROLE_ACTIONS));
+const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
 
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
@@ -90,11 +108,13 @@ type Actor = {
 };
 
 class ApiError extends Error {
+  details?: Payload;
   statusCode: number;
 
-  constructor(message: string, statusCode = 400) {
+  constructor(message: string, statusCode = 400, details?: Payload) {
     super(message);
     this.name = "ApiError";
+    this.details = details;
     this.statusCode = statusCode;
   }
 }
@@ -221,8 +241,14 @@ async function resolveSheetName(sheetName: string) {
   if (normalized) return normalized;
 
   throw new ApiError(
-    `Google Sheet tab missing: ${sheetName}. Tabs found: ${titles.join(", ") || "none"}`,
+    `Google Sheet tab missing: ${sheetName}.`,
     500,
+    {
+      fallbackUsed: false,
+      foundTabs: titles,
+      missingTab: sheetName,
+      spreadsheetId: maskId_(SPREADSHEET_ID),
+    },
   );
 }
 
@@ -255,8 +281,14 @@ async function getSheetValues(sheetName: string) {
     if (/Unable to parse range|not found|Unable to parse/i.test(message)) {
       const titles = await getSheetTitles();
       throw new ApiError(
-        `Google Sheet tab missing: ${sheetName}. Tabs found: ${titles.join(", ") || "none"}`,
+        `Google Sheet tab missing: ${sheetName}.`,
         500,
+        {
+          fallbackUsed: false,
+          foundTabs: titles,
+          missingTab: sheetName,
+          spreadsheetId: maskId_(SPREADSHEET_ID),
+        },
       );
     }
     throw new ApiError(`Google Sheet read failed for ${sheetName}.`, 500);
@@ -372,6 +404,7 @@ export async function handleAction(action: string, payload: Payload) {
     return success_({
       uid: actor.uid,
       email: actor.email,
+      name: actor.displayName || actor.email,
       profileFound: Boolean(actor.profileFound),
       role: actor.role,
       active: actor.active !== false,
@@ -389,6 +422,7 @@ export async function handleAction(action: string, payload: Payload) {
     case "appData":
     case "getAppData":
       return success_({
+        staff: staffForClient_(actor),
         data: {
           ...(await buildAppDataForRole(actor.role)),
           staffProfile: actor,
@@ -440,9 +474,8 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
 
   if (!idToken && localDevAuth) {
     const role = normalizeRole_(payload.devRole);
-    const allowed = ROLE_ACTIONS[role] || [];
 
-    if (!allowed.includes("*") && !allowed.includes(action)) {
+    if (!isActionAllowed_(role, action)) {
       throw new Error(`Role ${role} cannot run action ${action}.`);
     }
 
@@ -455,7 +488,7 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
     };
   }
 
-  if (!idToken) throw new ApiError("Missing Firebase token", 401);
+  if (!idToken) throw new ApiError("Missing Firebase ID token.", 401);
 
   initFirebaseAdmin();
   let decoded;
@@ -470,10 +503,12 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
   const email = clean_(decoded.email).toLowerCase();
   const uid = clean_(decoded.uid);
   const actor = await staffActorForUser(uid, email);
-  const allowed = ROLE_ACTIONS[actor.role] || [];
 
-  if (!allowed.includes("*") && !allowed.includes(action)) {
-    throw new ApiError("Role not allowed", 403);
+  if (!isActionAllowed_(actor.role, action)) {
+    throw new ApiError(
+      `Role '${actor.role}' is not allowed to perform action '${action}'.`,
+      403,
+    );
   }
 
   return actor;
@@ -514,39 +549,6 @@ async function staffProfileFromFirestore(uid: string, email: string) {
     safeServerError_("Firestore staff profile read failed", error);
     return null;
   }
-}
-
-async function staffProfileFromSheet(uid: string, email: string) {
-  let rows: Row[] = [];
-
-  try {
-    rows = await sheetToObjects(SHEETS.staffUsers);
-  } catch {
-    return null;
-  }
-
-  const row = rows.find((staff) => {
-    const staffEmail = clean_(
-      staff.email || staff.staffEmail || staff.userEmail || staff.firebaseEmail,
-    ).toLowerCase();
-    const staffUid = clean_(staff.uid || staff.firebaseUid || staff.userId);
-    return (staffEmail && staffEmail === email) || (staffUid && staffUid === uid);
-  });
-
-  if (!row) return null;
-
-  const active = activeValue_(row.active ?? row.status ?? row.enabled ?? true);
-  if (!active) throw new ApiError("Staff account inactive.", 403);
-
-  const role = clean_(row.role || row.staffRole || row.accessRole).toLowerCase();
-  if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.", 403);
-
-  return {
-    active,
-    displayName: staffDisplayName_(row) || email,
-    profileFound: true,
-    role,
-  };
 }
 
 async function addCustomer(payload: Payload) {
@@ -2458,7 +2460,11 @@ function uniqueStrings_(values: unknown[]) {
 
 function normalizeRole_(role: unknown) {
   const value = clean_(role).toLowerCase();
-  return ROLE_ACTIONS[value] ? value : "waiter";
+  return ROLE_PERMISSIONS[value] ? value : "waiter";
+}
+
+function isActionAllowed_(role: string, action: string) {
+  return ROLE_PERMISSIONS[role]?.has(action) === true;
 }
 
 function tokenFromPayload_(payload: Payload) {
@@ -2491,9 +2497,24 @@ function safeErrorMessage_(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function safeErrorDetails_(error: unknown) {
+  return error instanceof ApiError && error.details ? error.details : {};
+}
+
 function safeServerError_(label: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(label, message.replace(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g, "[redacted private key]"));
+}
+
+function staffForClient_(actor: Actor) {
+  return {
+    active: actor.active !== false,
+    displayName: actor.displayName || actor.email,
+    email: actor.email,
+    name: actor.displayName || actor.email,
+    role: actor.role,
+    uid: actor.uid,
+  };
 }
 
 function clean_(value: unknown) {
@@ -2589,6 +2610,7 @@ app.get("/api", async (request, response) => {
   } catch (error) {
     safeServerError_("API GET failed", error);
     response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
       success: false,
       message: safeErrorMessage_(error),
     });
@@ -2607,6 +2629,7 @@ app.post("/api", async (request, response) => {
   } catch (error) {
     safeServerError_("API POST failed", error);
     response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
       success: false,
       message: safeErrorMessage_(error),
     });
@@ -2631,6 +2654,7 @@ async function routeAction(
   } catch (error) {
     safeServerError_(`API action ${action} failed`, error);
     response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
       success: false,
       message: safeErrorMessage_(error),
     });
@@ -2648,6 +2672,7 @@ async function routeDataSlice(
   } catch (error) {
     safeServerError_("API data slice failed", error);
     response.status(statusCodeForError_(error)).json({
+      ...safeErrorDetails_(error),
       success: false,
       message: safeErrorMessage_(error),
     });
