@@ -4,7 +4,7 @@
 
 Joy Corner Loyalty is a staff web app for running a cafe loyalty and order workflow. The app lets staff sign in, create customer receipts, track unpaid balances, manage rewards, generate and redeem vouchers, and view daily dashboard data from Google Sheets.
 
-The app is deployed with Firebase Hosting and Firebase Cloud Functions. It uses Firebase Authentication for login, Firestore staff profiles for role access, and Google Sheets as the operational database.
+The app code is pushed from the laptop to GitHub, then Vercel deploys the frontend and `/api` backend from GitHub. It uses Firebase Authentication for login, Firestore staff profiles for role access, and Google Sheets as the operational database.
 
 ## 2. Current Architecture
 
@@ -15,12 +15,11 @@ The app is deployed with Firebase Hosting and Firebase Cloud Functions. It uses 
 - Styles: `src/app.css`
 - Static assets: `public/assets`
 - Built with Webpack.
-- Deployed by Firebase Hosting.
+- Deployed by Vercel from GitHub.
 
 ### API
 
-- Firebase Function entry: `firebase-functions.js`
-- Legacy Vercel API entry: `api/index.js`
+- Vercel API entry: `api/index.js`
 - Backend logic: `server/googleSheetsBackend.ts`
 - Sheet schema helpers: `server/sheetSchema.ts`
 
@@ -29,8 +28,8 @@ The app is deployed with Firebase Hosting and Firebase Cloud Functions. It uses 
 - Firebase Authentication: signs in staff users.
 - Firestore: stores staff profiles and roles in `users/{uid}`.
 - Google Sheets: stores cafe business data.
-- Firebase Hosting: hosts frontend.
-- Firebase Cloud Functions: hosts `/api`.
+- GitHub: stores the source code and triggers Vercel deploys.
+- Vercel: hosts the React frontend and `/api` serverless backend.
 
 ## 3. Staff Login Logic
 
@@ -43,7 +42,7 @@ The app is deployed with Firebase Hosting and Firebase Cloud Functions. It uses 
 Authorization: Bearer <Firebase ID token>
 ```
 
-5. Firebase Cloud Function verifies the token using Firebase Admin.
+5. Vercel `/api` verifies the token using Firebase Admin.
 6. Backend reads Firestore document:
 
 ```text
