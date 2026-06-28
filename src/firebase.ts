@@ -31,6 +31,7 @@ declare const __FIREBASE_OWNER_EMAILS__: string;
 export type StaffRole = "barista" | "waiter" | "cashier" | "owner";
 
 export type StaffProfile = {
+  active?: boolean;
   createdAt?: unknown;
   displayName: string;
   email: string;
@@ -120,12 +121,24 @@ async function ensureStaffProfile(
 
   if (snapshot.exists()) {
     const data = snapshot.data() as Partial<StaffProfile>;
+    const profileEmail = (data.email || email).toLowerCase();
+    const role = normalizeRole(data.role);
+
+    if (profileEmail && profileEmail !== email.toLowerCase()) {
+      throw new Error("Staff profile email does not match this signed-in user.");
+    }
+
+    if (!activeValue(data.active)) {
+      throw new Error("Staff account inactive.");
+    }
+
     return {
-      displayName: data.displayName || displayName || email,
-      email: data.email || email,
-      role: normalizeRole(data.role),
-      uid: user.uid,
       ...data,
+      active: true,
+      displayName: data.displayName || displayName || email,
+      email: profileEmail || email,
+      role,
+      uid: user.uid,
     };
   }
 
@@ -144,9 +157,11 @@ async function ensureStaffProfile(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    return { ...profile, active: true };
   }
 
-  return profile;
+  throw new Error("No staff profile found. Contact owner.");
 }
 
 function initialRoleForEmail(email: string, requestedRole: StaffRole): StaffRole {
@@ -162,9 +177,23 @@ function initialRoleForEmail(email: string, requestedRole: StaffRole): StaffRole
 }
 
 function normalizeRole(role: unknown): StaffRole {
-  return role === "barista" || role === "cashier" || role === "owner"
-    ? role
-    : "waiter";
+  if (
+    role === "barista" ||
+    role === "cashier" ||
+    role === "owner" ||
+    role === "waiter"
+  ) {
+    return role;
+  }
+
+  throw new Error("Invalid staff role.");
+}
+
+function activeValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
 }
 
 function errorMessage(error: unknown) {

@@ -433,7 +433,10 @@ export async function handleAction(action: string, payload: Payload) {
 
 async function authorizeAction(action: string, payload: Payload): Promise<Actor> {
   const idToken = tokenFromPayload_(payload);
-  const localDevAuth = clean_(process.env.LOCAL_DEV_AUTH).toLowerCase() === "true";
+  const localDevAuth =
+    clean_(process.env.LOCAL_DEV_AUTH).toLowerCase() === "true" &&
+    process.env.VERCEL !== "1" &&
+    process.env.NODE_ENV !== "production";
 
   if (!idToken && localDevAuth) {
     const role = normalizeRole_(payload.devRole);
@@ -477,20 +480,8 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
 }
 
 async function staffActorForUser(uid: string, email: string): Promise<Actor> {
-  const ownerEmails = clean_(process.env.FIREBASE_OWNER_EMAILS)
-    .split(",")
-    .map((value) => clean_(value).toLowerCase())
-    .filter(Boolean);
-
-  if (ownerEmails.includes(email)) {
-    return { active: true, email, profileFound: true, role: "owner", uid };
-  }
-
   const firestoreProfile = await staffProfileFromFirestore(uid, email);
   if (firestoreProfile) return { email, uid, ...firestoreProfile };
-
-  const sheetProfile = await staffProfileFromSheet(uid, email);
-  if (sheetProfile) return { email, uid, ...sheetProfile };
 
   throw new ApiError("No staff profile found. Contact owner.", 403);
 }
@@ -1212,11 +1203,14 @@ async function debugSheets() {
     SHEETS.loyaltyWinners,
     SHEETS.staffUsers,
   ]) {
-    if (!sheetTabsFound.includes(sheetName)) {
+    let resolvedSheetName = "";
+    try {
+      resolvedSheetName = await resolveSheetName(sheetName);
+    } catch {
       rowsCountByTab[sheetName] = -1;
       continue;
     }
-    rowsCountByTab[sheetName] = Math.max(0, (await getSheetValues(sheetName)).length - 1);
+    rowsCountByTab[resolvedSheetName] = Math.max(0, (await getSheetValues(sheetName)).length - 1);
   }
 
   return success_({
