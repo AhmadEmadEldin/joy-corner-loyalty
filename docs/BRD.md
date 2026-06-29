@@ -345,14 +345,17 @@ Do not prefix these with `VITE_`.
 
 ```text
 GOOGLE_SHEETS_SPREADSHEET_ID
-FIREBASE_SERVICE_ACCOUNT_JSON
+FIREBASE_CLIENT_EMAIL
+FIREBASE_PRIVATE_KEY
 FIREBASE_OWNER_EMAILS
 APP_API_BASE_URL=/api
 ```
 
-`GOOGLE_SERVICE_ACCOUNT_JSON` is optional when the same service account in
-`FIREBASE_SERVICE_ACCOUNT_JSON` is shared on the Google Sheet. This keeps Netlify
-environment variables under AWS Lambda compatibility size limits.
+For Netlify, prefer split service-account fields instead of full JSON. Use the
+Firebase Admin service account email as `FIREBASE_CLIENT_EMAIL`, put its private
+key in `FIREBASE_PRIVATE_KEY`, and share the Google Sheet with that same email.
+This keeps Netlify environment variables under AWS Lambda compatibility size
+limits.
 
 ### Frontend Firebase Variables
 

@@ -136,6 +136,13 @@ function initFirebaseAdmin() {
 function firebaseCredential() {
   const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   const file = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = (
+    process.env.FIREBASE_PRIVATE_KEY ||
+    process.env.GOOGLE_PRIVATE_KEY ||
+    ""
+  ).replace(/\\n/g, "\n");
 
   if (json) {
     return cert(parseServiceAccountJson_(json, "FIREBASE_SERVICE_ACCOUNT_JSON"));
@@ -143,6 +150,14 @@ function firebaseCredential() {
 
   if (file) {
     return cert(JSON.parse(readFileSync(file, "utf8")));
+  }
+
+  if (projectId && clientEmail && privateKey) {
+    return cert({
+      clientEmail,
+      privateKey,
+      projectId,
+    });
   }
 
   return undefined;
@@ -155,8 +170,12 @@ function googleServiceAccount() {
   const file =
     process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
     process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = (
+    process.env.GOOGLE_PRIVATE_KEY ||
+    process.env.FIREBASE_PRIVATE_KEY ||
+    ""
+  ).replace(/\\n/g, "\n");
 
   if (!SPREADSHEET_ID) {
     throw new ApiError("Missing GOOGLE_SHEETS_SPREADSHEET_ID.", 500);
@@ -169,7 +188,7 @@ function googleServiceAccount() {
   }
 
   throw new ApiError(
-    "Missing GOOGLE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_JSON.",
+    "Missing Google Sheets service account credentials.",
     500,
   );
 }
@@ -1241,11 +1260,12 @@ async function debugSheets() {
   return success_({
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
     serviceAccountPresent: Boolean(
-      process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+        process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
         process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
         process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
         process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
-        (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
+        (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) ||
+        (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY),
     ),
     spreadsheetId: maskId_(SPREADSHEET_ID),
     sheetTabsFound,
