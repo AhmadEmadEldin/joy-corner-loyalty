@@ -21,12 +21,26 @@ exports.handler = async (event) => {
   }
 
   try {
+    const path = event.path || "";
+    const headers = event.headers || {};
+
+    if (path.endsWith("/api/health") || path.endsWith("/.netlify/functions/api/health")) {
+      return {
+        body: JSON.stringify({
+          success: true,
+          service: "Joy Corner Netlify API",
+        }),
+        headers: corsHeaders,
+        statusCode: 200,
+      };
+    }
+
     const body = event.body ? JSON.parse(event.body) : {};
     const payload =
       event.httpMethod === "GET"
         ? { ...(event.queryStringParameters || {}) }
         : body;
-    payload.authorization = event.headers.authorization || event.headers.Authorization || "";
+    payload.authorization = headers.authorization || headers.Authorization || "";
 
     const action = String(payload.action || "appData").trim();
     const result = await handleAction(action, payload);
