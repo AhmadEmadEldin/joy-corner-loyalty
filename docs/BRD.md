@@ -339,17 +339,20 @@ Returns safe sheet diagnostics:
 
 ## 10. Environment Variables
 
-### Server-only Vercel Variables
+### Server-only Netlify/Vercel Variables
 
 Do not prefix these with `VITE_`.
 
 ```text
 GOOGLE_SHEETS_SPREADSHEET_ID
-GOOGLE_SERVICE_ACCOUNT_JSON
 FIREBASE_SERVICE_ACCOUNT_JSON
 FIREBASE_OWNER_EMAILS
 APP_API_BASE_URL=/api
 ```
+
+`GOOGLE_SERVICE_ACCOUNT_JSON` is optional when the same service account in
+`FIREBASE_SERVICE_ACCOUNT_JSON` is shared on the Google Sheet. This keeps Netlify
+environment variables under AWS Lambda compatibility size limits.
 
 ### Frontend Firebase Variables
 
@@ -371,7 +374,7 @@ VITE_FIREBASE_MEASUREMENT_ID
 - Firestore `users/{uid}` controls staff access.
 - UI hides unavailable actions, but API also enforces role permissions.
 - Service account JSON must never be exposed to the frontend.
-- `GOOGLE_SERVICE_ACCOUNT_JSON` and `FIREBASE_SERVICE_ACCOUNT_JSON` must stay Vercel server secrets.
+- `GOOGLE_SERVICE_ACCOUNT_JSON` and `FIREBASE_SERVICE_ACCOUNT_JSON` must stay Netlify/Vercel server secrets.
 - Service account JSON files should not be committed to Git.
 - If service account keys were exposed, rotate them in Google Cloud/Firebase.
 

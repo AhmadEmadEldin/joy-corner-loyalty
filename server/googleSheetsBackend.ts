@@ -149,8 +149,12 @@ function firebaseCredential() {
 }
 
 function googleServiceAccount() {
-  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const file = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
+  const json =
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const file =
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
@@ -165,7 +169,7 @@ function googleServiceAccount() {
   }
 
   throw new ApiError(
-    "Missing GOOGLE_SERVICE_ACCOUNT_JSON.",
+    "Missing GOOGLE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_JSON.",
     500,
   );
 }
@@ -1238,7 +1242,9 @@ async function debugSheets() {
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
     serviceAccountPresent: Boolean(
       process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+        process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
         process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
+        process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
         (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
     ),
     spreadsheetId: maskId_(SPREADSHEET_ID),
