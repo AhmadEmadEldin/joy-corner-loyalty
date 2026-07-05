@@ -79,4 +79,16 @@ npm run build
 npm run deploy:firebase
 ```
 
+Deploy only Hosting:
+
+```powershell
+npm run deploy:firebase:hosting
+```
+
+Deploy only Functions:
+
+```powershell
+npm run deploy:firebase:functions
+```
+
 Do not upload `.env`, service account JSON files, or private keys to GitHub.

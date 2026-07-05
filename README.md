@@ -84,6 +84,19 @@ npm run sync:staff
 
 This creates or updates Firebase Auth users and writes Firestore `users/{uid}` role documents.
 
+Staff documents use this shape:
+
+```json
+{
+  "email": "staff@example.com",
+  "displayName": "Staff Name",
+  "role": "owner",
+  "active": true,
+  "createdAt": "server timestamp",
+  "updatedAt": "server timestamp"
+}
+```
+
 ## Customer Order Requests
 
 Customers can open `/order`, sign up or sign in with Firebase Auth, choose a menu item, and submit an order request. Customer accounts do not need staff Firestore roles. The backend verifies their Firebase token and writes the request to `Orders` as `Staff = Customer Request`, `Payment Status = Unpaid`, and `Order Status = Requested`.

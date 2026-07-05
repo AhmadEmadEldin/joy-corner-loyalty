@@ -7,6 +7,8 @@
     "backend": "tsx ./server/googleSheetsBackend.ts",
     "build": "webpack --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts",
     "deploy:firebase": "npm run build && firebase deploy --only hosting,functions",
+    "deploy:firebase:functions": "firebase deploy --only functions",
+    "deploy:firebase:hosting": "npm run build && firebase deploy --only hosting",
     "dev": "concurrently \"npm run backend\" \"npm run start\"",
     "format": "prettier '**/*.{css,ts,tsx}' --no-config --write",
     "format:check": "prettier '**/*.{css,ts,tsx}' --no-config --check --ignore-path",

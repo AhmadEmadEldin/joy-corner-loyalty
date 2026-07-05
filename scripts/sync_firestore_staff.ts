@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { google } from "googleapis";
 import { readFileSync } from "node:fs";
 
@@ -127,14 +127,17 @@ async function upsertStaff(staff: StaffSeed) {
     });
   }
 
-  await getFirestore().collection("users").doc(user.uid).set(
+  const staffDoc = getFirestore().collection("users").doc(user.uid);
+  const staffSnapshot = await staffDoc.get();
+  await staffDoc.set(
     {
       active: staff.active,
+      ...(staffSnapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
       displayName: staff.displayName,
       email: staff.email,
       role: staff.role,
       uid: user.uid,
-      updatedAt: new Date(),
+      updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
