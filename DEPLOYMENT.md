@@ -1,44 +1,70 @@
-# Joy Corner Free Deployment
+# Joy Corner Netlify Deployment
 
-## Recommended free host
+## Deployment Flow
 
-Use Vercel for this app. It gives you a free permanent domain like:
+```text
+VS Code -> GitHub -> Netlify -> Firebase Auth -> Netlify Function -> Firestore users/{uid} -> Google Sheets
+```
 
-`https://joy-corner-loyalty.vercel.app`
-
-The project is configured for Vercel with:
+## Netlify Build Settings
 
 - Build command: `npm run build`
-- Output directory: `dist`
-- API routes: `api/*`
+- Publish directory: `dist`
+- Functions directory: `netlify/functions`
 
-## Required Vercel environment variables
+These are already configured in `netlify.toml`.
 
-Add these in Vercel under Project Settings > Environment Variables:
+## Required Netlify Environment Variables
 
-- `APP_API_BASE_URL=/api`
-- `GOOGLE_SHEETS_SPREADSHEET_ID`
-- `GOOGLE_SERVICE_ACCOUNT_JSON`
-- `FIREBASE_SERVICE_ACCOUNT_JSON`
-- `FIREBASE_API_KEY`
-- `FIREBASE_AUTH_DOMAIN`
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_STORAGE_BUCKET`
-- `FIREBASE_MESSAGING_SENDER_ID`
-- `FIREBASE_APP_ID`
-- `FIREBASE_MEASUREMENT_ID`
-- `FIREBASE_OWNER_EMAILS`
+Add these in Netlify under Site configuration > Environment variables.
 
-Do not upload `.env` to GitHub.
+Frontend Firebase config:
 
-## GitHub save flow
+```text
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_APP_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_MEASUREMENT_ID
+```
 
-1. Install Git or GitHub Desktop.
-2. Open this folder as a repository:
-   `C:\Users\CYBER-TECH\CanvaProjects\joy-corner-loyalty`
-3. Commit the changes.
-4. Push to GitHub.
-5. In Vercel, import the GitHub repository.
-6. Deploy.
+Backend Google Sheets access:
 
-Every future push to GitHub will redeploy the web app automatically.
+```text
+GOOGLE_SHEET_ID
+GOOGLE_CLIENT_EMAIL
+GOOGLE_PRIVATE_KEY
+```
+
+Backend Firebase Admin access:
+
+```text
+FIREBASE_PROJECT_ID
+FIREBASE_CLIENT_EMAIL
+FIREBASE_PRIVATE_KEY
+```
+
+Private keys must keep their newline escapes. In Netlify, paste them as one value with `\n` sequences if needed.
+
+## Firebase Setup
+
+1. Enable Email/Password sign-in in Firebase Authentication.
+2. Create each staff user in Firebase Authentication.
+3. For each Auth user, create Firestore document `users/{uid}`.
+4. Add `email`, `role`, `active`, and `displayName`.
+
+## Google Sheets Setup
+
+1. Enable Google Sheets API for the Google Cloud project that owns the service account.
+2. Share `Joy_Corner_Integrated_WITH_Loyalty_Winners` with `GOOGLE_CLIENT_EMAIL` as Editor.
+3. Set `GOOGLE_SHEET_ID` to the spreadsheet ID only.
+
+## GitHub Flow
+
+1. Commit changes locally.
+2. Push to GitHub.
+3. Netlify deploys automatically from the connected branch.
+
+Do not upload `.env`, service account JSON files, or private keys to GitHub.

@@ -7,6 +7,11 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  getFirestore,
+} from "firebase/firestore";
 
 declare const __FIREBASE_CONFIG__: {
   apiKey: string;
@@ -44,6 +49,7 @@ export const firebaseReady = requiredFirebaseKeys.every(
 const app = firebaseReady ? initializeApp(__FIREBASE_CONFIG__) : null;
 
 export const auth = app ? getAuth(app) : null;
+const firestore = app ? getFirestore(app) : null;
 
 if (app) {
   void isSupported().then((supported) => {
@@ -90,13 +96,88 @@ async function ensureStaffProfile(
   displayName = "",
 ): Promise<StaffProfile> {
   const email = user.email || "";
+  const firestoreProfile = await staffProfileFromFirestore(user.uid, email);
+
+  if (firestoreProfile) {
+    return firestoreProfile;
+  }
+
+  throw new Error("No active Firestore staff profile found for this account.");
+}
+
+async function staffProfileFromFirestore(
+  uid: string,
+  email: string,
+): Promise<StaffProfile | null> {
+  if (!firestore) return null;
+
+  const profile = await readStaffProfileDoc(uid, email);
+
+  if (!profile) {
+    throw new Error("No active Firestore staff profile found for this account.");
+  }
+
+  return profile;
+}
+
+async function readStaffProfileDoc(uid: string, signedInEmail: string) {
+  const snapshot = await getDoc(doc(firestore!, "users", uid));
+  if (!snapshot.exists()) return null;
+
+  return staffProfileFromData(uid, signedInEmail, snapshot.data());
+}
+
+function staffProfileFromData(
+  uid: string,
+  signedInEmail: string,
+  data: Record<string, unknown>,
+): StaffProfile {
+  const email = stringValue(data.email || signedInEmail).toLowerCase();
+  const role = normalizeRole(data.role);
+
+  if (!role) {
+    throw new Error("Firestore staff profile has an invalid role.");
+  }
+
+  if (email && signedInEmail && email !== signedInEmail.toLowerCase()) {
+    throw new Error("Firestore staff profile email does not match this login.");
+  }
+
+  if (!activeValue(data.active)) {
+    throw new Error("Firestore staff account is inactive.");
+  }
+
   return {
     active: true,
-    displayName: displayName || email,
+    displayName: stringValue(data.displayName || data.name || email),
     email,
-    role: "barista",
-    uid: user.uid,
+    role,
+    uid,
   };
+}
+
+function normalizeRole(value: unknown): StaffRole | null {
+  const role = stringValue(value).toLowerCase();
+  return role === "barista" ||
+    role === "waiter" ||
+    role === "cashier" ||
+    role === "owner"
+    ? role
+    : null;
+}
+
+function activeValue(value: unknown) {
+  if (value == null || value === "") return true;
+  if (typeof value === "boolean") return value;
+
+  const normalized = stringValue(value).toLowerCase();
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(
+    normalized,
+  );
+}
+
+function stringValue(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function errorMessage(error: unknown) {

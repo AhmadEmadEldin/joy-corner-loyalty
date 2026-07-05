@@ -42,7 +42,6 @@
     }
   },
   "include": [
-    "./api/**/*",
     "./server/**/*",
     "./src/**/*",
     "./scripts/write_standalone_html.ts",

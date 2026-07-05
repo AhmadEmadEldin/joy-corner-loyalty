@@ -14,11 +14,7 @@ const joyCultureStripUrl = "/assets/joy-reference-hero.png";
 const joyCornerMarkUrl = "/assets/joy-corner-logo.svg";
 const joyYourTimeUrl = "/assets/joy-your-time.svg";
 
-declare const __APP_API_BASE_URL__: string;
-declare const __ALLOW_LOCAL_PREVIEW_FALLBACK__: boolean;
-
-const API_BASE_URL = __APP_API_BASE_URL__ || "/api";
-const ALLOW_LOCAL_PREVIEW_FALLBACK = Boolean(__ALLOW_LOCAL_PREVIEW_FALLBACK__);
+const API_BASE_URL = "/api";
 
 type Row = Record<string, unknown>;
 
@@ -111,169 +107,6 @@ const tabIcons: Record<TabId, string> = {
   vouchers: "⌑",
 };
 
-const localStaffAccounts: Array<StaffProfile & { password: string }> = [
-  {
-    displayName: "Joy Corner Owner",
-    email: "owner@joycorner.local",
-    password: "owner123",
-    role: "owner",
-    uid: "local-owner",
-  },
-];
-
-const demoData: AppData = {
-  dashboard: {
-    totalCustomers: 3,
-      totalOrders: 3,
-      totalItems: 3,
-      totalSales: 375,
-      totalPaid: 300,
-      totalUnpaid: 75,
-      openReceipts: 1,
-      pickedUpReceipts: 0,
-      unpaidReceipts: 1,
-    rewardsReady: 1,
-    totalWinners: 1,
-  },
-  customers: [
-    {
-      customerId: "CUST-0001",
-      fullName: "Ahmed Emad",
-      phoneWhatsApp: "01000000000",
-      favoriteDrink: "Iced Spanish Latte",
-      totalOrders: "2",
-      totalSpent: "195",
-      unpaidBalance: "75",
-      freeDrinksReady: "0",
-    },
-    {
-      customerId: "CUST-0002",
-      fullName: "Mona Ali",
-      phoneWhatsApp: "01111111111",
-      favoriteDrink: "Cappuccino",
-      totalOrders: "1",
-      totalSpent: "180",
-      unpaidBalance: "0",
-      freeDrinksReady: "0",
-    },
-  ],
-  orders: [
-    {
-      orderDateTime: "2026-06-21",
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      staff: "Cashier 1",
-      orderPlace: "Table 4",
-      item: "Iced Spanish Latte",
-      qty: "1",
-      total: "120",
-      paidAmount: "120",
-      outstandingAmount: "0",
-      orderDescription: "Iced Spanish Latte x1 - 120 EGP",
-      paymentStatus: "Paid",
-      orderStatus: "Closed",
-    },
-    {
-      orderDateTime: "2026-06-22",
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      staff: "Waiter 1",
-      orderPlace: "Garden sofa",
-      item: "Honey Cake",
-      qty: "1",
-      total: "75",
-      paidAmount: "0",
-      outstandingAmount: "75",
-      orderDescription: "Honey Cake x1 - 75 EGP",
-      paymentStatus: "Unpaid",
-      orderStatus: "Open",
-    },
-  ],
-  rewards: [
-    {
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      phone: "01000000000",
-      favoriteDrink: "Iced Spanish Latte",
-      paidDrinks: "5",
-      earnedFreeDrinks: "1",
-      generatedVouchers: "0",
-      pendingVouchers: "0",
-      redeemedVouchers: "0",
-      freeDrinksReady: "1",
-      nextRewardProgress: "0/5",
-      winner: "Yes",
-      winnerMessage: "1 free drink voucher ready",
-    },
-  ],
-  winners: [
-    {
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      phone: "01000000000",
-      favoriteDrink: "Iced Spanish Latte",
-      paidDrinks: "5",
-      freeDrinksReady: "1",
-      winnerMessage: "1 free drink voucher ready",
-    },
-  ],
-  vouchers: [
-    {
-      voucherCode: "JC-CUST0001-2236",
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      phone: "01000000000",
-      favoriteDrink: "Iced Spanish Latte",
-      voucherTitle: "FREE DRINK VOUCHER",
-      voucherSubtitle: "Joy Corner Free Drink",
-      voucherText: "Congratulations Ahmed Emad!",
-      voucherReward: "Enjoy 1 Free Iced Spanish Latte",
-      redeemStatus: "Not Redeemed",
-      canvaStatus: "Pending",
-      generatedAt: "2026-06-24",
-    },
-  ],
-  unpaid: [
-    {
-      customerId: "CUST-0001",
-      customerName: "Ahmed Emad",
-      phone: "01000000000",
-      paymentStatus: "Unpaid",
-      unpaidBalance: "75",
-      openUnpaidOrders: "1",
-      orderPlace: "Garden sofa",
-      lastVisit: "2026-06-22",
-      unpaidDescription: "2026-06-22 - Honey Cake x1 = 75 EGP (Unpaid)",
-    },
-  ],
-  menu: [
-    {
-      itemId: "ITEM-0017",
-      category: "Hot Beverages",
-      itemName: "Latte",
-      priceText: "80 / 90 / 100",
-      suggestedPrice: "80",
-      active: "Yes",
-    },
-    {
-      itemId: "ITEM-0025",
-      category: "Iced Drinks",
-      itemName: "Iced Spanish Latte",
-      priceText: "120",
-      suggestedPrice: "120",
-      active: "Yes",
-    },
-  ],
-  lists: {
-    paymentStatus: ["Paid", "Unpaid", "Partial"],
-    paymentMethod: ["Cash", "Visa", "Wallet"],
-    staff: ["Cashier 1", "Cashier 2", "Waiter 1"],
-    orderPlace: ["Takeaway", "Table 1", "Table 2", "Table 3", "Table 4", "Garden sofa"],
-    serviceType: ["Hall", "Outside", "Car", "Takeaway"],
-    carColor: ["Black", "White", "Silver", "Gray", "Red", "Blue"],
-  },
-};
-
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [data, setData] = useState<AppData | null>(null);
@@ -355,7 +188,7 @@ export function App() {
 
     try {
       setLoading(true);
-      const response = await callServer("appData", {}, staffProfile);
+      const response = await callServer("appData");
       const nextData = response.data || response;
       const connected = ensureConnectedData(nextData);
       const liveStaffProfile = response.staff || connected.staffProfile;
@@ -376,15 +209,10 @@ export function App() {
       }
     } catch (error) {
       console.error("Failed to load app data", error);
-      if (!data && ALLOW_LOCAL_PREVIEW_FALLBACK) {
-        setData(ensureConnectedData(demoData));
-      }
       setStatus(
         data
           ? `${errorMessage(error)} Keeping the last loaded sheet data.`
-          : ALLOW_LOCAL_PREVIEW_FALLBACK
-            ? `${errorMessage(error)} Live Google Sheets failed. Loaded local preview data.`
-            : errorMessage(error),
+          : errorMessage(error),
       );
     } finally {
       setLoading(false);
@@ -404,7 +232,7 @@ export function App() {
     try {
       setLoading(true);
       setStatus("Saving...");
-      const response = await callServer(action, payload, staffProfile);
+      const response = await callServer(action, payload);
       const nextData = ensureConnectedData(response.data || response);
       setData(nextData);
       setStatus(`${message} ${dataSummary(nextData)}`);
@@ -591,11 +419,7 @@ export function App() {
       setAuthStatus("Signing in...");
 
       if (!firebaseReady) {
-        const profile = localSignInStaff(email, password);
-        setStaffProfile(profile);
-        setAuthStatus(`Signed in as ${profile.displayName || profile.email}.`);
-        form.reset();
-        return;
+        throw new Error("Firebase web config is missing. Add the VITE_FIREBASE_* variables.");
       }
 
       const profile = await signInStaff(email, password);
@@ -603,16 +427,6 @@ export function App() {
       setAuthStatus(`Signed in as ${profile.displayName || profile.email}.`);
       form.reset();
     } catch (error) {
-      if (isFirebaseAuthConfigurationError(error)) {
-        const profile = localSignInStaff(email, password);
-        setStaffProfile(profile);
-        setAuthStatus(
-          "Firebase Email/Password is not enabled yet, so local owner access is active.",
-        );
-        form.reset();
-        return;
-      }
-
       setAuthStatus(errorMessage(error));
     } finally {
       setAuthLoading(false);
@@ -627,7 +441,7 @@ export function App() {
     setAuthStatus(
       firebaseReady
         ? "Sign in with your staff account."
-        : "Signed out. Use a local staff password to sign in again.",
+        : "Firebase web config is missing.",
     );
   }
 
@@ -874,12 +688,10 @@ function AuthScreen({
               Firebase sign-in is configured. The backend allows only emails
               with an active Firestore staff profile.
             </p>
-            <p>Local owner: owner@joycorner.local / owner123</p>
           </div>
         ) : (
           <div className="muted auth-note">
-            <p>Local owner preview password:</p>
-            <p>owner@joycorner.local / owner123</p>
+            <p>Firebase web config is missing. Add the required Netlify environment variables.</p>
           </div>
         )}
       </section>
@@ -2253,18 +2065,8 @@ function FilterBar({
 async function callServer(
   action: string,
   payload: Record<string, unknown> = {},
-  staffProfile?: StaffProfile | null,
 ): Promise<ApiResponse & AppData> {
   const idToken = auth?.currentUser ? await auth.currentUser.getIdToken() : "";
-  const localStaffSession = Boolean(staffProfile?.uid?.startsWith("local-"));
-  const authPayload =
-    (!firebaseReady || localStaffSession) && staffProfile
-      ? {
-          devEmail: staffProfile.email,
-          devRole: staffProfile.role,
-          devUid: staffProfile.uid,
-        }
-      : {};
   const headers = {
     ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
   };
@@ -2273,15 +2075,11 @@ async function callServer(
       ? await fetch(
           `${API_BASE_URL}?${new URLSearchParams({
             action: "appData",
-            ...(idToken ? { idToken } : {}),
-            ...Object.fromEntries(
-              Object.entries(authPayload).map(([key, value]) => [key, String(value)]),
-            ),
           }).toString()}`,
           { headers },
         )
       : await fetch(API_BASE_URL, {
-          body: JSON.stringify({ action, idToken, ...authPayload, ...payload }),
+          body: JSON.stringify({ action, ...payload }),
           headers: { "Content-Type": "text/plain;charset=utf-8", ...headers },
           method: "POST",
         });
@@ -2966,29 +2764,6 @@ function roleLabel(role: StaffRole) {
   return labels[role];
 }
 
-function localSignInStaff(email: string, password: string): StaffProfile {
-  const account = localStaffAccounts.find(
-    (staff) =>
-      staff.email.toLowerCase() === email.toLowerCase() &&
-      staff.password === password,
-  );
-
-  if (!account) {
-    throw new Error("Local staff email or password is incorrect.");
-  }
-
-  return withoutPassword(account);
-}
-
-function withoutPassword(account: StaffProfile & { password: string }): StaffProfile {
-  return {
-    displayName: account.displayName,
-    email: account.email,
-    role: account.role,
-    uid: account.uid,
-  };
-}
-
 function rowSearchText(row: Row) {
   return Object.values(row)
     .map((value) => stringValue(value))
@@ -3146,6 +2921,10 @@ function errorMessage(error: unknown) {
     return "Firebase Email/Password sign-in is not enabled for this project yet.";
   }
 
+  if (isFirebaseInvalidCredentialError(error)) {
+    return "Firebase did not accept that email and password for this project. Check the Firebase Auth user, password, and project.";
+  }
+
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -3158,5 +2937,21 @@ function isFirebaseAuthConfigurationError(error: unknown) {
   return (
     code === "auth/configuration-not-found" ||
     message.includes("auth/configuration-not-found")
+  );
+}
+
+function isFirebaseInvalidCredentialError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = typeof error === "object" && error && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : "";
+
+  return (
+    code === "auth/invalid-credential" ||
+    code === "auth/user-not-found" ||
+    code === "auth/wrong-password" ||
+    message.includes("auth/invalid-credential") ||
+    message.includes("auth/user-not-found") ||
+    message.includes("auth/wrong-password")
   );
 }

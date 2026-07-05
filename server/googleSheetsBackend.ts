@@ -4,12 +4,11 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
-import { readFileSync } from "node:fs";
 import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config();
 
-const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "";
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || "";
 
 const SHEETS = {
   dashboard: "Dashboard",
@@ -134,23 +133,9 @@ function initFirebaseAdmin() {
 }
 
 function firebaseCredential() {
-  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  const file = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = (
-    process.env.FIREBASE_PRIVATE_KEY ||
-    process.env.GOOGLE_PRIVATE_KEY ||
-    ""
-  ).replace(/\\n/g, "\n");
-
-  if (json) {
-    return cert(parseServiceAccountJson_(json, "FIREBASE_SERVICE_ACCOUNT_JSON"));
-  }
-
-  if (file) {
-    return cert(JSON.parse(readFileSync(file, "utf8")));
-  }
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
   if (projectId && clientEmail && privateKey) {
     return cert({
@@ -160,45 +145,28 @@ function firebaseCredential() {
     });
   }
 
-  return undefined;
-}
-
-function googleServiceAccount() {
-  const json =
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  const file =
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
-    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE;
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = (
-    process.env.GOOGLE_PRIVATE_KEY ||
-    process.env.FIREBASE_PRIVATE_KEY ||
-    ""
-  ).replace(/\\n/g, "\n");
-
-  if (!SPREADSHEET_ID) {
-    throw new ApiError("Missing GOOGLE_SHEETS_SPREADSHEET_ID.", 500);
-  }
-
-  if (json) return parseServiceAccountJson_(json, "GOOGLE_SERVICE_ACCOUNT_JSON");
-  if (file) return JSON.parse(readFileSync(file, "utf8"));
-  if (clientEmail && privateKey) {
-    return { client_email: clientEmail, private_key: privateKey };
-  }
-
   throw new ApiError(
-    "Missing Google Sheets service account credentials.",
+    "Missing FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, or FIREBASE_PRIVATE_KEY.",
     500,
   );
 }
 
-function parseServiceAccountJson_(json: string, name: string) {
-  try {
-    return JSON.parse(json);
-  } catch {
-    throw new ApiError(`${name} is not valid JSON.`, 500);
+function googleServiceAccount() {
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+
+  if (!SPREADSHEET_ID) {
+    throw new ApiError("Missing GOOGLE_SHEET_ID.", 500);
   }
+
+  if (!clientEmail || !privateKey) {
+    throw new ApiError(
+      "Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY.",
+      500,
+    );
+  }
+
+  return { client_email: clientEmail, private_key: privateKey };
 }
 
 async function getSheetsClient() {
@@ -485,27 +453,6 @@ export async function handleAction(action: string, payload: Payload) {
 
 async function authorizeAction(action: string, payload: Payload): Promise<Actor> {
   const idToken = tokenFromPayload_(payload);
-  const localDevAuth =
-    clean_(process.env.LOCAL_DEV_AUTH).toLowerCase() === "true" &&
-    process.env.VERCEL !== "1" &&
-    process.env.NETLIFY_FUNCTIONS !== "1" &&
-    process.env.NODE_ENV !== "production";
-
-  if (!idToken && localDevAuth) {
-    const role = normalizeRole_(payload.devRole);
-
-    if (!isActionAllowed_(role, action)) {
-      throw new Error(`Role ${role} cannot run action ${action}.`);
-    }
-
-    return {
-      active: true,
-      email: clean_(payload.devEmail || "local@joycorner.local"),
-      profileFound: true,
-      role,
-      uid: clean_(payload.devUid || "local-dev"),
-    };
-  }
 
   if (!idToken) throw new ApiError("Missing Firebase ID token.", 401);
 
@@ -1260,12 +1207,10 @@ async function debugSheets() {
   return success_({
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
     serviceAccountPresent: Boolean(
-        process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
-        process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
-        process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
-        process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
-        (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) ||
-        (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY),
+        process.env.GOOGLE_CLIENT_EMAIL &&
+        process.env.GOOGLE_PRIVATE_KEY &&
+        process.env.FIREBASE_CLIENT_EMAIL &&
+        process.env.FIREBASE_PRIVATE_KEY,
     ),
     spreadsheetId: maskId_(SPREADSHEET_ID),
     sheetTabsFound,
@@ -2503,19 +2448,11 @@ function uniqueStrings_(values: unknown[]) {
   });
 }
 
-function normalizeRole_(role: unknown) {
-  const value = clean_(role).toLowerCase();
-  return ROLE_PERMISSIONS[value] ? value : "waiter";
-}
-
 function isActionAllowed_(role: string, action: string) {
   return ROLE_PERMISSIONS[role]?.has(action) === true;
 }
 
 function tokenFromPayload_(payload: Payload) {
-  const direct = clean_(payload.idToken || payload.token);
-  if (direct) return direct;
-
   const authorization = clean_(
     payload.authorization || payload.Authorization || payload.authHeader,
   );
@@ -2524,9 +2461,9 @@ function tokenFromPayload_(payload: Payload) {
 }
 
 function activeValue_(value: unknown) {
+  if (value == null || value === "") return true;
   if (typeof value === "boolean") return value;
   const normalized = clean_(value).toLowerCase();
-  if (!normalized) return false;
   return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
 }
 
@@ -2763,7 +2700,6 @@ async function routeDataSlice(
 }
 
 if (
-  process.env.VERCEL !== "1" &&
   process.env.FIREBASE_FUNCTIONS !== "1" &&
   process.env.NETLIFY_FUNCTIONS !== "1"
 ) {
