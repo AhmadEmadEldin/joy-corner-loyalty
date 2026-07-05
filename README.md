@@ -7,11 +7,11 @@ Joy Corner Loyalty is a React staff web app for cafe orders, customers, unpaid b
 ```text
 Laptop / VS Code
 -> GitHub
--> Netlify build and deploy
+-> Firebase Hosting deploy
 -> Firebase Auth email/password login
 -> React gets Firebase ID token
 -> React calls /api
--> Netlify redirects /api to netlify/functions/api.js
+-> Firebase Hosting rewrites /api to the api HTTPS Function
 -> Backend verifies Firebase ID token
 -> Backend reads Firestore users/{uid}
 -> Backend enforces role permissions
@@ -23,10 +23,10 @@ Laptop / VS Code
 
 - React app: `src/app.tsx`
 - Firebase browser auth and staff profile read: `src/firebase.ts`
-- Netlify Function entry: `netlify/functions/api.js`
+- Firebase Function entry: `firebase-functions.cjs`
 - Backend auth, role checks, and Google Sheets access: `server/googleSheetsBackend.ts`
 - Sheet write schema: `server/sheetSchema.ts`
-- Netlify config: `netlify.toml`
+- Firebase Hosting/Functions config: `firebase.json`
 - Required environment variables: `.env.example`
 - Staff role sync helper: `scripts/sync_firestore_staff.ts`
 
@@ -34,7 +34,7 @@ Laptop / VS Code
 
 Use the spreadsheet named `Joy_Corner_Integrated_WITH_Loyalty_Winners`.
 
-Set its ID in Netlify as:
+Set its ID as:
 
 ```text
 GOOGLE_SHEET_ID=<spreadsheet id only>
@@ -123,5 +123,5 @@ npm run build
 
 - Never commit `.env` or service account secrets.
 - Do not call Google Sheets directly from the browser.
-- Keep `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` as Netlify server-side environment variables.
+- Keep `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` server-side only.
 - Rotate service account keys if they were ever pasted into public code, GitHub, old integrations, or frontend variables.

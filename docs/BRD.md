@@ -9,11 +9,11 @@ Joy Corner Loyalty is a staff web app for cafe customer records, orders, unpaid 
 ```text
 Laptop / VS Code
 -> GitHub repository
--> Netlify deploy
+-> Firebase Hosting deploy
 -> Firebase Auth email/password
 -> React Firebase ID token
--> /api Netlify redirect
--> netlify/functions/api.js
+-> /api Firebase Hosting rewrite
+-> Firebase HTTPS Function api
 -> Firebase Admin token verification
 -> Firestore users/{uid} role lookup
 -> Google Sheets API
@@ -24,10 +24,10 @@ Laptop / VS Code
 
 - Frontend: `src/app.tsx`
 - Firebase client: `src/firebase.ts`
-- Netlify Function: `netlify/functions/api.js`
+- Firebase Function: `firebase-functions.cjs`
 - Backend: `server/googleSheetsBackend.ts`
 - Sheet schema: `server/sheetSchema.ts`
-- Netlify routing/build config: `netlify.toml`
+- Firebase Hosting/Functions config: `firebase.json`
 
 ## Authentication And Authorization
 
@@ -105,7 +105,7 @@ The current implementation also reads/writes `Generated Vouchers` and supports a
 
 ## API
 
-The frontend calls `/api`. Netlify redirects this to `/.netlify/functions/api`.
+The frontend calls `/api`. Firebase Hosting rewrites this to the `api` HTTPS Function.
 
 Main action endpoint:
 
@@ -166,7 +166,7 @@ FIREBASE_PRIVATE_KEY
 ## Security
 
 - Google service account credentials stay in the backend only.
-- Firebase Admin credentials stay in Netlify environment variables only.
+- Firebase Admin uses the Firebase Functions runtime credentials in production.
 - The browser never receives service account credentials.
 - Firestore role documents control staff access.
 - API role checks are required even when the UI hides actions.

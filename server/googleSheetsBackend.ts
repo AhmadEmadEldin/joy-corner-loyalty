@@ -154,6 +154,10 @@ function firebaseCredential() {
     });
   }
 
+  if (process.env.FIREBASE_FUNCTIONS === "1") {
+    return undefined;
+  }
+
   throw new ApiError(
     "Missing FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, or FIREBASE_PRIVATE_KEY.",
     500,

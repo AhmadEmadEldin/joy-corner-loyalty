@@ -699,7 +699,7 @@ function AuthScreen({
           </div>
         ) : (
           <div className="muted auth-note">
-            <p>Firebase web config is missing. Add the required Netlify environment variables.</p>
+            <p>Firebase web config is missing. Add the required Firebase environment variables.</p>
           </div>
         )}
       </section>
