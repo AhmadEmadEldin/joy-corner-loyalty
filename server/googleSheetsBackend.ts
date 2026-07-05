@@ -8,8 +8,9 @@ import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config();
 
-const SPREADSHEET_ID =
-  process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "";
+const SPREADSHEET_ID = spreadsheetIdFromEnv(
+  process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "",
+);
 
 const SHEETS = {
   dashboard: "Dashboard",
@@ -183,6 +184,12 @@ function googleServiceAccount() {
   }
 
   return { client_email: clientEmail, private_key: privateKey };
+}
+
+function spreadsheetIdFromEnv(value: string) {
+  const text = clean_(value);
+  const match = text.match(/\/spreadsheets\/d\/([^/]+)/);
+  return match?.[1] || text;
 }
 
 async function getSheetsClient() {
@@ -1191,7 +1198,8 @@ async function buildAppData() {
     winners,
     unpaid,
   );
-  const history = buildHistory_(orders, payments, redemptions);
+  const archivedHistoryDays = await archivedHistoryDays_();
+  const history = buildHistory_(orders, payments, redemptions, archivedHistoryDays);
 
   return {
     dashboard,
@@ -1394,22 +1402,62 @@ function buildDashboard_(
   };
 }
 
-function buildHistory_(orders: Row[], payments: Row[], redemptions: Row[]) {
+async function archivedHistoryDays_() {
+  try {
+    return (await sheetToObjects(SHEETS.dayHistory)).map(normalizeHistoryDay_);
+  } catch {
+    return [];
+  }
+}
+
+function buildHistory_(
+  orders: Row[],
+  payments: Row[],
+  redemptions: Row[],
+  archivedDays: Row[] = [],
+) {
   const dateKeys = uniqueStrings_([
     ...orders.map(orderDateKey_),
     ...payments.map(paymentDateKey_),
     ...redemptions.map(paymentDateKey_),
   ]).sort((left, right) => right.localeCompare(left));
+  const derivedDays = dateKeys.map((dateKey) =>
+    buildDaySummary_(
+      dateKey,
+      orders.filter((row) => orderDateKey_(row) === dateKey),
+      payments.filter((row) => paymentDateKey_(row) === dateKey),
+      redemptions.filter((row) => paymentDateKey_(row) === dateKey),
+    ),
+  );
+  const byDateKey: Record<string, Row> = {};
+
+  [...archivedDays, ...derivedDays].forEach((day) => {
+    const row = day as Row;
+    const dateKey = clean_(row.dateKey || row.date || row.day);
+    if (dateKey) byDateKey[dateKey] = { ...byDateKey[dateKey], ...row, dateKey };
+  });
 
   return {
-    days: dateKeys.map((dateKey) =>
-      buildDaySummary_(
-        dateKey,
-        orders.filter((row) => orderDateKey_(row) === dateKey),
-        payments.filter((row) => paymentDateKey_(row) === dateKey),
-        redemptions.filter((row) => paymentDateKey_(row) === dateKey),
-      ),
+    days: Object.values(byDateKey).sort((left, right) =>
+      clean_(right.dateKey).localeCompare(clean_(left.dateKey)),
     ),
+  };
+}
+
+function normalizeHistoryDay_(day: Row) {
+  return {
+    ...day,
+    dateKey: dateKeyFromValue_(day.dateKey || day.date || day.day),
+    bestSellingItem: day.bestSellingItem || day.bestSeller || day.topItem || "",
+    bestSellingQty: day.bestSellingQty || day.topQty || day.qty || "0",
+    latestReceiptSerial: day.latestReceiptSerial || day.latestReceipt || "",
+    orderCount: day.orderCount || day.items || day.itemCount || "0",
+    paymentCount: day.paymentCount || "0",
+    receiptCount: day.receiptCount || day.receipts || "0",
+    redemptionCount: day.redemptionCount || day.freeDrinks || "0",
+    totalPaid: day.totalPaid || day.paid || "0",
+    totalSales: day.totalSales || day.sales || "0",
+    totalUnpaid: day.totalUnpaid || day.unpaid || "0",
   };
 }
 
@@ -2405,6 +2453,20 @@ function dateKeyFromValue_(value: unknown) {
   if (!text) return "";
   const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoMatch) return isoMatch[1] || "";
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 100000) {
+    return dateKey_(new Date(Math.round((serial - 25569) * 86400000)));
+  }
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    const month = Number(slashMatch[1]);
+    const day = Number(slashMatch[2]);
+    const year = Number(slashMatch[3]);
+
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
 
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) return dateKey_(parsed);

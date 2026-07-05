@@ -40,6 +40,12 @@ Set its ID as:
 GOOGLE_SHEET_ID=<spreadsheet id only>
 ```
 
+Canonical sheet ID:
+
+```text
+1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8
+```
+
 Expected tabs:
 
 - `Dashboard`

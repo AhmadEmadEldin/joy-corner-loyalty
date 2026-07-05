@@ -48,6 +48,14 @@ firebase functions:secrets:set GOOGLE_CLIENT_EMAIL
 firebase functions:secrets:set GOOGLE_PRIVATE_KEY
 ```
 
+Use this value for `GOOGLE_SHEET_ID`:
+
+```text
+1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8
+```
+
+The backend also accepts the full Google Sheets URL, but the raw ID is cleaner.
+
 Compatibility variables still accepted:
 
 ```text
