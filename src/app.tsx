@@ -1,11 +1,15 @@
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { User } from "firebase/auth";
 import {
   StaffProfile,
   StaffRole,
   auth,
   firebaseReady,
+  signInCustomer,
   signInStaff,
+  signUpCustomer,
   signOutStaff,
+  watchFirebaseUser,
   watchStaffAuth,
 } from "./firebase";
 
@@ -108,6 +112,10 @@ const tabIcons: Record<TabId, string> = {
 };
 
 export function App() {
+  if (window.location.pathname.startsWith("/order")) {
+    return <CustomerOrderPage />;
+  }
+
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [data, setData] = useState<AppData | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
@@ -695,6 +703,190 @@ function AuthScreen({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function CustomerOrderPage() {
+  const [customerUser, setCustomerUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signup");
+  const [status, setStatus] = useState(
+    firebaseReady
+      ? "Create an account or sign in to request an order."
+      : "Firebase web config is missing.",
+  );
+  const [loading, setLoading] = useState(false);
+  const [menu, setMenu] = useState<Row[]>([]);
+
+  useEffect(() => {
+    return watchFirebaseUser(
+      (user) => setCustomerUser(user),
+      (message) => setStatus(message),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!customerUser) return;
+    void loadCustomerMenu();
+  }, [customerUser?.uid]);
+
+  async function loadCustomerMenu() {
+    try {
+      setLoading(true);
+      const response = await callServer("customerMenu");
+      setMenu(response.data?.menu || response.menu || []);
+      setStatus("Choose an item and send your request.");
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitCustomerAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = formObject(form);
+    const email = stringValue(payload.email);
+    const password = stringValue(payload.password);
+
+    try {
+      setLoading(true);
+      setStatus(authMode === "signup" ? "Creating account..." : "Signing in...");
+      if (authMode === "signup") {
+        await signUpCustomer(email, password);
+      } else {
+        await signInCustomer(email, password);
+      }
+      form.reset();
+      setStatus("Signed in. Loading menu...");
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitCustomerOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = formObject(form);
+    const item = menu.find((row) => stringValue(row.itemId) === stringValue(payload.itemId));
+
+    if (item) {
+      payload.itemName = menuName(item);
+      payload.category = stringValue(item.category);
+      payload.unitPrice = numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
+    }
+
+    try {
+      setLoading(true);
+      setStatus("Sending order request...");
+      const response = await callServer("submitCustomerOrder", payload);
+      setStatus(response.message || "Order request sent to Joy Corner.");
+      form.reset();
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const appStyle = {
+    "--coffee-field-image": `url(${coffeeBeanFieldUrl})`,
+    "--joy-culture-strip": `url(${joyCultureStripUrl})`,
+    "--joy-your-time": `url(${joyYourTimeUrl})`,
+  } as CSSProperties;
+
+  return (
+    <div className="app-shell customer-order-shell" style={appStyle}>
+      <header>
+        <div className="topbar">
+          <div className="brand">
+            <div className="brand-mark">
+              <img alt="" src={joyCornerMarkUrl} />
+            </div>
+            <div>
+              <h1>Joy Corner</h1>
+              <p className="muted">Customer order request</p>
+            </div>
+          </div>
+          <img className="joy-time-signature" alt="" src={joyYourTimeUrl} />
+          {customerUser && (
+            <div className="account-chip">
+              <span>{customerUser.email}</span>
+              <button onClick={() => void signOutStaff()} type="button">
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <main className="customer-order-main">
+        <section className="panel customer-order-panel">
+          <PanelHead
+            title={customerUser ? "Request an Order" : "Customer Access"}
+            note={customerUser ? "Your request goes to the cafe staff dashboard" : "Sign up or sign in"}
+          />
+          <div className="panel-body">
+            {!customerUser ? (
+              <form className="auth-form customer-order-form" onSubmit={submitCustomerAuth}>
+                <div className="segmented">
+                  <button
+                    className={authMode === "signup" ? "primary" : "secondary"}
+                    onClick={() => setAuthMode("signup")}
+                    type="button"
+                  >
+                    Sign Up
+                  </button>
+                  <button
+                    className={authMode === "signin" ? "primary" : "secondary"}
+                    onClick={() => setAuthMode("signin")}
+                    type="button"
+                  >
+                    Sign In
+                  </button>
+                </div>
+                <Field label="Email" name="email" placeholder="you@example.com" required type="email" />
+                <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
+                <button className="primary" disabled={loading || !firebaseReady} type="submit">
+                  Continue
+                </button>
+              </form>
+            ) : (
+              <form className="customer-order-form" onSubmit={submitCustomerOrder}>
+                <Field label="Your Name" name="customerName" placeholder="Name for the order" required />
+                <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+                <label>
+                  Item
+                  <select name="itemId" required>
+                    <option value="">Choose from menu</option>
+                    {menu.map((item) => (
+                      <option key={stringValue(item.itemId)} value={stringValue(item.itemId)}>
+                        {menuName(item)} - {money(numberValue(item.suggestedPrice) || firstPrice(menuPrice(item)))} EGP
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Quantity
+                  <input defaultValue="1" min="1" name="qty" required type="number" />
+                </label>
+                <Field label="Pickup / Table / Notes" name="orderPlace" placeholder="Pickup, table, car, or note" />
+                <label>
+                  Extra Notes
+                  <textarea name="notes" placeholder="Sugar, ice, timing, or anything helpful" />
+                </label>
+                <button className="primary" disabled={loading || !menu.length} type="submit">
+                  Send Request
+                </button>
+              </form>
+            )}
+            <p className="status">{status}</p>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

@@ -8,7 +8,8 @@ import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config();
 
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || "";
+const SPREADSHEET_ID =
+  process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "";
 
 const SHEETS = {
   dashboard: "Dashboard",
@@ -104,6 +105,11 @@ type Actor = {
   role: string;
   uid: string;
 };
+type CustomerActor = {
+  email: string;
+  name?: string;
+  uid: string;
+};
 
 class ApiError extends Error {
   details?: Payload;
@@ -133,9 +139,12 @@ function initFirebaseAdmin() {
 }
 
 function firebaseCredential() {
+  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+
+  if (json) return cert(JSON.parse(json));
 
   if (projectId && clientEmail && privateKey) {
     return cert({
@@ -152,12 +161,15 @@ function firebaseCredential() {
 }
 
 function googleServiceAccount() {
+  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
   if (!SPREADSHEET_ID) {
     throw new ApiError("Missing GOOGLE_SHEET_ID.", 500);
   }
+
+  if (json) return JSON.parse(json);
 
   if (!clientEmail || !privateKey) {
     throw new ApiError(
@@ -385,6 +397,16 @@ async function writeObjectRow(sheetName: string, record: Payload) {
 }
 
 export async function handleAction(action: string, payload: Payload) {
+  if (action === "customerMenu") {
+    await authorizeFirebaseUser(payload);
+    return success_({ data: { menu: await customerMenu() } });
+  }
+
+  if (action === "submitCustomerOrder") {
+    const customer = await authorizeFirebaseUser(payload);
+    return await submitCustomerOrder(payload, customer);
+  }
+
   if (action === "debugAuth") {
     const actor = await authorizeAction("appData", payload);
     return success_({
@@ -452,22 +474,9 @@ export async function handleAction(action: string, payload: Payload) {
 }
 
 async function authorizeAction(action: string, payload: Payload): Promise<Actor> {
-  const idToken = tokenFromPayload_(payload);
-
-  if (!idToken) throw new ApiError("Missing Firebase ID token.", 401);
-
-  initFirebaseAdmin();
-  let decoded;
-
-  try {
-    decoded = await getAuth().verifyIdToken(idToken);
-  } catch (error) {
-    safeServerError_("Invalid Firebase token", error);
-    throw new ApiError("Invalid Firebase token", 401);
-  }
-
-  const email = clean_(decoded.email).toLowerCase();
-  const uid = clean_(decoded.uid);
+  const user = await authorizeFirebaseUser(payload);
+  const email = user.email;
+  const uid = user.uid;
   const actor = await staffActorForUser(uid, email);
 
   if (!isActionAllowed_(actor.role, action)) {
@@ -478,6 +487,26 @@ async function authorizeAction(action: string, payload: Payload): Promise<Actor>
   }
 
   return actor;
+}
+
+async function authorizeFirebaseUser(payload: Payload): Promise<CustomerActor> {
+  const idToken = tokenFromPayload_(payload);
+
+  if (!idToken) throw new ApiError("Missing Firebase ID token.", 401);
+
+  initFirebaseAdmin();
+
+  try {
+    const decoded = await getAuth().verifyIdToken(idToken);
+    return {
+      email: clean_(decoded.email).toLowerCase(),
+      name: clean_(decoded.name),
+      uid: clean_(decoded.uid),
+    };
+  } catch (error) {
+    safeServerError_("Invalid Firebase token", error);
+    throw new ApiError("Invalid Firebase token", 401);
+  }
 }
 
 async function staffActorForUser(uid: string, email: string): Promise<Actor> {
@@ -761,6 +790,65 @@ async function addPayment(payload: Payload) {
   ]);
 
   return success_({ data: await buildAppData() });
+}
+
+async function customerMenu() {
+  return (await sheetToObjects(SHEETS.menu))
+    .filter((row) => row.itemId && row.active !== "No")
+    .map(enrichMenuItem_);
+}
+
+async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
+  const item = await findMenuItem(clean_(payload.itemId), clean_(payload.itemName));
+  if (!item.itemId && !item.itemName) throw new Error("Choose a menu item first.");
+
+  const customerName = clean_(payload.customerName || actor.name || actor.email);
+  const phone = clean_(payload.phone || payload.customerPhone);
+  const qty = Math.max(1, number_(payload.qty || 1));
+  const unitPrice =
+    number_(payload.unitPrice) ||
+    parsePrice_(item.priceText || item.priceTextEditLater || item.price);
+  const total = Math.max(0, qty * unitPrice);
+  const receiptId = await createReceiptSerial();
+  const customer = await getOrCreateReceiptCustomer({
+    customerName,
+    phone,
+  });
+  const orderPlace = clean_(payload.orderPlace || payload.location || "Customer request");
+  const notes = [
+    "Customer online order request",
+    `Firebase UID: ${actor.uid}`,
+    actor.email ? `Email: ${actor.email}` : "",
+    orderPlace ? `Place: ${orderPlace}` : "",
+    clean_(payload.notes),
+    `Receipt: ${receiptId}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  await writeDataRow(SHEETS.orders, [
+    new Date(),
+    customer.customerId,
+    getCustomerName_(customer.customer) || customerName,
+    "Customer Request",
+    item.category || clean_(payload.category),
+    item.itemName || clean_(payload.itemName),
+    qty,
+    unitPrice,
+    0,
+    total,
+    0,
+    0,
+    "Unpaid",
+    "Requested",
+    notes,
+  ]);
+
+  return success_({
+    message: "Order request sent to Joy Corner.",
+    receiptId,
+    total,
+  });
 }
 
 async function collectUnpaidPayment(payload: Payload) {

@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import {
   User,
+  createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -84,6 +85,28 @@ export async function signInStaff(email: string, password: string) {
   if (!auth) throw new Error("Firebase is not configured yet.");
   const credential = await signInWithEmailAndPassword(auth, email, password);
   return await ensureStaffProfile(credential.user);
+}
+
+export function watchFirebaseUser(
+  onChange: (user: User | null) => void,
+  onError: (message: string) => void,
+) {
+  if (!auth) {
+    onChange(null);
+    return () => undefined;
+  }
+
+  return onAuthStateChanged(auth, onChange, (error) => onError(errorMessage(error)));
+}
+
+export async function signInCustomer(email: string, password: string) {
+  if (!auth) throw new Error("Firebase is not configured yet.");
+  return await signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function signUpCustomer(email: string, password: string) {
+  if (!auth) throw new Error("Firebase is not configured yet.");
+  return await createUserWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOutStaff() {

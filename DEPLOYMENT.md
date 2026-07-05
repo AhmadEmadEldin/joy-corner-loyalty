@@ -48,12 +48,16 @@ FIREBASE_PRIVATE_KEY
 
 Private keys must keep their newline escapes. In Netlify, paste them as one value with `\n` sequences if needed.
 
+The backend also accepts old deploy variables `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, and `FIREBASE_SERVICE_ACCOUNT_JSON`, but the clean split keys above are preferred.
+
 ## Firebase Setup
 
 1. Enable Email/Password sign-in in Firebase Authentication.
 2. Create each staff user in Firebase Authentication.
 3. For each Auth user, create Firestore document `users/{uid}`.
 4. Add `email`, `role`, `active`, and `displayName`.
+
+If staff accounts are listed in the Google Sheet tab named `Staff`, run `npm run sync:staff` to sync those rows into Firebase Auth and Firestore.
 
 ## Google Sheets Setup
 

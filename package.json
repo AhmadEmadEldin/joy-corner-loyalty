@@ -14,6 +14,7 @@
     "lint:fix": "eslint . --fix",
     "lint:types": "tsc --noEmit",
     "start": "webpack serve --config webpack.config.ts --mode development",
+    "sync:staff": "tsx ./scripts/sync_firestore_staff.ts",
     "test": "jest --no-cache --passWithNoTests",
     "test:watch": "jest --watchAll",
     "test:update": "npm run test -- -u",

@@ -28,6 +28,7 @@ Laptop / VS Code
 - Sheet write schema: `server/sheetSchema.ts`
 - Netlify config: `netlify.toml`
 - Required environment variables: `.env.example`
+- Staff role sync helper: `scripts/sync_firestore_staff.ts`
 
 ## Google Sheet
 
@@ -74,6 +75,18 @@ Required fields:
 ```
 
 Allowed roles are `owner`, `cashier`, `waiter`, and `barista`.
+
+If your `Staff` sheet has `Email`, `Password`, `Role`, `Name`, and `Active`, run:
+
+```powershell
+npm run sync:staff
+```
+
+This creates or updates Firebase Auth users and writes Firestore `users/{uid}` role documents.
+
+## Customer Order Requests
+
+Customers can open `/order`, sign up or sign in with Firebase Auth, choose a menu item, and submit an order request. Customer accounts do not need staff Firestore roles. The backend verifies their Firebase token and writes the request to `Orders` as `Staff = Customer Request`, `Payment Status = Unpaid`, and `Order Status = Requested`.
 
 ## Role Data
 
