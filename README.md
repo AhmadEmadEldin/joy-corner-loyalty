@@ -27,6 +27,7 @@ Laptop / VS Code
 - Backend auth, role checks, and Google Sheets access: `server/googleSheetsBackend.ts`
 - Sheet write schema: `server/sheetSchema.ts`
 - Firebase Hosting/Functions config: `firebase.json`
+- Firestore rules: `firestore.rules`
 - Required environment variables: `.env.example`
 - Staff role sync helper: `scripts/sync_firestore_staff.ts`
 
@@ -107,6 +108,21 @@ Staff documents use this shape:
 
 Customers can open `/order`, sign up or sign in with Firebase Auth, choose a menu item, and submit an order request. Customer accounts do not need staff Firestore roles. The backend verifies their Firebase token and writes the request to `Orders` as `Staff = Customer Request`, `Payment Status = Unpaid`, and `Order Status = Requested`.
 
+Customer documents use this shape:
+
+```json
+{
+  "email": "customer@example.com",
+  "displayName": "Customer Name",
+  "phone": "optional",
+  "active": true,
+  "createdAt": "server timestamp",
+  "updatedAt": "server timestamp"
+}
+```
+
+Staff accounts use `/` for staff access and must not use `/order`. Customer accounts use `/order` and cannot access the staff dashboard because they do not have `users/{uid}` staff role documents.
+
 ## Role Data
 
 - `owner`: full app data and owner controls.
@@ -136,6 +152,16 @@ Local development still uses real Firebase Auth, Firestore staff roles, and Goog
 npm run lint:types
 npm test
 npm run build
+```
+
+## Firebase Deploy Commands
+
+```powershell
+npm run deploy
+npm run deploy:firebase
+npm run deploy:firebase:hosting
+npm run deploy:firebase:functions
+npm run deploy:firebase:rules
 ```
 
 ## Security

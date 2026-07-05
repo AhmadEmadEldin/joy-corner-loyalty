@@ -107,8 +107,11 @@ type Actor = {
   uid: string;
 };
 type CustomerActor = {
+  active?: boolean;
+  displayName?: string;
   email: string;
   name?: string;
+  phone?: string;
   uid: string;
 };
 
@@ -409,12 +412,12 @@ async function writeObjectRow(sheetName: string, record: Payload) {
 
 export async function handleAction(action: string, payload: Payload) {
   if (action === "customerMenu") {
-    await authorizeFirebaseUser(payload);
+    await authorizeCustomerAction(payload);
     return success_({ data: { menu: await customerMenu() } });
   }
 
   if (action === "submitCustomerOrder") {
-    const customer = await authorizeFirebaseUser(payload);
+    const customer = await authorizeCustomerAction(payload);
     return await submitCustomerOrder(payload, customer);
   }
 
@@ -518,6 +521,48 @@ async function authorizeFirebaseUser(payload: Payload): Promise<CustomerActor> {
     safeServerError_("Invalid Firebase token", error);
     throw new ApiError("Invalid Firebase token", 401);
   }
+}
+
+async function authorizeCustomerAction(payload: Payload): Promise<CustomerActor> {
+  const user = await authorizeFirebaseUser(payload);
+  const staffSnapshot = await getFirestore().collection("users").doc(user.uid).get();
+
+  if (staffSnapshot.exists) {
+    throw new ApiError("Staff accounts cannot access the customer portal.", 403, {
+      uid: user.uid,
+    });
+  }
+
+  const customerSnapshot = await getFirestore().collection("customers").doc(user.uid).get();
+  if (!customerSnapshot.exists) {
+    throw new ApiError("No customer profile found. Please sign up first.", 403, {
+      uid: user.uid,
+    });
+  }
+
+  const data = customerSnapshot.data() || {};
+  const profileEmail = clean_(data.email || user.email).toLowerCase();
+  const active = activeValue_(data.active);
+
+  if (profileEmail && profileEmail !== user.email) {
+    throw new ApiError("Customer profile email does not match signed-in user.", 403, {
+      uid: user.uid,
+    });
+  }
+
+  if (!active) {
+    throw new ApiError("Customer account inactive.", 403, {
+      uid: user.uid,
+    });
+  }
+
+  return {
+    ...user,
+    active,
+    displayName: clean_(data.displayName || data.name || user.name || profileEmail),
+    email: profileEmail || user.email,
+    phone: clean_(data.phone),
+  };
 }
 
 async function staffActorForUser(uid: string, email: string): Promise<Actor> {
@@ -813,8 +858,10 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
   const item = await findMenuItem(clean_(payload.itemId), clean_(payload.itemName));
   if (!item.itemId && !item.itemName) throw new Error("Choose a menu item first.");
 
-  const customerName = clean_(payload.customerName || actor.name || actor.email);
-  const phone = clean_(payload.phone || payload.customerPhone);
+  const customerName = clean_(
+    payload.customerName || actor.displayName || actor.name || actor.email,
+  );
+  const phone = clean_(payload.phone || payload.customerPhone || actor.phone);
   const qty = Math.max(1, number_(payload.qty || 1));
   const unitPrice =
     number_(payload.unitPrice) ||

@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(docId) {
+      return signedIn() && request.auth.uid == docId;
+    }
+
+    function customerKeysAreValid() {
+      return request.resource.data.keys().hasOnly([
+        'active',
+        'createdAt',
+        'displayName',
+        'email',
+        'phone',
+        'uid',
+        'updatedAt'
+      ]);
+    }
+
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow write: if false;
+    }
+
+    match /customers/{uid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && customerKeysAreValid()
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.active == true;
+      allow update: if owns(uid)
+        && customerKeysAreValid()
+        && resource.data.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.active == resource.data.active;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

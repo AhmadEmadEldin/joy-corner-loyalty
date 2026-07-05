@@ -26,5 +26,8 @@
       "dist",
       "coverage"
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

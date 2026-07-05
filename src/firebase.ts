@@ -12,6 +12,8 @@ import {
   doc,
   getDoc,
   getFirestore,
+  serverTimestamp,
+  setDoc,
 } from "firebase/firestore";
 
 declare const __FIREBASE_CONFIG__: {
@@ -32,6 +34,16 @@ export type StaffProfile = {
   displayName: string;
   email: string;
   role: StaffRole;
+  uid: string;
+  updatedAt?: unknown;
+};
+
+export type CustomerProfile = {
+  active?: boolean;
+  createdAt?: unknown;
+  displayName: string;
+  email: string;
+  phone?: string;
   uid: string;
   updatedAt?: unknown;
 };
@@ -101,12 +113,20 @@ export function watchFirebaseUser(
 
 export async function signInCustomer(email: string, password: string) {
   if (!auth) throw new Error("Firebase is not configured yet.");
-  return await signInWithEmailAndPassword(auth, email, password);
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  await ensureCustomerProfile(credential.user);
+  return credential;
 }
 
-export async function signUpCustomer(email: string, password: string) {
+export async function signUpCustomer(
+  email: string,
+  password: string,
+  displayName = "",
+) {
   if (!auth) throw new Error("Firebase is not configured yet.");
-  return await createUserWithEmailAndPassword(auth, email, password);
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  await createCustomerProfile(credential.user, displayName);
+  return credential;
 }
 
 export async function signOutStaff() {
@@ -126,6 +146,72 @@ async function ensureStaffProfile(
   }
 
   throw new Error("No active Firestore staff profile found for this account.");
+}
+
+async function ensureCustomerProfile(user: User): Promise<CustomerProfile> {
+  if (!firestore) throw new Error("Firestore is not configured yet.");
+  const staffSnapshot = await getDoc(doc(firestore, "users", user.uid));
+
+  if (staffSnapshot.exists()) {
+    throw new Error("Staff accounts must use the staff sign-in page.");
+  }
+
+  const snapshot = await getDoc(doc(firestore, "customers", user.uid));
+  if (!snapshot.exists()) {
+    throw new Error("No customer profile found. Please sign up first.");
+  }
+
+  const profile = customerProfileFromData(user.uid, user.email || "", snapshot.data());
+  if (!activeValue(profile.active)) {
+    throw new Error("Customer account is inactive.");
+  }
+
+  return profile;
+}
+
+async function createCustomerProfile(user: User, displayName = "") {
+  if (!firestore) throw new Error("Firestore is not configured yet.");
+  const staffSnapshot = await getDoc(doc(firestore, "users", user.uid));
+
+  if (staffSnapshot.exists()) {
+    throw new Error("Staff accounts must use the staff sign-in page.");
+  }
+
+  const email = stringValue(user.email).toLowerCase();
+  const profileRef = doc(firestore, "customers", user.uid);
+  const snapshot = await getDoc(profileRef);
+  await setDoc(
+    profileRef,
+    {
+      active: true,
+      ...(snapshot.exists() ? {} : { createdAt: serverTimestamp() }),
+      displayName: stringValue(displayName || email),
+      email,
+      uid: user.uid,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+function customerProfileFromData(
+  uid: string,
+  signedInEmail: string,
+  data: Record<string, unknown>,
+): CustomerProfile {
+  const email = stringValue(data.email || signedInEmail).toLowerCase();
+
+  if (email && signedInEmail && email !== signedInEmail.toLowerCase()) {
+    throw new Error("Customer profile email does not match this login.");
+  }
+
+  return {
+    active: activeValue(data.active),
+    displayName: stringValue(data.displayName || data.name || email),
+    email,
+    phone: stringValue(data.phone),
+    uid,
+  };
 }
 
 async function staffProfileFromFirestore(

@@ -421,6 +421,7 @@ export function App() {
     const payload = formObject(form);
     const email = stringValue(payload.email);
     const password = stringValue(payload.password);
+    const displayName = stringValue(payload.displayName);
 
     try {
       setAuthLoading(true);
@@ -749,12 +750,13 @@ function CustomerOrderPage() {
     const payload = formObject(form);
     const email = stringValue(payload.email);
     const password = stringValue(payload.password);
+    const displayName = stringValue(payload.displayName);
 
     try {
       setLoading(true);
       setStatus(authMode === "signup" ? "Creating account..." : "Signing in...");
       if (authMode === "signup") {
-        await signUpCustomer(email, password);
+        await signUpCustomer(email, password, displayName);
       } else {
         await signInCustomer(email, password);
       }
@@ -848,6 +850,9 @@ function CustomerOrderPage() {
                     Sign In
                   </button>
                 </div>
+                {authMode === "signup" && (
+                  <Field label="Name" name="displayName" placeholder="Your name" required />
+                )}
                 <Field label="Email" name="email" placeholder="you@example.com" required type="email" />
                 <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
                 <button className="primary" disabled={loading || !firebaseReady} type="submit">

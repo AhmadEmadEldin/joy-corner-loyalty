@@ -99,4 +99,10 @@ Deploy only Functions:
 npm run deploy:firebase:functions
 ```
 
+Deploy only Firestore rules:
+
+```powershell
+npm run deploy:firebase:rules
+```
+
 Do not upload `.env`, service account JSON files, or private keys to GitHub.

@@ -15,7 +15,7 @@ Laptop / VS Code
 -> /api Firebase Hosting rewrite
 -> Firebase HTTPS Function api
 -> Firebase Admin token verification
--> Firestore users/{uid} role lookup
+-> Firestore users/{uid} staff role lookup or customers/{uid} customer profile lookup
 -> Google Sheets API
 -> Role-filtered React dashboard
 ```
@@ -55,6 +55,27 @@ The document must include:
   "displayName": "Staff Name"
 }
 ```
+
+Customer profiles live at:
+
+```text
+customers/{firebaseAuthUid}
+```
+
+Customer profile fields:
+
+```json
+{
+  "email": "customer@example.com",
+  "displayName": "Customer Name",
+  "phone": "optional",
+  "active": true,
+  "createdAt": "server timestamp",
+  "updatedAt": "server timestamp"
+}
+```
+
+Staff users cannot use customer-only API actions. Customer users cannot use staff API actions.
 
 Allowed roles:
 
