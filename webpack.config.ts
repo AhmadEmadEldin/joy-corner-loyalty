@@ -6,7 +6,7 @@ import type { Configuration as DevServerConfiguration } from "webpack-dev-server
 
 dotenv.config();
 
-const port = Number(process.env.PORT || process.env.CANVA_FRONTEND_PORT || 8081);
+const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || "",
@@ -75,7 +75,7 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
     proxy: [
       {
         context: ["/api", "/health"],
-        target: `http://localhost:${process.env.CANVA_BACKEND_PORT || 3001}`,
+        target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
       },
     ],
     static: {

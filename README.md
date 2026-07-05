@@ -16,6 +16,7 @@ Laptop / VS Code
 -> Backend reads Firestore users/{uid}
 -> Backend enforces role permissions
 -> Backend reads/writes Google Sheets
+-> Optional Canva voucher metadata stays backend-controlled
 -> React renders the role-specific dashboard
 ```
 
@@ -70,18 +71,26 @@ Every staff member must have a Firebase Auth email/password account and a matchi
 users/{firebaseAuthUid}
 ```
 
+The document ID must be the exact UID from Firebase Authentication, not the email address. For example, if Firebase Auth shows owner UID `abc123`, create:
+
+```text
+users/abc123
+```
+
 Required fields:
 
 ```json
 {
-  "email": "staff@example.com",
+  "email": "owner@joycorner.com",
+  "displayName": "Joy Corner Owner",
+  "type": "staff",
   "role": "owner",
-  "active": true,
-  "displayName": "Staff Name"
+  "active": true
 }
 ```
 
-Allowed roles are `owner`, `cashier`, `waiter`, and `barista`.
+Allowed roles are `owner`, `manager`, `cashier`, `waiter`, and `barista`.
+Use Firestore field types exactly: `email`, `displayName`, `type`, and `role` are strings; `active` is a boolean set to `true`.
 
 If your `Staff` sheet has `Email`, `Password`, `Role`, `Name`, and `Active`, run:
 
@@ -97,6 +106,7 @@ Staff documents use this shape:
 {
   "email": "staff@example.com",
   "displayName": "Staff Name",
+  "type": "staff",
   "role": "owner",
   "active": true,
   "createdAt": "server timestamp",
@@ -106,7 +116,9 @@ Staff documents use this shape:
 
 ## Customer Order Requests
 
-Customers can open `/order`, sign up or sign in with Firebase Auth, choose a menu item, and submit an order request. Customer accounts do not need staff Firestore roles. The backend verifies their Firebase token and writes the request to `Orders` as `Staff = Customer Request`, `Payment Status = Unpaid`, and `Order Status = Requested`.
+Customers can open `/order`, sign up or sign in with Firebase Auth, choose a menu item, and submit an order request. Customer accounts do not need staff Firestore roles. On signup, the app creates `customers/{uid}` in Firestore, then calls the Firebase Function to create or reuse the matching row in the Google Sheet `Customers` tab. The backend verifies the customer Firebase token before touching Google Sheets.
+
+When a customer submits an order, the backend writes the request to `Orders` as `Staff = Customer Request`, `Payment Status = Unpaid`, and `Order Status = Requested`.
 
 Customer documents use this shape:
 
@@ -115,7 +127,9 @@ Customer documents use this shape:
   "email": "customer@example.com",
   "displayName": "Customer Name",
   "phone": "optional",
+  "type": "customer",
   "active": true,
+  "loyaltyPoints": 0,
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }
@@ -126,6 +140,7 @@ Staff accounts use `/` for staff access and must not use `/order`. Customer acco
 ## Role Data
 
 - `owner`: full app data and owner controls.
+- `manager`: full operational data except owner-only reset controls.
 - `cashier`: full operational data except owner-only controls.
 - `waiter`: order-taking data, customer lookup, menu, and receipt workflow.
 - `barista`: dashboard pickup board and pickup completion only.
@@ -169,4 +184,23 @@ npm run deploy:firebase:rules
 - Never commit `.env` or service account secrets.
 - Do not call Google Sheets directly from the browser.
 - Keep `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` server-side only.
+- Keep Canva credentials server-side only. If Canva secrets are not configured, voucher link/update workflows should fail clearly without breaking loyalty tracking.
 - Rotate service account keys if they were ever pasted into public code, GitHub, old integrations, or frontend variables.
+
+## Firebase Function Secrets
+
+Set backend-only values with Firebase secrets:
+
+```powershell
+firebase functions:secrets:set GOOGLE_SHEET_ID
+firebase functions:secrets:set GOOGLE_CLIENT_EMAIL
+firebase functions:secrets:set GOOGLE_PRIVATE_KEY
+```
+
+Optional Canva secrets, only when backend voucher generation is connected:
+
+```powershell
+firebase functions:secrets:set CANVA_CLIENT_ID
+firebase functions:secrets:set CANVA_CLIENT_SECRET
+firebase functions:secrets:set CANVA_REFRESH_TOKEN
+```

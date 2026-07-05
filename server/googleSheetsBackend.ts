@@ -58,6 +58,24 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = {
     "debugAuth",
     "debugSheets",
   ]),
+  manager: new Set([
+    "appData",
+    "getAppData",
+    "addCustomer",
+    "removeCustomer",
+    "addReceipt",
+    "collectUnpaidPayment",
+    "updateReceiptPayment",
+    "markReceiptDone",
+    "generateVoucher",
+    "redeemVoucher",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
   cashier: new Set([
     "appData",
     "getAppData",
@@ -94,7 +112,7 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = {
 };
 
 const REWARD_THRESHOLD = 5;
-const PORT = Number(process.env.CANVA_BACKEND_PORT || process.env.API_PORT || 3001);
+const PORT = Number(process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001);
 const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
@@ -104,6 +122,7 @@ type Actor = {
   email: string;
   profileFound?: boolean;
   role: string;
+  type?: "staff";
   uid: string;
 };
 type CustomerActor = {
@@ -112,6 +131,7 @@ type CustomerActor = {
   email: string;
   name?: string;
   phone?: string;
+  type?: "customer";
   uid: string;
 };
 
@@ -416,6 +436,11 @@ export async function handleAction(action: string, payload: Payload) {
     return success_({ data: { menu: await customerMenu() } });
   }
 
+  if (action === "registerCustomerProfile") {
+    const customer = await authorizeCustomerAction(payload);
+    return await registerCustomerProfile(payload, customer);
+  }
+
   if (action === "submitCustomerOrder") {
     const customer = await authorizeCustomerAction(payload);
     return await submitCustomerOrder(payload, customer);
@@ -562,6 +587,7 @@ async function authorizeCustomerAction(payload: Payload): Promise<CustomerActor>
     displayName: clean_(data.displayName || data.name || user.name || profileEmail),
     email: profileEmail || user.email,
     phone: clean_(data.phone),
+    type: "customer",
   };
 }
 
@@ -617,6 +643,7 @@ async function staffProfileFromFirestore(uid: string, email: string) {
       displayName: clean_(data.name || data.displayName || profileEmail),
       profileFound: true,
       role,
+      type: "staff" as const,
     };
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -852,6 +879,44 @@ async function customerMenu() {
   return (await sheetToObjects(SHEETS.menu))
     .filter((row) => row.itemId && row.active !== "No")
     .map(enrichMenuItem_);
+}
+
+async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
+  const customerName = clean_(
+    payload.customerName || payload.displayName || actor.displayName || actor.name || actor.email,
+  );
+  const phone = clean_(payload.phone || payload.customerPhone || actor.phone);
+
+  if (!isRealCustomerInput_(customerName)) {
+    throw new Error("Customer name is required.");
+  }
+
+  const existing = await findCustomerByPhoneOrName(phone, customerName);
+  if (existing.customerId) {
+    return success_({
+      customerId: existing.customerId,
+      message: "Customer profile already exists in the Customers sheet.",
+    });
+  }
+
+  const customerId = await createCustomerFromOrder(customerName, phone, {
+    ...payload,
+    customerName,
+    phone,
+    notes: [
+      "Created automatically from customer signup.",
+      `Firebase UID: ${actor.uid}`,
+      actor.email ? `Email: ${actor.email}` : "",
+      clean_(payload.notes),
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  });
+
+  return success_({
+    customerId,
+    message: "Customer profile saved in the Customers sheet.",
+  });
 }
 
 async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
@@ -2094,7 +2159,7 @@ async function createCustomerFromOrder(customerName: string, phone: string, payl
     birthday: "",
     favoriteDrink: clean_(payload.favoriteDrink),
     favouriteDrink: clean_(payload.favoriteDrink),
-    notes: "Created automatically from receipt.",
+    notes: clean_(payload.notes || "Created automatically from receipt."),
     active: "Yes",
     totalOrders: 0,
     totalSpent: 0,
@@ -2900,10 +2965,7 @@ async function routeDataSlice(
   }
 }
 
-if (
-  process.env.FIREBASE_FUNCTIONS !== "1" &&
-  process.env.NETLIFY_FUNCTIONS !== "1"
-) {
+if (process.env.FIREBASE_FUNCTIONS !== "1") {
   app.listen(PORT, () => {
     console.log(`Joy Corner backend listening on http://localhost:${PORT}`);
   });

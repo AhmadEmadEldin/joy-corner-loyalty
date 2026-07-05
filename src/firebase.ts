@@ -26,7 +26,7 @@ declare const __FIREBASE_CONFIG__: {
   storageBucket: string;
 };
 
-export type StaffRole = "barista" | "waiter" | "cashier" | "owner";
+export type StaffRole = "barista" | "waiter" | "cashier" | "manager" | "owner";
 
 export type StaffProfile = {
   active?: boolean;
@@ -34,6 +34,7 @@ export type StaffProfile = {
   displayName: string;
   email: string;
   role: StaffRole;
+  type?: "staff";
   uid: string;
   updatedAt?: unknown;
 };
@@ -43,7 +44,9 @@ export type CustomerProfile = {
   createdAt?: unknown;
   displayName: string;
   email: string;
+  loyaltyPoints?: number;
   phone?: string;
+  type?: "customer";
   uid: string;
   updatedAt?: unknown;
 };
@@ -122,10 +125,11 @@ export async function signUpCustomer(
   email: string,
   password: string,
   displayName = "",
+  phone = "",
 ) {
   if (!auth) throw new Error("Firebase is not configured yet.");
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  await createCustomerProfile(credential.user, displayName);
+  await createCustomerProfile(credential.user, displayName, phone);
   return credential;
 }
 
@@ -169,7 +173,7 @@ async function ensureCustomerProfile(user: User): Promise<CustomerProfile> {
   return profile;
 }
 
-async function createCustomerProfile(user: User, displayName = "") {
+async function createCustomerProfile(user: User, displayName = "", phone = "") {
   if (!firestore) throw new Error("Firestore is not configured yet.");
   const staffSnapshot = await getDoc(doc(firestore, "users", user.uid));
 
@@ -187,6 +191,9 @@ async function createCustomerProfile(user: User, displayName = "") {
       ...(snapshot.exists() ? {} : { createdAt: serverTimestamp() }),
       displayName: stringValue(displayName || email),
       email,
+      ...(snapshot.exists() ? {} : { loyaltyPoints: 0 }),
+      phone: stringValue(phone),
+      type: "customer",
       uid: user.uid,
       updatedAt: serverTimestamp(),
     },
@@ -209,7 +216,9 @@ function customerProfileFromData(
     active: activeValue(data.active),
     displayName: stringValue(data.displayName || data.name || email),
     email,
+    loyaltyPoints: Number(data.loyaltyPoints || 0),
     phone: stringValue(data.phone),
+    type: "customer",
     uid,
   };
 }
@@ -261,6 +270,7 @@ function staffProfileFromData(
     displayName: stringValue(data.displayName || data.name || email),
     email,
     role,
+    type: "staff",
     uid,
   };
 }
@@ -270,6 +280,7 @@ function normalizeRole(value: unknown): StaffRole | null {
   return role === "barista" ||
     role === "waiter" ||
     role === "cashier" ||
+    role === "manager" ||
     role === "owner"
     ? role
     : null;

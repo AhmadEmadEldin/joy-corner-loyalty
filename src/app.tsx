@@ -684,7 +684,7 @@ function AuthScreen({
         </div>
         <img className="auth-signature" alt="" src={joyYourTimeUrl} />
         <form className="auth-form" onSubmit={onSubmit}>
-          <Field label="Owner Email" name="email" placeholder="owner@joycorner.com" required type="email" />
+          <Field label="Staff Email" name="email" placeholder="staff@joycorner.com" required type="email" />
           <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
           <button className="primary" disabled={authLoading} type="submit">
             Sign In
@@ -751,12 +751,18 @@ function CustomerOrderPage() {
     const email = stringValue(payload.email);
     const password = stringValue(payload.password);
     const displayName = stringValue(payload.displayName);
+    const phone = stringValue(payload.phone);
 
     try {
       setLoading(true);
       setStatus(authMode === "signup" ? "Creating account..." : "Signing in...");
       if (authMode === "signup") {
-        await signUpCustomer(email, password, displayName);
+        await signUpCustomer(email, password, displayName, phone);
+        await callServer("registerCustomerProfile", {
+          customerName: displayName,
+          displayName,
+          phone,
+        });
       } else {
         await signInCustomer(email, password);
       }
@@ -851,7 +857,10 @@ function CustomerOrderPage() {
                   </button>
                 </div>
                 {authMode === "signup" && (
-                  <Field label="Name" name="displayName" placeholder="Your name" required />
+                  <>
+                    <Field label="Name" name="displayName" placeholder="Your name" required />
+                    <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+                  </>
                 )}
                 <Field label="Email" name="email" placeholder="you@example.com" required type="email" />
                 <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
@@ -2911,6 +2920,24 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "debugAuth",
     "debugSheets",
   ]),
+  manager: new Set([
+    "appData",
+    "getAppData",
+    "addCustomer",
+    "removeCustomer",
+    "addReceipt",
+    "collectUnpaidPayment",
+    "updateReceiptPayment",
+    "markReceiptDone",
+    "generateVoucher",
+    "redeemVoucher",
+    "customerSearch",
+    "customerHistory",
+    "historyDays",
+    "dayHistory",
+    "debugAuth",
+    "debugSheets",
+  ]),
   cashier: new Set([
     "appData",
     "getAppData",
@@ -2954,6 +2981,7 @@ function roleLabel(role: StaffRole) {
   const labels: Record<StaffRole, string> = {
     barista: "Barista",
     cashier: "Cashier",
+    manager: "Manager",
     owner: "Owner",
     waiter: "Waiter",
   };

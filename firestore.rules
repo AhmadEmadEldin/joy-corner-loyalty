@@ -16,7 +16,9 @@ service cloud.firestore {
         'createdAt',
         'displayName',
         'email',
+        'loyaltyPoints',
         'phone',
+        'type',
         'uid',
         'updatedAt'
       ]);
@@ -33,12 +35,16 @@ service cloud.firestore {
         && customerKeysAreValid()
         && request.resource.data.uid == uid
         && request.resource.data.email == request.auth.token.email
+        && request.resource.data.type == 'customer'
+        && request.resource.data.loyaltyPoints == 0
         && request.resource.data.active == true;
       allow update: if owns(uid)
         && customerKeysAreValid()
         && resource.data.uid == uid
         && request.resource.data.uid == uid
         && request.resource.data.email == resource.data.email
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.loyaltyPoints == resource.data.loyaltyPoints
         && request.resource.data.active == resource.data.active;
       allow delete: if false;
     }

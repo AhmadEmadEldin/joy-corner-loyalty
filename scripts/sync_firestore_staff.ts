@@ -12,10 +12,10 @@ type StaffSeed = {
   displayName: string;
   email: string;
   password: string;
-  role: "owner" | "cashier" | "waiter" | "barista";
+  role: "owner" | "manager" | "cashier" | "waiter" | "barista";
 };
 
-const validRoles = new Set(["owner", "cashier", "waiter", "barista"]);
+const validRoles = new Set(["owner", "manager", "cashier", "waiter", "barista"]);
 
 function firebaseCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -136,6 +136,7 @@ async function upsertStaff(staff: StaffSeed) {
       displayName: staff.displayName,
       email: staff.email,
       role: staff.role,
+      type: "staff",
       uid: user.uid,
       updatedAt: FieldValue.serverTimestamp(),
     },
