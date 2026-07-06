@@ -1419,10 +1419,7 @@ async function debugSheets() {
   return success_({
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
     serviceAccountPresent: Boolean(
-        process.env.GOOGLE_CLIENT_EMAIL &&
-        process.env.GOOGLE_PRIVATE_KEY &&
-        process.env.FIREBASE_CLIENT_EMAIL &&
-        process.env.FIREBASE_PRIVATE_KEY,
+      process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY,
     ),
     spreadsheetId: maskId_(SPREADSHEET_ID),
     sheetTabsFound,
@@ -2811,11 +2808,11 @@ app.use((_request, response, next) => {
 app.options("/api", (_request, response) => response.sendStatus(204));
 
 app.get("/api/menu", async (request, response) => {
-  await routeDataSlice(request.query, response, (data) => ({ menu: data.menu }));
+  await routeDataSlice(requestPayload_(request), response, (data) => ({ menu: data.menu }));
 });
 
 app.get("/api/dashboard/today", async (request, response) => {
-  await routeDataSlice(request.query, response, (data) => ({
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
     dashboard: data.dashboard,
     dashboardOrders: data.dashboardOrders,
     dashboardTopItems: data.dashboardTopItems,
@@ -2823,34 +2820,31 @@ app.get("/api/dashboard/today", async (request, response) => {
 });
 
 app.get("/api/customers/search", async (request, response) => {
-  await routeAction("customerSearch", request.query, response);
+  await routeAction("customerSearch", requestPayload_(request), response);
 });
 
 app.get("/api/customers/:customerId/history", async (request, response) => {
   await routeAction(
     "customerHistory",
-    { ...request.query, customerId: request.params.customerId },
+    { ...requestPayload_(request), customerId: request.params.customerId },
     response,
   );
 });
 
 app.get("/api/history/days", async (request, response) => {
-  await routeAction("historyDays", request.query, response);
+  await routeAction("historyDays", requestPayload_(request), response);
 });
 
 app.get("/api/history/:dateKey", async (request, response) => {
   await routeAction(
     "dayHistory",
-    { ...request.query, dateKey: request.params.dateKey },
+    { ...requestPayload_(request), dateKey: request.params.dateKey },
     response,
   );
 });
 
 app.get("/api", async (request, response) => {
-  const payload: Payload = {
-    ...request.query,
-    authorization: request.header("authorization"),
-  };
+  const payload = requestPayload_(request);
   const action = clean_(payload.action || "appData");
 
   try {
@@ -2866,10 +2860,7 @@ app.get("/api", async (request, response) => {
 });
 
 app.post("/api", async (request, response) => {
-  const payload: Payload = {
-    ...(request.body || {}),
-    authorization: request.header("authorization"),
-  };
+  const payload = requestPayload_(request);
   const action = clean_(payload.action);
 
   try {
@@ -2885,10 +2876,7 @@ app.post("/api", async (request, response) => {
 });
 
 app.get("/", async (request, response) => {
-  const payload: Payload = {
-    ...request.query,
-    authorization: request.header("authorization"),
-  };
+  const payload = requestPayload_(request);
   const action = clean_(payload.action || "appData");
 
   try {
@@ -2904,10 +2892,7 @@ app.get("/", async (request, response) => {
 });
 
 app.post("/", async (request, response) => {
-  const payload: Payload = {
-    ...(request.body || {}),
-    authorization: request.header("authorization"),
-  };
+  const payload = requestPayload_(request);
   const action = clean_(payload.action);
 
   try {
@@ -2926,9 +2911,16 @@ app.get("/health", (_request, response) => {
   response.json({
     success: true,
     service: "Joy Corner Firebase + Google Sheets API",
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: maskId_(SPREADSHEET_ID),
   });
 });
+
+function requestPayload_(request: express.Request): Payload {
+  return {
+    ...(request.method === "GET" ? request.query : request.body || {}),
+    authorization: request.header("authorization"),
+  };
+}
 
 async function routeAction(
   action: string,

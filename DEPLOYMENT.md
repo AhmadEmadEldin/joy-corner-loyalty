@@ -3,7 +3,7 @@
 ## Deployment Flow
 
 ```text
-VS Code -> GitHub -> Firebase Hosting -> Firebase HTTPS Function -> Firestore users/{uid} -> Google Sheets
+VS Code -> GitHub -> Firebase Hosting -> Firebase HTTPS Function -> Firestore users/{uid} or customers/{uid} -> Google Sheets
 ```
 
 Firebase Hosting serves the React build from `dist`. Requests to `/api/**` are rewritten to the Firebase Function named `api`.
@@ -69,8 +69,12 @@ FIREBASE_SERVICE_ACCOUNT_JSON
 1. Enable Firebase Authentication Email/Password.
 2. Enable Firestore.
 3. Create staff Auth users, or keep them in the Google Sheet tab named `Staff`.
-4. Create Firestore documents at `users/{uid}` with `email`, `role`, `active`, and `displayName`.
+4. Create Firestore documents at `users/{uid}` with `email`, `displayName`, `type: "staff"`, `role`, and `active`.
 5. Run `npm run sync:staff` to sync the `Staff` sheet into Firebase Auth/Firestore when network credentials are working.
+
+Allowed staff roles are `owner`, `manager`, `cashier`, `waiter`, and `barista`.
+
+Customer signup creates `customers/{uid}` with `email`, `displayName`, `phone`, `type: "customer"`, `active`, and `loyaltyPoints`.
 
 ## Google Sheets Setup
 
