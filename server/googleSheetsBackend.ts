@@ -2784,6 +2784,17 @@ function success_(payload: Payload) {
 export const app = express();
 
 app.use(express.json({ limit: "1mb", type: ["application/json", "text/plain"] }));
+app.use((error: unknown, _request: express.Request, response: express.Response, next: express.NextFunction) => {
+  if (error instanceof SyntaxError) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid JSON request body.",
+    });
+    return;
+  }
+
+  next(error);
+});
 app.use((_request, response, next) => {
   response.header("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
   response.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -2847,7 +2858,7 @@ app.get("/api", async (request, response) => {
 
 app.post("/api", async (request, response) => {
   const payload = requestPayload_(request);
-  const action = clean_(payload.action);
+  const action = clean_(payload.action || request.query.action || "appData");
 
   try {
     response.json(await handleAction(action, payload));
@@ -2879,7 +2890,7 @@ app.get("/", async (request, response) => {
 
 app.post("/", async (request, response) => {
   const payload = requestPayload_(request);
-  const action = clean_(payload.action);
+  const action = clean_(payload.action || request.query.action || "appData");
 
   try {
     response.json(await handleAction(action, payload));
@@ -2902,10 +2913,24 @@ app.get("/health", (_request, response) => {
 });
 
 function requestPayload_(request: express.Request): Payload {
+  const body =
+    typeof request.body === "string" ? payloadFromText_(request.body) : request.body || {};
   return {
-    ...(request.method === "GET" ? request.query : request.body || {}),
+    ...(request.method === "GET" ? request.query : body),
     authorization: request.header("authorization"),
   };
+}
+
+function payloadFromText_(body: string): Payload {
+  const text = clean_(body);
+  if (!text) return {};
+
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 async function routeAction(
