@@ -183,7 +183,7 @@ npm run deploy:firebase:rules
 
 - Never commit `.env.local`, `.env`, or service account secrets.
 - Do not call Google Sheets directly from the browser.
-- Keep `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` server-side only.
+- Production Google Sheets access uses the Firebase Functions runtime service account. Share the Sheet with that service account as Editor.
 - Keep Canva credentials server-side only. If Canva secrets are not configured, voucher link/update workflows should fail clearly without breaking loyalty tracking.
 - Rotate service account keys if they were ever pasted into public code, GitHub, old integrations, or frontend variables.
 
@@ -193,8 +193,12 @@ Set backend-only values with Firebase secrets:
 
 ```powershell
 firebase functions:secrets:set GOOGLE_SHEET_ID
-firebase functions:secrets:set GOOGLE_CLIENT_EMAIL
-firebase functions:secrets:set GOOGLE_PRIVATE_KEY
+```
+
+For `joycornerapp-c784d`, share the Google Sheet with this runtime service account:
+
+```text
+606859361107-compute@developer.gserviceaccount.com
 ```
 
 Optional Canva secrets, only when backend voucher generation is connected:

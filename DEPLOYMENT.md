@@ -36,16 +36,12 @@ Google Sheets backend access is needed by the Firebase Function:
 
 ```text
 GOOGLE_SHEET_ID
-GOOGLE_CLIENT_EMAIL
-GOOGLE_PRIVATE_KEY
 ```
 
 For local `.env.local`, these variables are read directly. For deployed Firebase Functions, use Firebase Secret Manager:
 
 ```powershell
 firebase functions:secrets:set GOOGLE_SHEET_ID
-firebase functions:secrets:set GOOGLE_CLIENT_EMAIL
-firebase functions:secrets:set GOOGLE_PRIVATE_KEY
 ```
 
 Use this value for `GOOGLE_SHEET_ID`:
@@ -56,11 +52,10 @@ Use this value for `GOOGLE_SHEET_ID`:
 
 The backend also accepts the full Google Sheets URL, but the raw ID is cleaner.
 
-Compatibility Google Sheets variables still accepted by local code:
+Compatibility Google Sheets variable still accepted by local code:
 
 ```text
 GOOGLE_SHEETS_SPREADSHEET_ID
-GOOGLE_SERVICE_ACCOUNT_JSON
 ```
 
 Do not keep a root `.env` file before deploying Firebase Functions. Firebase CLI loads root `.env` as Functions runtime env and rejects reserved `FIREBASE_*` keys. Use `.env.local` for local builds and scripts.
@@ -80,8 +75,16 @@ Customer signup creates `customers/{uid}` with `email`, `displayName`, `phone`, 
 ## Google Sheets Setup
 
 1. Enable Google Sheets API in Google Cloud.
-2. Share `Joy_Corner_Integrated_WITH_Loyalty_Winners` with `GOOGLE_CLIENT_EMAIL` as Editor.
+2. Share `Joy_Corner_Integrated_WITH_Loyalty_Winners` with the Firebase Functions runtime service account as Editor.
 3. Set `GOOGLE_SHEET_ID` to the spreadsheet ID only.
+
+For project `joycornerapp-c784d`, the default runtime service account shown by Firebase dry-run is:
+
+```text
+606859361107-compute@developer.gserviceaccount.com
+```
+
+If you later change the Functions service account, share the Sheet with that new service account instead.
 
 ## Deploy
 

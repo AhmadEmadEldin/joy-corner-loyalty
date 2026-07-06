@@ -11,8 +11,6 @@ exports.api = onRequest(
     region: process.env.FIREBASE_FUNCTION_REGION || "us-central1",
     secrets: [
       "GOOGLE_SHEET_ID",
-      "GOOGLE_CLIENT_EMAIL",
-      "GOOGLE_PRIVATE_KEY",
     ],
   },
   app,

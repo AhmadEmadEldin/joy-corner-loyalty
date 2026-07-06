@@ -191,25 +191,10 @@ function firebaseCredential() {
   );
 }
 
-function googleServiceAccount() {
-  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-
+function validateGoogleSheetsConfig() {
   if (!SPREADSHEET_ID) {
     throw new ApiError("Missing GOOGLE_SHEET_ID.", 500);
   }
-
-  if (json) return JSON.parse(json);
-
-  if (!clientEmail || !privateKey) {
-    throw new ApiError(
-      "Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY.",
-      500,
-    );
-  }
-
-  return { client_email: clientEmail, private_key: privateKey };
 }
 
 function spreadsheetIdFromEnv(value: string) {
@@ -221,8 +206,8 @@ function spreadsheetIdFromEnv(value: string) {
 async function getSheetsClient() {
   if (!sheetsClientPromise) {
     sheetsClientPromise = (async () => {
+      validateGoogleSheetsConfig();
       const auth = new google.auth.GoogleAuth({
-        credentials: googleServiceAccount(),
         scopes: ["https://www.googleapis.com/auth/spreadsheets"],
       });
       return google.sheets({ auth, version: "v4" });
@@ -1421,9 +1406,7 @@ async function debugSheets() {
 
   return success_({
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
-    serviceAccountPresent: Boolean(
-      process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY,
-    ),
+    googleAuthMode: "runtime-default",
     spreadsheetId: maskId_(SPREADSHEET_ID),
     sheetTabsFound,
     rowsCountByTab,
