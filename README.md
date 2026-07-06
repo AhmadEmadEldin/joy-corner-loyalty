@@ -31,6 +31,7 @@ Laptop / VS Code
 - Firestore rules: `firestore.rules`
 - Required environment variables: `.env.example`
 - Staff role sync helper: `scripts/sync_firestore_staff.ts`
+- Code map and ownership notes: `docs/CODE_ORGANIZATION.md`
 
 ## Google Sheet
 
@@ -165,8 +166,15 @@ Local development still uses real Firebase Auth, Firestore staff roles, and Goog
 
 ```powershell
 npm run lint:types
+npm run lint
 npm test
 npm run build
+```
+
+Run the full local verification chain:
+
+```powershell
+npm run check
 ```
 
 ## Firebase Deploy Commands

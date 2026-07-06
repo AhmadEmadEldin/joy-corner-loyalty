@@ -101,14 +101,14 @@ const tabs: Array<[TabId, string]> = [
 ];
 
 const tabIcons: Record<TabId, string> = {
-  customers: "♙",
-  dashboard: "⌂",
-  history: "↺",
-  menu: "☕",
-  orders: "▣",
-  rewards: "◇",
-  unpaid: "▭",
-  vouchers: "⌑",
+  customers: "CUS",
+  dashboard: "DASH",
+  history: "HIST",
+  menu: "MENU",
+  orders: "ORD",
+  rewards: "REW",
+  unpaid: "DUE",
+  vouchers: "VCH",
 };
 
 export function App() {

@@ -2,59 +2,59 @@
 
 ## Purpose
 
-Joy Corner Loyalty is a staff web app for cafe customer records, orders, unpaid balances, reward tracking, voucher generation/redemption, and daily dashboard operations.
+Joy Corner Loyalty is a Firebase-hosted cafe operations app for staff dashboards, customer order requests, unpaid tracking, rewards, vouchers, and daily history.
 
 ## Production Architecture
 
 ```text
-Laptop / VS Code
--> GitHub repository
--> Firebase Hosting deploy
--> Firebase Auth email/password
--> React Firebase ID token
--> /api Firebase Hosting rewrite
+VS Code / Laptop
+-> GitHub
+-> Firebase Hosting
+-> React frontend
+-> Firebase Auth
+-> Firebase ID token
 -> Firebase HTTPS Function api
 -> Firebase Admin token verification
--> Firestore users/{uid} staff role lookup or customers/{uid} customer profile lookup
--> Google Sheets API
--> Role-filtered React dashboard
+-> Firestore users/{uid} or customers/{uid}
+-> Google Sheets API using the Firebase Functions runtime service account
+-> Role-filtered staff dashboard or customer portal
 ```
 
 ## Core Code
 
-- Frontend: `src/app.tsx`
-- Firebase client: `src/firebase.ts`
-- Firebase Function: `firebase-functions.cjs`
-- Backend: `server/googleSheetsBackend.ts`
-- Sheet schema: `server/sheetSchema.ts`
-- Firebase Hosting/Functions config: `firebase.json`
+- Frontend app: `src/app.tsx`
+- Firebase browser auth/profile helpers: `src/firebase.ts`
+- Firebase Function entry: `firebase-functions.cjs`
+- Backend API, authorization, and Google Sheets access: `server/googleSheetsBackend.ts`
+- Sheet write schema: `server/sheetSchema.ts`
+- Firebase Hosting/Functions/Firestore config: `firebase.json`
+- Firestore security rules: `firestore.rules`
 
-## Authentication And Authorization
+## Authentication And Profiles
 
-Staff sign in with Firebase Auth email/password.
+Staff sign in with Firebase Auth email/password at `/`.
 
-The frontend sends the Firebase ID token to the backend:
-
-```text
-Authorization: Bearer <Firebase ID token>
-```
-
-The backend verifies the token, then reads:
+Staff profiles live at:
 
 ```text
 users/{firebaseAuthUid}
 ```
 
-The document must include:
+Required staff document shape:
 
 ```json
 {
   "email": "staff@example.com",
+  "displayName": "Staff Name",
+  "type": "staff",
   "role": "owner",
   "active": true,
-  "displayName": "Staff Name"
+  "createdAt": "server timestamp",
+  "updatedAt": "server timestamp"
 }
 ```
+
+Customers sign up or sign in at `/order`.
 
 Customer profiles live at:
 
@@ -62,38 +62,42 @@ Customer profiles live at:
 customers/{firebaseAuthUid}
 ```
 
-Customer profile fields:
+Customer document shape:
 
 ```json
 {
   "email": "customer@example.com",
   "displayName": "Customer Name",
   "phone": "optional",
+  "type": "customer",
   "active": true,
+  "loyaltyPoints": 0,
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }
 ```
 
-Staff users cannot use customer-only API actions. Customer users cannot use staff API actions.
+Staff accounts cannot use customer-only actions, and customer accounts cannot use staff dashboard actions.
 
-Allowed roles:
+## Roles
+
+Allowed staff roles:
 
 - `owner`
+- `manager`
 - `cashier`
 - `waiter`
 - `barista`
 
-The app does not use hardcoded production staff emails. Firestore is the source of truth.
+Role behavior:
 
-## Role Access
-
-- `owner`: all tabs, all operational actions, owner reset controls, debug sheets.
-- `cashier`: dashboard, customers, orders, rewards, vouchers, unpaid, history, menu, payments, voucher actions.
-- `waiter`: order-taking workflow, customer lookup, menu, receipt history, pickup action.
+- `owner`: full app data, all operational actions, owner reset controls.
+- `manager`: full operational data and actions except owner-only reset controls.
+- `cashier`: operational data and cashier/reward/unpaid workflows.
+- `waiter`: order-taking, customer lookup, menu, receipt history, pickup action.
 - `barista`: pickup dashboard and mark-picked-up action.
 
-The frontend filters tabs for usability. The backend enforces permissions for security.
+The frontend hides unavailable views for usability. The backend enforces role permissions for security.
 
 ## Google Sheets Database
 
@@ -103,11 +107,13 @@ Main spreadsheet:
 Joy_Corner_Integrated_WITH_Loyalty_Winners
 ```
 
-Required environment variable:
+Production Firebase Functions only needs this secret:
 
 ```text
 GOOGLE_SHEET_ID
 ```
+
+Google Sheets API authentication uses the Firebase Functions runtime service account. The Sheet must be shared with that service account as Editor.
 
 Expected business tabs:
 
@@ -122,20 +128,30 @@ Expected business tabs:
 - `Loyalty Winners`
 - `Reward Redemptions`
 
-The current implementation also reads/writes `Generated Vouchers` and supports aliases for existing tab names such as `Staff`/`Staff Users` and `History`/`Day History`.
+Helper tabs supported by the app:
+
+- `Generated Vouchers`
+- `Staff` or `Staff Users`
+- `History` or `Day History`
 
 ## API
 
-The frontend calls `/api`. Firebase Hosting rewrites this to the `api` HTTPS Function.
+The frontend calls `/api`. Firebase Hosting rewrites `/api/**` to the `api` HTTPS Function.
 
-Main action endpoint:
+Main endpoints:
 
 ```text
 GET /api?action=appData
 POST /api
 ```
 
-Common actions:
+Every protected request must include:
+
+```text
+Authorization: Bearer <Firebase ID token>
+```
+
+Common actions include:
 
 - `appData`
 - `addCustomer`
@@ -151,53 +167,28 @@ Common actions:
 - `customerHistory`
 - `historyDays`
 - `dayHistory`
-- `debugAuth`
-- `debugSheets`
-
-## Environment Variables
-
-Frontend Firebase variables:
-
-```text
-VITE_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID
-VITE_FIREBASE_APP_ID
-VITE_FIREBASE_STORAGE_BUCKET
-VITE_FIREBASE_MESSAGING_SENDER_ID
-VITE_FIREBASE_MEASUREMENT_ID
-```
-
-Backend Google Sheets variables:
-
-```text
-GOOGLE_SHEET_ID
-GOOGLE_CLIENT_EMAIL
-GOOGLE_PRIVATE_KEY
-```
-
-Backend Firebase Admin variables:
-
-```text
-FIREBASE_PROJECT_ID
-FIREBASE_CLIENT_EMAIL
-FIREBASE_PRIVATE_KEY
-```
+- `customerMenu`
+- `registerCustomerProfile`
+- `submitCustomerOrder`
 
 ## Security
 
-- Google service account credentials stay in the backend only.
-- Firebase Admin uses the Firebase Functions runtime credentials in production.
-- The browser never receives service account credentials.
-- Firestore role documents control staff access.
-- API role checks are required even when the UI hides actions.
+- The browser never receives Google credentials or Canva credentials.
+- Firebase Functions verifies Firebase ID tokens before reading or writing Google Sheets.
+- Firestore `users/{uid}` controls staff role access.
+- Firestore `customers/{uid}` controls customer portal access.
+- Missing, inactive, or mismatched profiles are blocked.
+- Google Sheet tab resolution returns clear errors for missing tabs.
+- Production deployment does not use Netlify, Vercel, or Apps Script backends.
 
 ## Success Criteria
 
 1. Staff can sign in with Firebase email/password.
-2. Backend verifies Firebase ID token.
-3. Backend finds active Firestore `users/{uid}` profile.
-4. Correct role-specific UI appears.
-5. Backend reads/writes the Google Sheet.
-6. Owner/cashier/waiter/barista each receive only their intended data/actions.
-7. Missing env vars, inactive staff, missing staff profiles, and missing sheet tabs return clear errors.
+2. Customer signup creates Auth and Firestore customer profile.
+3. Backend verifies Firebase ID token.
+4. Backend finds an active profile in Firestore.
+5. Correct role-specific UI appears.
+6. Backend reads/writes the Google Sheet.
+7. Staff roles receive only intended data/actions.
+8. Customers cannot access staff dashboards.
+9. Missing profile, inactive profile, invalid token, and missing sheet tabs return clear errors.
