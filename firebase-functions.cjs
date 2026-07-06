@@ -8,6 +8,7 @@ const { app } = require("./server/googleSheetsBackend.ts");
 exports.api = onRequest(
   {
     cors: true,
+    memory: "1GiB",
     region: process.env.FIREBASE_FUNCTION_REGION || "us-central1",
     secrets: [
       "GOOGLE_SHEET_ID",

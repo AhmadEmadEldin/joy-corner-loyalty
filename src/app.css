@@ -268,14 +268,24 @@ button:active:not(:disabled) {
   white-space: nowrap;
 }
 
-.tab-button::before {
+.tab-icon {
   color: #f0c77d;
-  content: attr(data-icon);
-  display: block;
-  font-size: 30px;
-  font-weight: 500;
-  line-height: 1;
+  display: grid;
+  height: 34px;
+  place-items: center;
   text-shadow: 0 0 16px rgba(217, 173, 99, 0.36);
+  width: 34px;
+}
+
+.tab-icon svg {
+  display: block;
+  fill: none;
+  height: 31px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 31px;
 }
 
 .tab-button.active {
@@ -289,7 +299,7 @@ button:active:not(:disabled) {
   color: var(--brand-dark);
 }
 
-.tab-button.active::before {
+.tab-button.active .tab-icon {
   color: var(--brand-dark);
   text-shadow: 0 1px 0 rgba(255, 246, 229, 0.46);
 }
@@ -1632,8 +1642,14 @@ tbody tr:hover {
     white-space: nowrap;
   }
 
-  .tab-button::before {
-    font-size: 20px;
+  .tab-icon {
+    height: 24px;
+    width: 24px;
+  }
+
+  .tab-icon svg {
+    height: 22px;
+    width: 22px;
   }
 
   main {

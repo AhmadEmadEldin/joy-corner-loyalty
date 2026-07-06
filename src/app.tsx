@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { User } from "firebase/auth";
 import {
   StaffProfile,
@@ -100,16 +100,80 @@ const tabs: Array<[TabId, string]> = [
   ["menu", "Menu"],
 ];
 
-const tabIcons: Record<TabId, string> = {
-  customers: "CUS",
-  dashboard: "DASH",
-  history: "HIST",
-  menu: "MENU",
-  orders: "ORD",
-  rewards: "REW",
-  unpaid: "DUE",
-  vouchers: "VCH",
-};
+function TabIcon({ id }: { id: TabId }) {
+  const paths: Record<TabId, ReactNode> = {
+    customers: (
+      <>
+        <path d="M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+        <circle cx="9.5" cy="7" r="3.5" />
+        <path d="M20.5 20v-2a3.5 3.5 0 0 0-2.8-3.4" />
+        <path d="M16.5 3.4a3.5 3.5 0 0 1 0 6.8" />
+      </>
+    ),
+    dashboard: (
+      <>
+        <path d="M4 13a8 8 0 1 1 16 0" />
+        <path d="M5 17h14" />
+        <path d="m12 13 4-4" />
+        <path d="M8 21h8" />
+      </>
+    ),
+    history: (
+      <>
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <path d="M3 4v5h5" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    menu: (
+      <>
+        <path d="M5 8h11a4 4 0 0 1 0 8H5z" />
+        <path d="M16 10h1a2 2 0 0 1 0 4h-1" />
+        <path d="M7 3v2" />
+        <path d="M11 3v2" />
+        <path d="M5 19h12" />
+      </>
+    ),
+    orders: (
+      <>
+        <path d="M7 3h10l2 3v15H5V6z" />
+        <path d="M7 8h10" />
+        <path d="M8 12h8" />
+        <path d="M8 16h5" />
+      </>
+    ),
+    rewards: (
+      <>
+        <path d="M12 3 14.7 8l5.6.8-4.1 4 1 5.6L12 15.8l-5.2 2.7 1-5.6-4.1-4L9.3 8z" />
+        <path d="M9 21h6" />
+      </>
+    ),
+    unpaid: (
+      <>
+        <rect height="13" rx="2" width="18" x="3" y="6" />
+        <path d="M3 10h18" />
+        <path d="M7 15h4" />
+        <path d="M16 14v3" />
+      </>
+    ),
+    vouchers: (
+      <>
+        <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z" />
+        <path d="M9 9h.01" />
+        <path d="M15 15h.01" />
+        <path d="m9 15 6-6" />
+      </>
+    ),
+  };
+
+  return (
+    <span className="tab-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {paths[id]}
+      </svg>
+    </span>
+  );
+}
 
 export function App() {
   if (window.location.pathname.startsWith("/order")) {
@@ -521,11 +585,11 @@ export function App() {
           {visibleTabs.map(([id, label]) => (
             <button
               className={`tab-button ${activeTab === id ? "active" : ""}`}
-              data-icon={tabIcons[id]}
               key={id}
               onClick={() => setActiveTab(id)}
               type="button"
             >
+              <TabIcon id={id} />
               {label}
             </button>
           ))}
