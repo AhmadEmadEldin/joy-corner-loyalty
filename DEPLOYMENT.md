@@ -40,7 +40,7 @@ GOOGLE_CLIENT_EMAIL
 GOOGLE_PRIVATE_KEY
 ```
 
-For local `.env`, these variables are read directly. For deployed Firebase Functions, use Firebase Secret Manager:
+For local `.env.local`, these variables are read directly. For deployed Firebase Functions, use Firebase Secret Manager:
 
 ```powershell
 firebase functions:secrets:set GOOGLE_SHEET_ID
@@ -56,13 +56,14 @@ Use this value for `GOOGLE_SHEET_ID`:
 
 The backend also accepts the full Google Sheets URL, but the raw ID is cleaner.
 
-Compatibility variables still accepted:
+Compatibility Google Sheets variables still accepted by local code:
 
 ```text
 GOOGLE_SHEETS_SPREADSHEET_ID
 GOOGLE_SERVICE_ACCOUNT_JSON
-FIREBASE_SERVICE_ACCOUNT_JSON
 ```
+
+Do not keep a root `.env` file before deploying Firebase Functions. Firebase CLI loads root `.env` as Functions runtime env and rejects reserved `FIREBASE_*` keys. Use `.env.local` for local builds and scripts.
 
 ## Firebase Setup
 
@@ -109,4 +110,4 @@ Deploy only Firestore rules:
 npm run deploy:firebase:rules
 ```
 
-Do not upload `.env`, service account JSON files, or private keys to GitHub.
+Do not upload `.env.local`, `.env`, service account JSON files, or private keys to GitHub.

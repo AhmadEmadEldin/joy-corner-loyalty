@@ -159,7 +159,7 @@ This starts:
 - Frontend: `http://localhost:8081`
 - Backend: `http://localhost:3001`
 
-Local development still uses real Firebase Auth, Firestore staff roles, and Google Sheets credentials from `.env`.
+Local development still uses real Firebase Auth, Firestore staff roles, and Google Sheets credentials from `.env.local`. Keep the project root free of `.env` before deploying Firebase Functions because Firebase CLI treats root `.env` as Functions runtime env.
 
 ## Checks
 
@@ -181,7 +181,7 @@ npm run deploy:firebase:rules
 
 ## Security
 
-- Never commit `.env` or service account secrets.
+- Never commit `.env.local`, `.env`, or service account secrets.
 - Do not call Google Sheets directly from the browser.
 - Keep `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` server-side only.
 - Keep Canva credentials server-side only. If Canva secrets are not configured, voucher link/update workflows should fail clearly without breaking loyalty tracking.

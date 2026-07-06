@@ -5,7 +5,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { google } from "googleapis";
 import { readFileSync } from "node:fs";
 
-dotenv.config();
+dotenv.config({ path: [".env.local", ".env"] });
 
 type StaffSeed = {
   active: boolean;
@@ -18,20 +18,20 @@ type StaffSeed = {
 const validRoles = new Set(["owner", "manager", "cashier", "waiter", "barista"]);
 
 function firebaseCredential() {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    return cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+  if (process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return cert(JSON.parse(process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON));
   }
 
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE) {
-    return cert(JSON.parse(readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE, "utf8")));
+  if (process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE) {
+    return cert(JSON.parse(readFileSync(process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE, "utf8")));
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const projectId = process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.JOY_FIREBASE_CLIENT_EMAIL;
+  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin credentials.");
+    throw new Error("Missing Joy Corner Firebase Admin credentials.");
   }
 
   return cert({ clientEmail, privateKey, projectId });
@@ -156,7 +156,7 @@ async function main() {
   if (!getApps().length) {
     initializeApp({
       credential: firebaseCredential(),
-      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+      projectId: process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
     });
   }
 

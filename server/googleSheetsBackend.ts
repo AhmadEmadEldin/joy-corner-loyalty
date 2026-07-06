@@ -6,7 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
 import { schemaForSheet } from "./sheetSchema";
 
-dotenv.config();
+dotenv.config({ path: [".env.local", ".env"] });
 
 const SPREADSHEET_ID = spreadsheetIdFromEnv(
   process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "",
@@ -154,19 +154,22 @@ function initFirebaseAdmin() {
   if (getApps().length) return;
 
   const credential = firebaseCredential();
+  const projectId =
+    process.env.JOY_FIREBASE_PROJECT_ID ||
+    process.env.VITE_FIREBASE_PROJECT_ID;
   initializeApp({
     ...(credential ? { credential } : {}),
-    ...(process.env.FIREBASE_PROJECT_ID
-      ? { projectId: process.env.FIREBASE_PROJECT_ID }
-      : {}),
+    ...(projectId ? { projectId } : {}),
   });
 }
 
 function firebaseCredential() {
-  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const json = process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON;
+  const projectId =
+    process.env.JOY_FIREBASE_PROJECT_ID ||
+    process.env.VITE_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.JOY_FIREBASE_CLIENT_EMAIL;
+  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
   if (json) return cert(JSON.parse(json));
 
@@ -183,7 +186,7 @@ function firebaseCredential() {
   }
 
   throw new ApiError(
-    "Missing FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, or FIREBASE_PRIVATE_KEY.",
+    "Missing JOY_FIREBASE_PROJECT_ID, JOY_FIREBASE_CLIENT_EMAIL, or JOY_FIREBASE_PRIVATE_KEY.",
     500,
   );
 }
