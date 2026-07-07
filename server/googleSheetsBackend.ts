@@ -702,7 +702,9 @@ async function addOrder(payload: Payload) {
   const discount = Number(payload.discount || 0);
   const total = Math.max(0, qty * unitPrice - discount);
   const paymentStatus = clean_(payload.paymentStatus || "Paid");
-  const orderStatus = paymentStatus === "Paid" ? "Closed" : "Open";
+  // Payment and pickup are separate steps. Paid orders must stay live on the
+  // dashboard until staff marks them Picked Up or the owner runs End Day Reset.
+  const orderStatus = "Open";
   const paidAmount =
     paymentStatus === "Partial" ? Number(payload.paidAmount || 0) : total;
   const notes = orderNotes_(clean_(payload.notes), paymentStatus, paidAmount);
@@ -782,7 +784,7 @@ async function addReceipt(payload: Payload) {
     );
     const discount = Number(receiptItem.discount || 0);
     const total = Math.max(0, qty * unitPrice - discount);
-    const orderStatus = paymentStatus === "Paid" ? "Closed" : "Open";
+    const orderStatus = "Open";
     const rowPaidAmount =
       paymentStatus === "Paid"
         ? total
@@ -997,15 +999,11 @@ async function updateReceiptPayment(payload: Payload) {
     await setCell(SHEETS.orders, context.row, context.statusIndex, paymentStatus);
 
     if (
+      paymentStatus === "Unpaid" &&
       context.orderStatusIndex >= 0 &&
       !isPickedUpStatus_(context.currentOrderStatus)
     ) {
-      await setCell(
-        SHEETS.orders,
-        context.row,
-        context.orderStatusIndex,
-        paymentStatus === "Paid" ? "Closed" : "Open",
-      );
+      await setCell(SHEETS.orders, context.row, context.orderStatusIndex, "Open");
     }
 
     if (context.notesIndex >= 0) {
@@ -2195,9 +2193,6 @@ async function closeUnpaidOrders(customerId: string, amount: number) {
     if (remaining < outstanding) break;
 
     await setCell(SHEETS.orders, row + 1, statusIndex, "Paid");
-    if (orderStatusIndex >= 0 && !isPickedUpStatus_(valuesRow[orderStatusIndex])) {
-      await setCell(SHEETS.orders, row + 1, orderStatusIndex, "Closed");
-    }
     if (notesIndex >= 0) {
       const currentNotes = clean_(valuesRow[notesIndex]);
       const settledNote = `Settled unpaid on ${new Date().toLocaleString()}`;
