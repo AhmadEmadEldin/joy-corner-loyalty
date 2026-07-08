@@ -15,7 +15,13 @@ type StaffSeed = {
   role: "owner" | "manager" | "cashier" | "waiter" | "barista";
 };
 
-const validRoles = new Set(["owner", "manager", "cashier", "waiter", "barista"]);
+const validRoles = new Set([
+  "owner",
+  "manager",
+  "cashier",
+  "waiter",
+  "barista",
+]);
 
 function firebaseCredential() {
   if (process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -23,12 +29,20 @@ function firebaseCredential() {
   }
 
   if (process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE) {
-    return cert(JSON.parse(readFileSync(process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE, "utf8")));
+    return cert(
+      JSON.parse(
+        readFileSync(process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE, "utf8"),
+      ),
+    );
   }
 
-  const projectId = process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const projectId =
+    process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.JOY_FIREBASE_CLIENT_EMAIL;
-  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(
+    /\\n/g,
+    "\n",
+  );
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error("Missing Joy Corner Firebase Admin credentials.");
@@ -43,11 +57,16 @@ function googleCredential() {
   }
 
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE) {
-    return JSON.parse(readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE, "utf8"));
+    return JSON.parse(
+      readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE, "utf8"),
+    );
   }
 
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(
+    /\\n/g,
+    "\n",
+  );
 
   if (!clientEmail || !privateKey) {
     throw new Error("Missing Google Sheets service account credentials.");
@@ -61,16 +80,21 @@ function clean(value: unknown) {
 }
 
 function normalizeKey(value: unknown) {
-  return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function activeValue(value: unknown) {
   const normalized = clean(value).toLowerCase();
-  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(
+    normalized,
+  );
 }
 
 async function readStaffSheet() {
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  const spreadsheetId =
+    process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   if (!spreadsheetId) throw new Error("Missing GOOGLE_SHEET_ID.");
 
   const auth = new google.auth.GoogleAuth({
@@ -103,7 +127,9 @@ async function readStaffSheet() {
         role,
       } as StaffSeed;
     })
-    .filter((staff): staff is StaffSeed => Boolean(staff?.email && staff.password));
+    .filter((staff): staff is StaffSeed =>
+      Boolean(staff?.email && staff.password),
+    );
 }
 
 async function upsertStaff(staff: StaffSeed) {
@@ -132,7 +158,9 @@ async function upsertStaff(staff: StaffSeed) {
   await staffDoc.set(
     {
       active: staff.active,
-      ...(staffSnapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+      ...(staffSnapshot.exists
+        ? {}
+        : { createdAt: FieldValue.serverTimestamp() }),
       displayName: staff.displayName,
       email: staff.email,
       role: staff.role,
@@ -156,16 +184,21 @@ async function main() {
   if (!getApps().length) {
     initializeApp({
       credential: firebaseCredential(),
-      projectId: process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+      projectId:
+        process.env.JOY_FIREBASE_PROJECT_ID ||
+        process.env.VITE_FIREBASE_PROJECT_ID,
     });
   }
 
   const staffRows = await readStaffSheet();
-  if (!staffRows.length) throw new Error("No valid staff rows found in the Staff sheet.");
+  if (!staffRows.length)
+    throw new Error("No valid staff rows found in the Staff sheet.");
 
   for (const staff of staffRows) {
     const result = await upsertStaff(staff);
-    console.log(`${result.role.padEnd(7)} ${result.email.padEnd(32)} ${result.uid}`);
+    console.log(
+      `${result.role.padEnd(7)} ${result.email.padEnd(32)} ${result.uid}`,
+    );
   }
 }
 

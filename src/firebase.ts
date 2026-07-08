@@ -59,8 +59,8 @@ const requiredFirebaseKeys: Array<keyof typeof __FIREBASE_CONFIG__> = [
   "projectId",
 ];
 
-export const firebaseReady = requiredFirebaseKeys.every(
-  (key) => Boolean(__FIREBASE_CONFIG__[key]),
+export const firebaseReady = requiredFirebaseKeys.every((key) =>
+  Boolean(__FIREBASE_CONFIG__[key]),
 );
 
 const app = firebaseReady ? initializeApp(__FIREBASE_CONFIG__) : null;
@@ -112,7 +112,9 @@ export function watchFirebaseUser(
     return () => undefined;
   }
 
-  return onAuthStateChanged(auth, onChange, (error) => onError(errorMessage(error)));
+  return onAuthStateChanged(auth, onChange, (error) =>
+    onError(errorMessage(error)),
+  );
 }
 
 export async function signInCustomer(email: string, password: string) {
@@ -129,7 +131,11 @@ export async function signUpCustomer(
   phone = "",
 ) {
   if (!auth) throw new Error("Firebase is not configured yet.");
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const credential = await createUserWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
   await createCustomerProfile(credential.user, displayName, phone);
   return credential;
 }
@@ -166,7 +172,11 @@ async function ensureCustomerProfile(user: User): Promise<CustomerProfile> {
     throw new Error("No customer profile found. Please sign up first.");
   }
 
-  const profile = customerProfileFromData(user.uid, user.email || "", snapshot.data());
+  const profile = customerProfileFromData(
+    user.uid,
+    user.email || "",
+    snapshot.data(),
+  );
   if (!activeValue(profile.active)) {
     throw new Error("Customer account is inactive.");
   }
@@ -233,7 +243,9 @@ async function staffProfileFromFirestore(
   const profile = await readStaffProfileDoc(uid, email);
 
   if (!profile) {
-    throw new Error("No active Firestore staff profile found for this account.");
+    throw new Error(
+      "No active Firestore staff profile found for this account.",
+    );
   }
 
   return profile;

@@ -47,6 +47,9 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
   orders: {
     sheetName: "Orders",
     requiredHeaders: [
+      "orderId",
+      "receiptNumber",
+      "businessDate",
       "orderDateTime",
       "customerId",
       "customerName",
@@ -62,6 +65,9 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
       "notes",
     ],
     editableColumns: [
+      "orderId",
+      "receiptNumber",
+      "businessDate",
       "orderDateTime",
       "customerId",
       "customerName",
@@ -78,12 +84,45 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
       "orderStatus",
       "notes",
     ],
-    idColumns: ["orderId", "receiptSerial"],
-    dateColumns: ["orderDateTime", "dateKey"],
+    idColumns: ["orderId", "receiptNumber", "receiptSerial"],
+    dateColumns: ["businessDate", "orderDateTime", "dateKey"],
+  },
+  orderItems: {
+    sheetName: "Order Items",
+    requiredHeaders: [
+      "orderItemId",
+      "orderId",
+      "menuItemId",
+      "menuItemName",
+      "category",
+      "size",
+      "quantity",
+      "unitPrice",
+      "extrasTotal",
+      "lineTotal",
+      "preparationStatus",
+    ],
+    editableColumns: [
+      "orderItemId",
+      "orderId",
+      "menuItemId",
+      "menuItemName",
+      "category",
+      "size",
+      "quantity",
+      "unitPrice",
+      "extrasTotal",
+      "lineTotal",
+      "notes",
+      "preparationStatus",
+    ],
+    idColumns: ["orderItemId", "orderId"],
   },
   payments: {
     sheetName: "Payments",
     requiredHeaders: [
+      "paymentId",
+      "orderId",
       "paymentDate",
       "customerId",
       "customerName",
@@ -93,6 +132,8 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
       "relatedOrderNotes",
     ],
     editableColumns: [
+      "paymentId",
+      "orderId",
       "paymentDate",
       "customerId",
       "customerName",
@@ -101,12 +142,68 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
       "collectedBy",
       "relatedOrderNotes",
     ],
-    idColumns: ["paymentId", "receiptSerial"],
+    idColumns: ["paymentId", "orderId", "receiptSerial"],
     dateColumns: ["paymentDate", "dateKey"],
+  },
+  auditLog: {
+    sheetName: "Audit Log",
+    requiredHeaders: [
+      "auditId",
+      "userId",
+      "role",
+      "action",
+      "entityType",
+      "success",
+      "timestamp",
+    ],
+    editableColumns: [
+      "auditId",
+      "userId",
+      "role",
+      "action",
+      "entityType",
+      "entityId",
+      "previousValue",
+      "newValue",
+      "reason",
+      "requestId",
+      "success",
+      "timestamp",
+      "sessionMetadata",
+    ],
+    idColumns: ["auditId"],
+    dateColumns: ["timestamp"],
+  },
+  syncFailures: {
+    sheetName: "Sync Failures",
+    requiredHeaders: [
+      "syncFailureId",
+      "entityType",
+      "entityId",
+      "errorMessage",
+      "createdAt",
+    ],
+    editableColumns: [
+      "syncFailureId",
+      "syncJobId",
+      "entityType",
+      "entityId",
+      "errorMessage",
+      "retryCount",
+      "createdAt",
+      "resolvedAt",
+    ],
+    idColumns: ["syncFailureId", "syncJobId"],
+    dateColumns: ["createdAt", "resolvedAt"],
   },
   generatedVouchers: {
     sheetName: "Generated Vouchers",
-    requiredHeaders: ["voucherCode", "customerId", "customerName", "redeemStatus"],
+    requiredHeaders: [
+      "voucherCode",
+      "customerId",
+      "customerName",
+      "redeemStatus",
+    ],
     editableColumns: [
       "voucherCode",
       "customerId",
@@ -155,5 +252,7 @@ export const SHEET_SCHEMAS: Record<string, SheetSchema> = {
 };
 
 export function schemaForSheet(sheetName: string) {
-  return Object.values(SHEET_SCHEMAS).find((schema) => schema.sheetName === sheetName);
+  return Object.values(SHEET_SCHEMAS).find(
+    (schema) => schema.sheetName === sheetName,
+  );
 }

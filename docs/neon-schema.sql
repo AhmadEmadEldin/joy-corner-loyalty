@@ -12,9 +12,23 @@ create table if not exists users (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists roles (
+  role_id text primary key,
+  description text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists permissions (
   permission_id text primary key,
   description text not null default ''
+);
+
+create table if not exists role_permissions (
+  role_id text not null references roles(role_id),
+  permission_id text not null references permissions(permission_id),
+  created_at timestamptz not null default now(),
+  primary key (role_id, permission_id)
 );
 
 create table if not exists user_permissions (
@@ -67,6 +81,15 @@ create table if not exists menu_item_sizes (
   price numeric(12,2) not null check (price >= 0),
   active boolean not null default true,
   unique (menu_item_id, size_name)
+);
+
+create table if not exists menu_item_flavors (
+  menu_item_flavor_id text primary key,
+  menu_item_id text not null references menu_items(menu_item_id),
+  name text not null,
+  active boolean not null default true,
+  archived_at timestamptz,
+  unique (menu_item_id, name)
 );
 
 create table if not exists extras (
@@ -242,3 +265,14 @@ create index if not exists idx_orders_customer on orders(customer_id);
 create index if not exists idx_payments_customer on payments(customer_id);
 create index if not exists idx_unpaid_customer_status on unpaid_accounts(customer_id, status);
 create index if not exists idx_audit_logs_entity on audit_logs(entity_type, entity_id);
+create index if not exists idx_order_items_order on order_items(order_id);
+create index if not exists idx_sync_failures_unresolved on sync_failures(entity_type, entity_id) where resolved_at is null;
+
+insert into roles(role_id, description)
+values
+  ('owner', 'Full owner access'),
+  ('manager', 'Manager access'),
+  ('cashier', 'Cashier access'),
+  ('waiter', 'Waiter access'),
+  ('barista', 'Barista access')
+on conflict (role_id) do nothing;

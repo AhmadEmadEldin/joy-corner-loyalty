@@ -45,7 +45,7 @@
   "include": [
     "./server/**/*",
     "./src/**/*",
-    "./scripts/write_standalone_html.ts",
+    "./scripts/**/*.ts",
     "./webpack.config.ts"
   ],
   "ts-node": {

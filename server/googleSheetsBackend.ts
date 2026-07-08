@@ -4,12 +4,22 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
+import { featurePermissions } from "../src/domain";
 import { normalizedMenu, resolveMenuPrice } from "../src/menuRepository";
+import {
+  canTransitionOrderStatus,
+  normalizeOrderStatus,
+} from "../src/orderStatus";
+import {
+  actionFeaturePermissions,
+  roleFeaturePermissions,
+} from "../src/permissions";
 import {
   calculateReceiptLine,
   normalizePaidAmount,
   normalizePaymentStatus,
 } from "../src/receiptCalculator";
+import { neonHealth, writeNeonAuditLog } from "./neon";
 import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config({ path: [".env.local", ".env"] });
@@ -24,6 +34,7 @@ const SHEETS = {
   menu: "Menu",
   customers: "Customers",
   orders: "Orders",
+  orderItems: "Order Items",
   payments: "Payments",
   unpaidTracker: "Unpaid Tracker",
   rewards: "Rewards",
@@ -32,6 +43,8 @@ const SHEETS = {
   rewardRedemptions: "Reward Redemptions",
   staffUsers: "Staff Users",
   dayHistory: "Day History",
+  auditLog: "Audit Log",
+  syncFailures: "Sync Failures",
 } as const;
 
 const SHEET_ALIASES: Record<string, string[]> = {
@@ -46,6 +59,9 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.loyaltyWinners]: ["Loyalty Winners", "Winners"],
   [SHEETS.unpaidTracker]: ["Unpaid Tracker", "Unpaid"],
   [SHEETS.dayHistory]: ["Day History", "History"],
+  [SHEETS.auditLog]: ["Audit Log", "Audit Logs", "Audits"],
+  [SHEETS.orderItems]: ["Order Items", "Items"],
+  [SHEETS.syncFailures]: ["Sync Failures", "Sync Failure"],
 };
 
 const DAY_HISTORY_HEADERS = [
@@ -85,6 +101,9 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "active",
   ],
   [SHEETS.orders]: [
+    "orderId",
+    "receiptNumber",
+    "businessDate",
     "orderDateTime",
     "customerId",
     "customerName",
@@ -101,7 +120,23 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "orderStatus",
     "notes",
   ],
+  [SHEETS.orderItems]: [
+    "orderItemId",
+    "orderId",
+    "menuItemId",
+    "menuItemName",
+    "category",
+    "size",
+    "quantity",
+    "unitPrice",
+    "extrasTotal",
+    "lineTotal",
+    "notes",
+    "preparationStatus",
+  ],
   [SHEETS.payments]: [
+    "paymentId",
+    "orderId",
     "paymentDate",
     "customerId",
     "customerName",
@@ -167,6 +202,31 @@ const SHEET_HEADERS: Record<string, string[]> = {
   ],
   [SHEETS.staffUsers]: ["email", "displayName", "role", "active", "uid"],
   [SHEETS.dayHistory]: [...DAY_HISTORY_HEADERS],
+  [SHEETS.auditLog]: [
+    "auditId",
+    "userId",
+    "role",
+    "action",
+    "entityType",
+    "entityId",
+    "previousValue",
+    "newValue",
+    "reason",
+    "requestId",
+    "success",
+    "timestamp",
+    "sessionMetadata",
+  ],
+  [SHEETS.syncFailures]: [
+    "syncFailureId",
+    "syncJobId",
+    "entityType",
+    "entityId",
+    "errorMessage",
+    "retryCount",
+    "createdAt",
+    "resolvedAt",
+  ],
 };
 
 const SHEET_TAB_COLORS: Record<
@@ -177,6 +237,7 @@ const SHEET_TAB_COLORS: Record<
   [SHEETS.menu]: { red: 0.86, green: 0.56, blue: 0.24 },
   [SHEETS.customers]: { red: 0.32, green: 0.46, blue: 0.24 },
   [SHEETS.orders]: { red: 0.78, green: 0.39, blue: 0.16 },
+  [SHEETS.orderItems]: { red: 0.8, green: 0.45, blue: 0.2 },
   [SHEETS.payments]: { red: 0.2, green: 0.48, blue: 0.52 },
   [SHEETS.unpaidTracker]: { red: 0.72, green: 0.2, blue: 0.16 },
   [SHEETS.rewards]: { red: 0.74, green: 0.56, blue: 0.18 },
@@ -186,148 +247,31 @@ const SHEET_TAB_COLORS: Record<
   [SHEETS.rewardRedemptions]: { red: 0.34, green: 0.52, blue: 0.5 },
   [SHEETS.staffUsers]: { red: 0.25, green: 0.25, blue: 0.25 },
   [SHEETS.dayHistory]: { red: 0.24, green: 0.38, blue: 0.55 },
+  [SHEETS.auditLog]: { red: 0.42, green: 0.24, blue: 0.18 },
+  [SHEETS.syncFailures]: { red: 0.68, green: 0.18, blue: 0.16 },
 };
 
-const ROLE_PERMISSIONS: Record<string, Set<string>> = {
-  owner: new Set([
-    "appData",
-    "getAppData",
-    "addCustomer",
-    "removeCustomer",
-    "addReceipt",
-    "collectUnpaidPayment",
-    "updateReceiptPayment",
-    "markReceiptDone",
-    "generateVoucher",
-    "redeemVoucher",
-    "resetDay",
-    "customerSearch",
-    "customerHistory",
-    "historyDays",
-    "dayHistory",
-    "organizeSpreadsheet",
-    "debugAuth",
-    "debugSheets",
-  ]),
-  manager: new Set([
-    "appData",
-    "getAppData",
-    "addCustomer",
-    "removeCustomer",
-    "addReceipt",
-    "collectUnpaidPayment",
-    "updateReceiptPayment",
-    "markReceiptDone",
-    "generateVoucher",
-    "redeemVoucher",
-    "customerSearch",
-    "customerHistory",
-    "historyDays",
-    "dayHistory",
-    "debugAuth",
-    "debugSheets",
-  ]),
-  cashier: new Set([
-    "appData",
-    "getAppData",
-    "addCustomer",
-    "removeCustomer",
-    "addReceipt",
-    "collectUnpaidPayment",
-    "updateReceiptPayment",
-    "markReceiptDone",
-    "generateVoucher",
-    "redeemVoucher",
-    "customerSearch",
-    "customerHistory",
-    "historyDays",
-    "dayHistory",
-    "debugAuth",
-    "debugSheets",
-  ]),
-  waiter: new Set([
-    "appData",
-    "getAppData",
-    "addReceipt",
-    "customerSearch",
-    "customerHistory",
-    "markReceiptDone",
-    "debugAuth",
-  ]),
-  barista: new Set(["appData", "getAppData", "markReceiptDone", "debugAuth"]),
-};
-
-const ACTION_FEATURE_PERMISSIONS: Record<string, string> = {
-  addCustomer: "customers.create",
-  addOrder: "orders.create",
-  addPayment: "payments.create",
-  addReceipt: "orders.create",
-  appData: "dashboard.view",
-  collectUnpaidPayment: "unpaid.update",
-  customerHistory: "customers.view",
-  customerSearch: "customers.view",
-  dayHistory: "archive.view",
-  debugAuth: "settings.manage",
-  debugSheets: "settings.manage",
-  generateVoucher: "rewards.manage",
-  getAppData: "dashboard.view",
-  historyDays: "archive.view",
-  markReceiptDone: "orders.update",
-  organizeSpreadsheet: "settings.manage",
-  redeemVoucher: "redemptions.create",
-  removeCustomer: "customers.delete",
-  resetDay: "day.reset",
-  updateReceiptPayment: "payments.create",
-  updateVoucherCanvaLink: "rewards.manage",
-};
+const ACTION_FEATURE_PERMISSIONS: Record<string, string> =
+  actionFeaturePermissions;
 
 const ROLE_FEATURE_PERMISSIONS: Record<string, Set<string>> = {
-  owner: new Set(Object.values(ACTION_FEATURE_PERMISSIONS)),
-  manager: new Set([
-    "archive.view",
-    "customers.create",
-    "customers.delete",
-    "customers.update",
-    "customers.view",
-    "dashboard.view",
-    "menu.view",
-    "orders.create",
-    "orders.update",
-    "orders.view",
-    "payments.create",
-    "payments.view",
-    "redemptions.create",
-    "rewards.manage",
-    "unpaid.update",
-    "unpaid.view",
-  ]),
-  cashier: new Set([
-    "archive.view",
-    "customers.create",
-    "customers.delete",
-    "customers.view",
-    "dashboard.view",
-    "menu.view",
-    "orders.create",
-    "orders.update",
-    "orders.view",
-    "payments.create",
-    "payments.view",
-    "redemptions.create",
-    "rewards.manage",
-    "unpaid.update",
-    "unpaid.view",
-  ]),
-  waiter: new Set([
-    "customers.view",
-    "dashboard.view",
-    "menu.view",
-    "orders.create",
-    "orders.update",
-    "orders.view",
-  ]),
-  barista: new Set(["dashboard.view", "orders.update", "orders.view"]),
+  ...roleFeaturePermissions,
+  owner: new Set(featurePermissions),
 };
+
+const ROLE_PERMISSIONS: Record<string, Set<string>> = Object.fromEntries(
+  Object.entries(ROLE_FEATURE_PERMISSIONS).map(([role, permissions]) => [
+    role,
+    new Set(
+      Object.entries(ACTION_FEATURE_PERMISSIONS)
+        .filter(
+          ([, feature]) =>
+            role === "owner" || permissions.has(feature as never),
+        )
+        .map(([action]) => action),
+    ),
+  ]),
+);
 
 const REWARD_THRESHOLD = 5;
 const PORT = Number(
@@ -643,6 +587,46 @@ async function writeObjectRow(sheetName: string, record: Payload) {
   );
 }
 
+async function upsertSheetObject_(
+  sheetName: string,
+  idHeader: string,
+  idValue: string,
+  record: Payload,
+) {
+  await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || [idHeader]);
+
+  const values = await getSheetValues(sheetName);
+  const headers = (values[0] || []).map(normalizeKey_);
+  const idIndex = headers.indexOf(normalizeKey_(idHeader));
+  if (idIndex < 0) {
+    throw new ApiError(`${sheetName} sheet needs ${idHeader} column.`, 500);
+  }
+
+  const existingRowIndex = values.findIndex(
+    (row, index) => index > 0 && clean_(row[idIndex]) === idValue,
+  );
+
+  if (existingRowIndex < 1) {
+    await writeObjectRow(sheetName, record);
+    return { created: true };
+  }
+
+  await Promise.all(
+    headers.map(async (header, columnIndex) => {
+      if (!header || !Object.prototype.hasOwnProperty.call(record, header))
+        return;
+      await setCell(
+        sheetName,
+        existingRowIndex + 1,
+        columnIndex,
+        valueForHeaderForSheet_(record, header),
+      );
+    }),
+  );
+
+  return { created: false };
+}
+
 export async function handleAction(action: string, payload: Payload) {
   if (action === "customerMenu") {
     await authorizeCustomerAction(payload);
@@ -702,6 +686,12 @@ export async function handleAction(action: string, payload: Payload) {
       return await collectUnpaidPayment(payload);
     case "updateReceiptPayment":
       return await updateReceiptPayment(payload);
+    case "markReceiptAccepted":
+      return await updateReceiptPreparationStatus(payload, "Accepted");
+    case "markReceiptPreparing":
+      return await updateReceiptPreparationStatus(payload, "Preparing");
+    case "markReceiptReady":
+      return await updateReceiptPreparationStatus(payload, "Ready");
     case "markReceiptDone":
       return await markReceiptDone(payload);
     case "generateVoucher":
@@ -724,6 +714,22 @@ export async function handleAction(action: string, payload: Payload) {
       return success_({ history: await dayHistory(clean_(payload.dateKey)) });
     case "organizeSpreadsheet":
       return await organizeSpreadsheet();
+    case "syncMenuToSheets":
+      return await syncMenuToSheets(actor);
+    case "updateMenuItem":
+      return await updateMenuItem(payload, actor);
+    case "ownerOverview":
+      return await ownerOverview(actor);
+    case "upsertStaff":
+      return await upsertStaff(payload, actor);
+    case "setStaffActive":
+      return await setStaffActive(payload, actor);
+    case "setStaffRole":
+      return await setStaffRole(payload, actor);
+    case "setStaffPermissions":
+      return await setStaffPermissions(payload, actor);
+    case "retrySyncFailures":
+      return await retrySyncFailures(actor);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
@@ -904,6 +910,216 @@ async function staffProfileFromFirestore(uid: string, email: string) {
   }
 }
 
+async function ownerOverview(actor: Actor) {
+  return success_({
+    data: {
+      auditLogs: (await safeSheetObjects_(SHEETS.auditLog))
+        .reverse()
+        .slice(0, 100),
+      permissionCatalog: featurePermissions,
+      staff: await staffDirectory_(),
+      syncFailures: (await safeSheetObjects_(SHEETS.syncFailures))
+        .reverse()
+        .slice(0, 100),
+      systemHealth: {
+        googleSheetsConfigured: Boolean(SPREADSHEET_ID),
+        neonBackupConfigured: neonBackupConfigured_(),
+        role: actor.role,
+      },
+    },
+  });
+}
+
+async function upsertStaff(payload: Payload, actor: Actor) {
+  const email = clean_(payload.email).toLowerCase();
+  const displayName = clean_(payload.displayName || payload.name || email);
+  const role = clean_(payload.role || "waiter").toLowerCase();
+  const active = activeValue_(payload.active ?? true);
+  const password = clean_(payload.password);
+
+  if (!email) throw new ApiError("Staff email is required.");
+  if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.");
+
+  initFirebaseAdmin();
+
+  let uid = clean_(payload.uid);
+  let authCreated = false;
+  if (!uid) {
+    try {
+      uid = (await getAuth().getUserByEmail(email)).uid;
+    } catch {
+      if (!password || password.length < 6) {
+        throw new ApiError(
+          "A password of at least 6 characters is required to create a new Firebase Auth staff account.",
+          400,
+        );
+      }
+      uid = (
+        await getAuth().createUser({
+          disabled: !active,
+          displayName,
+          email,
+          password,
+        })
+      ).uid;
+      authCreated = true;
+    }
+  } else {
+    await getAuth().updateUser(uid, {
+      disabled: !active,
+      displayName,
+      email,
+    });
+  }
+
+  const docRef = getFirestore().collection("users").doc(uid);
+  const previous = (await docRef.get()).data() || {};
+  const profile = {
+    active,
+    displayName,
+    email,
+    role,
+    type: "staff",
+    updatedAt: new Date().toISOString(),
+    ...(previous.createdAt ? {} : { createdAt: new Date().toISOString() }),
+  };
+  await docRef.set(profile, { merge: true });
+  await recordAuditLog_(actor, {
+    action: authCreated ? "staff.create" : "staff.upsert",
+    entityId: uid,
+    entityType: "staff",
+    newValue: profile,
+    previousValue: previous,
+    reason: clean_(payload.reason),
+    requestId: clean_(payload.requestId),
+    success: true,
+  });
+
+  return success_({ staff: await staffDirectory_() });
+}
+
+async function setStaffActive(payload: Payload, actor: Actor) {
+  const uid = clean_(payload.uid);
+  if (!uid) throw new ApiError("Staff UID is required.");
+
+  const active = activeValue_(payload.active);
+  const docRef = getFirestore().collection("users").doc(uid);
+  const previous = (await docRef.get()).data() || {};
+
+  await getAuth().updateUser(uid, { disabled: !active });
+  await docRef.set(
+    {
+      active,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+  await recordAuditLog_(actor, {
+    action: active ? "staff.activate" : "staff.deactivate",
+    entityId: uid,
+    entityType: "staff",
+    newValue: { active },
+    previousValue: previous,
+    reason: clean_(payload.reason),
+    requestId: clean_(payload.requestId),
+    success: true,
+  });
+
+  return success_({ staff: await staffDirectory_() });
+}
+
+async function setStaffRole(payload: Payload, actor: Actor) {
+  const uid = clean_(payload.uid);
+  const role = clean_(payload.role).toLowerCase();
+  if (!uid) throw new ApiError("Staff UID is required.");
+  if (!VALID_ROLES.has(role)) throw new ApiError("Invalid staff role.");
+
+  const docRef = getFirestore().collection("users").doc(uid);
+  const previous = (await docRef.get()).data() || {};
+  await docRef.set(
+    { role, updatedAt: new Date().toISOString() },
+    { merge: true },
+  );
+  await recordAuditLog_(actor, {
+    action: "staff.role.update",
+    entityId: uid,
+    entityType: "staff",
+    newValue: { role },
+    previousValue: previous,
+    reason: clean_(payload.reason),
+    requestId: clean_(payload.requestId),
+    success: true,
+  });
+
+  return success_({ staff: await staffDirectory_() });
+}
+
+async function setStaffPermissions(payload: Payload, actor: Actor) {
+  const uid = clean_(payload.uid);
+  if (!uid) throw new ApiError("Staff UID is required.");
+
+  const permissions = stringArray_(payload.permissions).filter((permission) =>
+    featurePermissions.includes(permission as never),
+  );
+  const revokedPermissions = stringArray_(payload.revokedPermissions).filter(
+    (permission) => featurePermissions.includes(permission as never),
+  );
+  const docRef = getFirestore().collection("users").doc(uid);
+  const previous = (await docRef.get()).data() || {};
+
+  await docRef.set(
+    {
+      permissions,
+      revokedPermissions,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+  await recordAuditLog_(actor, {
+    action: "staff.permissions.update",
+    entityId: uid,
+    entityType: "staff",
+    newValue: { permissions, revokedPermissions },
+    previousValue: previous,
+    reason: clean_(payload.reason),
+    requestId: clean_(payload.requestId),
+    success: true,
+  });
+
+  return success_({ staff: await staffDirectory_() });
+}
+
+async function staffDirectory_() {
+  const snapshot = await getFirestore().collection("users").get();
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data() || {};
+      return {
+        active: activeValue_(data.active),
+        displayName: clean_(data.displayName || data.name || data.email),
+        email: clean_(data.email).toLowerCase(),
+        permissions: stringArray_(data.permissions || data.featurePermissions),
+        revokedPermissions: stringArray_(
+          data.revokedPermissions ||
+            data.deniedPermissions ||
+            data.disabledPermissions,
+        ),
+        role: clean_(data.role || "waiter").toLowerCase(),
+        uid: doc.id,
+        updatedAt: clean_(data.updatedAt),
+      };
+    })
+    .filter((staff) => clean_(staff.email));
+}
+
+async function safeSheetObjects_(sheetName: string) {
+  try {
+    return await sheetToObjects(sheetName);
+  } catch {
+    return [];
+  }
+}
+
 async function addCustomer(payload: Payload) {
   const customers = await sheetToObjects(SHEETS.customers);
   const nextId = nextIdFromRows_("CUST", customers);
@@ -969,43 +1185,77 @@ async function addOrder(payload: Payload) {
     clean_(payload.itemName),
   );
   const resolvedPrice = resolveMenuSelection_(payload, item);
-  const qty = Number(payload.qty || 1);
-  const unitPrice = resolvedPrice.price;
-  const discount = Number(payload.discount || 0);
-  const total = Math.max(0, qty * unitPrice - discount);
-  const paymentStatus = clean_(payload.paymentStatus || "Paid");
+  const line = calculateReceiptLine({
+    discount: number_(payload.discount),
+    qty: number_(payload.qty || 1),
+    unitPrice: resolvedPrice.price,
+  });
+  const qty = line.qty;
+  const unitPrice = line.unitPrice;
+  const discount = line.discount;
+  const total = line.total;
+  const paymentStatus = normalizePaymentStatus(
+    clean_(payload.paymentStatus || "Paid"),
+  );
   // Payment and pickup are separate steps. Paid orders must stay live on the
   // dashboard until staff marks them Picked Up or the owner runs End Day Reset.
-  const orderStatus = "Open";
-  const paidAmount =
-    paymentStatus === "Partial" ? Number(payload.paidAmount || 0) : total;
+  const orderStatus = "Submitted";
+  const paidAmount = normalizePaidAmount(
+    paymentStatus,
+    number_(payload.paidAmount),
+    total,
+  );
   const notes = orderNotes_(clean_(payload.notes), paymentStatus, paidAmount);
   const pointsEarned =
     clean_(item.loyaltyEligible) === "Yes" ? Math.floor(total / 10) : 0;
   const customer = await findCustomer(customerId);
   const customerName =
     customer.fullName || customer.customerName || clean_(payload.customerName);
+  const receiptNumber = await createReceiptSerial();
+  const orderId = clean_(payload.orderId) || `order-${receiptNumber}`;
+  const orderItemId = `${orderId}-item-0001`;
+  const itemName = itemNameWithSize_(
+    resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+    resolvedPrice.size,
+  );
 
-  await writeDataRow(SHEETS.orders, [
-    new Date(),
+  await writeObjectRow(SHEETS.orders, {
+    orderId,
+    receiptNumber,
+    businessDate: dateKey_(new Date()),
+    orderDateTime: new Date(),
     customerId,
     customerName,
-    clean_(payload.staff || "Cashier 1"),
-    resolvedPrice.category || item.category || clean_(payload.category),
-    itemNameWithSize_(
-      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
-      resolvedPrice.size,
-    ),
+    staff: clean_(payload.staff || "Cashier 1"),
+    category:
+      resolvedPrice.category || item.category || clean_(payload.category),
+    item: itemName,
     qty,
     unitPrice,
     discount,
     total,
     pointsEarned,
-    Number(payload.pointsRedeemed || 0),
+    pointsRedeemed: Number(payload.pointsRedeemed || 0),
     paymentStatus,
     orderStatus,
     notes,
-  ]);
+  });
+  await writeObjectRow(SHEETS.orderItems, {
+    orderItemId,
+    orderId,
+    menuItemId: resolvedPrice.itemId || clean_(payload.itemId),
+    menuItemName:
+      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+    category:
+      resolvedPrice.category || item.category || clean_(payload.category),
+    size: resolvedPrice.size,
+    quantity: qty,
+    unitPrice,
+    extrasTotal: 0,
+    lineTotal: total,
+    notes,
+    preparationStatus: orderStatus,
+  });
 
   if (
     (paymentStatus === "Paid" || paymentStatus === "Partial") &&
@@ -1017,6 +1267,7 @@ async function addOrder(payload: Payload) {
       method: payload.paymentMethod || "Cash",
       amount: paidAmount,
       collectedBy: payload.staff || "Cashier 1",
+      orderId,
       notes: item.itemName || payload.itemName,
     });
   }
@@ -1057,6 +1308,7 @@ async function addReceipt(payload: Payload) {
   );
   const items = Array.isArray(payload.items) ? payload.items : [];
   const receiptId = await createReceiptSerial();
+  const orderId = clean_(payload.orderId) || `order-${receiptId}`;
 
   if (!items.length) throw new Error("Receipt has no items.");
 
@@ -1066,7 +1318,7 @@ async function addReceipt(payload: Payload) {
     paymentStatus === "Partial" ? requestedPaidAmount : 0;
   const writtenItems: string[] = [];
 
-  for (const rawReceiptItem of items) {
+  for (const [index, rawReceiptItem] of items.entries()) {
     const receiptItem = rawReceiptItem as Payload;
     const item = await findMenuItem(
       clean_(receiptItem.itemId),
@@ -1082,7 +1334,7 @@ async function addReceipt(payload: Payload) {
     const unitPrice = line.unitPrice;
     const discount = line.discount;
     const total = line.total;
-    const orderStatus = "Open";
+    const orderStatus = "Submitted";
     const rowPaidAmount =
       paymentStatus === "Paid"
         ? total
@@ -1099,39 +1351,53 @@ async function addReceipt(payload: Payload) {
     const rowNotes = orderNotes_(receiptNotes, paymentStatus, rowPaidAmount);
     const pointsEarned =
       clean_(item.loyaltyEligible) === "Yes" ? Math.floor(total / 10) : 0;
+    const orderItemId = `${orderId}-item-${String(index + 1).padStart(4, "0")}`;
+    const itemName = itemNameWithSize_(
+      resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
+      resolvedPrice.size,
+    );
 
-    await writeDataRow(SHEETS.orders, [
-      new Date(),
+    await writeObjectRow(SHEETS.orders, {
+      orderId,
+      receiptNumber: receiptId,
+      businessDate: dateKey_(new Date()),
+      orderDateTime: new Date(),
       customerId,
       customerName,
       staff,
-      resolvedPrice.category || item.category || clean_(receiptItem.category),
-      itemNameWithSize_(
-        resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
-        resolvedPrice.size,
-      ),
+      category:
+        resolvedPrice.category || item.category || clean_(receiptItem.category),
+      item: itemName,
       qty,
       unitPrice,
       discount,
       total,
       pointsEarned,
-      Number(receiptItem.pointsRedeemed || 0),
+      pointsRedeemed: Number(receiptItem.pointsRedeemed || 0),
       paymentStatus,
       orderStatus,
-      rowNotes,
-    ]);
+      notes: rowNotes,
+    });
+    await writeObjectRow(SHEETS.orderItems, {
+      orderItemId,
+      orderId,
+      menuItemId: resolvedPrice.itemId || clean_(receiptItem.itemId),
+      menuItemName:
+        resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
+      category:
+        resolvedPrice.category || item.category || clean_(receiptItem.category),
+      size: resolvedPrice.size,
+      quantity: qty,
+      unitPrice,
+      extrasTotal: 0,
+      lineTotal: total,
+      notes: rowNotes,
+      preparationStatus: orderStatus,
+    });
 
     remainingPaidAmount -= rowPaidAmount;
     receiptTotal += total;
-    writtenItems.push(
-      itemNameWithSize_(
-        resolvedPrice.itemName ||
-          item.itemName ||
-          clean_(receiptItem.itemName) ||
-          "Item",
-        resolvedPrice.size,
-      ),
-    );
+    writtenItems.push(itemName || "Item");
   }
 
   if (paymentStatus === "Paid" || paymentStatus === "Partial") {
@@ -1142,15 +1408,17 @@ async function addReceipt(payload: Payload) {
     );
 
     if (paidAmount > 0) {
-      await writeDataRow(SHEETS.payments, [
-        new Date(),
+      await writeObjectRow(SHEETS.payments, {
+        paymentId: stableUniqueId_("pay"),
+        orderId,
+        paymentDate: new Date(),
         customerId,
         customerName,
-        paymentMethod,
-        paidAmount,
-        staff,
-        `Receipt: ${writtenItems.join(", ")}`,
-      ]);
+        method: paymentMethod,
+        amount: paidAmount,
+        collectedBy: staff,
+        relatedOrderNotes: `Receipt: ${receiptId} - ${writtenItems.join(", ")}`,
+      });
     }
   }
 
@@ -1166,21 +1434,84 @@ async function addPayment(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
   const customer = await findCustomer(customerId);
 
-  await writeDataRow(SHEETS.payments, [
-    new Date(),
+  await writeObjectRow(SHEETS.payments, {
+    paymentId: clean_(payload.paymentId) || stableUniqueId_("pay"),
+    orderId: clean_(payload.orderId),
+    paymentDate: new Date(),
     customerId,
-    customer.fullName || clean_(payload.customerName),
-    clean_(payload.method || "Cash"),
-    Number(payload.amount || 0),
-    clean_(payload.collectedBy || "Cashier 1"),
-    clean_(payload.notes),
-  ]);
+    customerName: customer.fullName || clean_(payload.customerName),
+    method: clean_(payload.method || "Cash"),
+    amount: Number(payload.amount || 0),
+    collectedBy: clean_(payload.collectedBy || "Cashier 1"),
+    relatedOrderNotes: clean_(payload.notes),
+  });
 
   return success_({ data: await buildAppData() });
 }
 
 async function customerMenu() {
-  return normalizedMenu;
+  return await menuForApp_();
+}
+
+async function syncMenuToSheets(actor: Actor) {
+  for (const item of normalizedMenu) {
+    await upsertSheetObject_(SHEETS.menu, "itemId", item.itemId, {
+      active: item.active ? "Yes" : "No",
+      category: item.category,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      loyaltyEligible: "Yes",
+      price: item.priceText,
+    });
+  }
+
+  await recordAuditLog_(actor, {
+    action: "menu.seed.sync",
+    entityType: "menu",
+    newValue: { itemCount: normalizedMenu.length },
+    success: true,
+  });
+
+  return success_({
+    data: await buildAppDataForRole(actor.role),
+    message: `Synchronized ${normalizedMenu.length} menu item(s) to Google Sheets.`,
+  });
+}
+
+async function updateMenuItem(payload: Payload, actor: Actor) {
+  const itemId = clean_(payload.itemId);
+  if (!itemId) throw new ApiError("Menu item ID is required.");
+
+  const existing =
+    (await menuForApp_()).find((item) => clean_(item.itemId) === itemId) || {};
+  const record = {
+    active: activeValue_(payload.active ?? existing.active) ? "Yes" : "No",
+    category: clean_(payload.category || existing.category),
+    itemId,
+    itemName: clean_(payload.itemName || existing.itemName || existing.name),
+    loyaltyEligible: clean_(
+      payload.loyaltyEligible || existing.loyaltyEligible || "Yes",
+    ),
+    price: clean_(payload.price || payload.priceText || existing.priceText),
+  };
+
+  if (!record.itemName) throw new ApiError("Menu item name is required.");
+  if (!record.category) throw new ApiError("Menu category is required.");
+  if (!parsePrice_(record.price)) throw new ApiError("Menu price is required.");
+
+  await upsertSheetObject_(SHEETS.menu, "itemId", itemId, record);
+  await recordAuditLog_(actor, {
+    action: "menu.item.update",
+    entityId: itemId,
+    entityType: "menuItem",
+    newValue: record,
+    previousValue: existing,
+    reason: clean_(payload.reason),
+    requestId: clean_(payload.requestId),
+    success: true,
+  });
+
+  return success_({ data: await buildAppDataForRole(actor.role) });
 }
 
 async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
@@ -1242,6 +1573,8 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
   const unitPrice = resolvedPrice.price;
   const total = Math.max(0, qty * unitPrice);
   const receiptId = await createReceiptSerial();
+  const orderId = `order-${receiptId}`;
+  const orderItemId = `${orderId}-item-0001`;
   const customer = await getOrCreateReceiptCustomer({
     customerName,
     phone,
@@ -1260,26 +1593,48 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     .filter(Boolean)
     .join(" | ");
 
-  await writeDataRow(SHEETS.orders, [
-    new Date(),
-    customer.customerId,
-    getCustomerName_(customer.customer) || customerName,
-    "Customer Request",
-    resolvedPrice.category || item.category || clean_(payload.category),
-    itemNameWithSize_(
-      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
-      resolvedPrice.size,
-    ),
+  const itemName = itemNameWithSize_(
+    resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+    resolvedPrice.size,
+  );
+
+  await writeObjectRow(SHEETS.orders, {
+    orderId,
+    receiptNumber: receiptId,
+    businessDate: dateKey_(new Date()),
+    orderDateTime: new Date(),
+    customerId: customer.customerId,
+    customerName: getCustomerName_(customer.customer) || customerName,
+    staff: "Customer Request",
+    category:
+      resolvedPrice.category || item.category || clean_(payload.category),
+    item: itemName,
     qty,
     unitPrice,
-    0,
+    discount: 0,
     total,
-    0,
-    0,
-    "Unpaid",
-    "Requested",
+    pointsEarned: 0,
+    pointsRedeemed: 0,
+    paymentStatus: "Unpaid",
+    orderStatus: "Submitted",
     notes,
-  ]);
+  });
+  await writeObjectRow(SHEETS.orderItems, {
+    orderItemId,
+    orderId,
+    menuItemId: resolvedPrice.itemId || clean_(payload.itemId),
+    menuItemName:
+      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+    category:
+      resolvedPrice.category || item.category || clean_(payload.category),
+    size: resolvedPrice.size,
+    quantity: qty,
+    unitPrice,
+    extrasTotal: 0,
+    lineTotal: total,
+    notes,
+    preparationStatus: "Submitted",
+  });
 
   return success_({
     message: "Order request sent to Joy Corner.",
@@ -1302,15 +1657,17 @@ async function collectUnpaidPayment(payload: Payload) {
   const customer = await findCustomer(customerId);
   const closedOrders = await closeUnpaidOrders(customerId, amount);
 
-  await writeDataRow(SHEETS.payments, [
-    new Date(),
+  await writeObjectRow(SHEETS.payments, {
+    paymentId: stableUniqueId_("pay"),
+    orderId: clean_(payload.orderId),
+    paymentDate: new Date(),
     customerId,
-    customer.fullName || clean_(payload.customerName),
+    customerName: customer.fullName || clean_(payload.customerName),
     method,
     amount,
     collectedBy,
-    `Collected unpaid balance. Closed: ${closedOrders.join(", ") || "partial only"}`,
-  ]);
+    relatedOrderNotes: `Collected unpaid balance. Closed: ${closedOrders.join(", ") || "partial only"}`,
+  });
 
   return success_({ closedOrders, data: await buildAppData() });
 }
@@ -1354,15 +1711,17 @@ async function updateReceiptPayment(payload: Payload) {
   });
 
   if (paymentStatus === "Paid" && result.newlyPaidTotal > 0) {
-    await writeDataRow(SHEETS.payments, [
-      new Date(),
-      result.customerId,
-      result.customerName,
-      clean_(payload.paymentMethod || payload.method || "Cash"),
-      result.newlyPaidTotal,
-      clean_(payload.staff || payload.collectedBy || "Cashier 1"),
-      `Receipt paid: ${result.itemNames.join(", ")}`,
-    ]);
+    await writeObjectRow(SHEETS.payments, {
+      paymentId: stableUniqueId_("pay"),
+      orderId: clean_(payload.orderId),
+      paymentDate: new Date(),
+      customerId: result.customerId,
+      customerName: result.customerName,
+      method: clean_(payload.paymentMethod || payload.method || "Cash"),
+      amount: result.newlyPaidTotal,
+      collectedBy: clean_(payload.staff || payload.collectedBy || "Cashier 1"),
+      relatedOrderNotes: `Receipt paid: ${result.itemNames.join(", ")}`,
+    });
   }
 
   return success_({
@@ -1371,19 +1730,30 @@ async function updateReceiptPayment(payload: Payload) {
   });
 }
 
-async function markReceiptDone(payload: Payload) {
+async function updateReceiptPreparationStatus(
+  payload: Payload,
+  nextStatus: "Accepted" | "Preparing" | "Ready" | "Served",
+) {
   const result = await updateReceiptRows(payload, async (context) => {
+    const currentStatus = normalizeOrderStatus(context.currentOrderStatus);
+    if (!canTransitionOrderStatus(currentStatus, nextStatus)) {
+      throw new ApiError(
+        `Order status cannot move from ${currentStatus} to ${nextStatus}.`,
+        409,
+      );
+    }
+
     if (context.orderStatusIndex >= 0) {
       await setCell(
         SHEETS.orders,
         context.row,
         context.orderStatusIndex,
-        "Picked Up",
+        nextStatus,
       );
     }
 
     if (context.notesIndex >= 0) {
-      const note = `Picked up by barista on ${new Date().toLocaleString()}`;
+      const note = `Status changed to ${nextStatus} on ${new Date().toLocaleString()}`;
       await setCell(
         SHEETS.orders,
         context.row,
@@ -1397,6 +1767,10 @@ async function markReceiptDone(payload: Payload) {
     updatedRows: result.updatedRows,
     data: await buildAppData(),
   });
+}
+
+async function markReceiptDone(payload: Payload) {
+  return await updateReceiptPreparationStatus(payload, "Served");
 }
 
 async function generateVoucher(payload: Payload) {
@@ -1524,6 +1898,17 @@ async function resetDay(actor: Actor) {
     resetAt,
     actor.email,
   );
+  await recordAuditLog_(actor, {
+    action: "day.reset",
+    entityId: todayKey,
+    entityType: "businessDay",
+    newValue: {
+      archivedRows,
+      summary,
+    },
+    reason: "Owner End Day reset",
+    success: true,
+  });
 
   return success_({
     archivedRows,
@@ -1807,6 +2192,114 @@ async function backfillDayHistory_() {
   return added;
 }
 
+async function recordAuditLog_(
+  actor: Actor,
+  event: {
+    action: string;
+    entityId?: string;
+    entityType: string;
+    newValue?: unknown;
+    previousValue?: unknown;
+    reason?: string;
+    requestId?: string;
+    success: boolean;
+  },
+) {
+  const auditId = stableUniqueId_("audit");
+  const timestamp = new Date().toISOString();
+  const sessionMetadata = {
+    email: actor.email,
+    uid: actor.uid,
+  };
+  try {
+    await writeObjectRow(SHEETS.auditLog, {
+      action: event.action,
+      auditId,
+      entityId: event.entityId || "",
+      entityType: event.entityType,
+      newValue: event.newValue ? JSON.stringify(event.newValue) : "",
+      previousValue: event.previousValue
+        ? JSON.stringify(event.previousValue)
+        : "",
+      reason: event.reason || "",
+      requestId: event.requestId || "",
+      role: actor.role,
+      sessionMetadata: JSON.stringify(sessionMetadata),
+      success: event.success,
+      timestamp,
+      userId: actor.uid,
+    });
+  } catch (error) {
+    await recordSyncFailure_(
+      "auditLog",
+      event.entityId || event.entityType,
+      error,
+    );
+  }
+
+  try {
+    await writeNeonAuditLog({
+      action: event.action,
+      auditId,
+      entityId: event.entityId,
+      entityType: event.entityType,
+      newValue: event.newValue,
+      previousValue: event.previousValue,
+      reason: event.reason,
+      requestId: event.requestId,
+      role: actor.role,
+      sessionMetadata,
+      success: event.success,
+      timestamp,
+      userId: actor.uid,
+    });
+  } catch (error) {
+    await recordSyncFailure_(
+      "neon.auditLog",
+      event.entityId || event.entityType,
+      error,
+    );
+  }
+}
+
+async function recordSyncFailure_(
+  entityType: string,
+  entityId: string,
+  error: unknown,
+  syncJobId = "",
+) {
+  try {
+    await writeObjectRow(SHEETS.syncFailures, {
+      createdAt: new Date().toISOString(),
+      entityId,
+      entityType,
+      errorMessage: safeErrorMessage_(error),
+      retryCount: 0,
+      syncFailureId: stableUniqueId_("syncfail"),
+      syncJobId,
+    });
+  } catch (nestedError) {
+    safeServerError_("Sync failure recording failed", nestedError);
+  }
+}
+
+async function retrySyncFailures(actor: Actor) {
+  await recordAuditLog_(actor, {
+    action: "sync.retry.requested",
+    entityType: "syncFailures",
+    newValue: { attemptedAt: new Date().toISOString() },
+    success: true,
+  });
+
+  return success_({
+    message:
+      "Retry request recorded. Automatic per-failure replay is available after Neon and Sheets reconciliation are configured.",
+    syncFailures: (await safeSheetObjects_(SHEETS.syncFailures))
+      .reverse()
+      .slice(0, 100),
+  });
+}
+
 async function archiveTodayOrders_(
   dateKey: string,
   resetAt: string,
@@ -1865,7 +2358,7 @@ async function buildAppData() {
     .map(enrichVoucher_)
     .reverse();
   const redemptions = await sheetToObjects(SHEETS.rewardRedemptions);
-  const menu = normalizedMenu;
+  const menu = await menuForApp_();
   const lists = await listOptions();
   lists.staff = await staffOptions_(lists.staff || []);
   lists.orderPlace = buildOrderPlaceOptions_(orders, lists);
@@ -1917,6 +2410,83 @@ async function buildAppData() {
     historyDays: history.days,
     generatedAt: new Date().toISOString(),
   };
+}
+
+async function menuForApp_() {
+  let sheetMenu: Row[] = [];
+  try {
+    sheetMenu = (await sheetToObjects(SHEETS.menu)).map(enrichMenuItem_);
+  } catch {
+    sheetMenu = [];
+  }
+
+  const byId = new Map(
+    normalizedMenu.map((item) => [item.itemId, { ...item } as Row]),
+  );
+
+  for (const sheetItem of sheetMenu) {
+    const itemId = getRowItemId_(sheetItem);
+    if (!itemId) continue;
+
+    const existing = byId.get(itemId);
+    const active = activeValue_(sheetItem.active);
+    const priceText = clean_(sheetItem.priceText || sheetItem.price);
+    if (existing) {
+      byId.set(itemId, {
+        ...existing,
+        active,
+        category: clean_(sheetItem.category) || existing.category,
+        itemName:
+          clean_(sheetItem.itemName || sheetItem.name) || existing.itemName,
+        name: clean_(sheetItem.itemName || sheetItem.name) || existing.name,
+        priceText: priceText || existing.priceText,
+        suggestedPrice: String(
+          parsePrice_(priceText) || existing.suggestedPrice || "",
+        ),
+      });
+      continue;
+    }
+
+    const itemName = clean_(sheetItem.itemName || sheetItem.name);
+    const category = clean_(sheetItem.category || "Menu");
+    const price = parsePrice_(priceText);
+    if (!itemName || !price) continue;
+
+    byId.set(itemId, {
+      active,
+      availability: active ? "available" : "unavailable",
+      availableExtras: [],
+      category,
+      categoryId: category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      currency: "EGP",
+      displayOrder: byId.size + 10000,
+      flavors: [],
+      ingredients: [],
+      itemId,
+      itemName,
+      name: itemName,
+      preparationStation:
+        /food|dessert|sandwich|bakery|croissant|waffle|cake/i.test(category)
+          ? "kitchen"
+          : "barista",
+      priceText,
+      sizes: [
+        {
+          active: true,
+          menuItemId: itemId,
+          price,
+          size: "Standard",
+          sizeId: "standard",
+          sizeName: "Standard",
+        },
+      ],
+      soldOut: !active,
+      standardSize: "Standard",
+      suggestedPrice: String(price),
+    });
+  }
+
+  return Array.from(byId.values()).filter((item) => activeValue_(item.active));
 }
 
 async function searchCustomers(query: string) {
@@ -2027,6 +2597,7 @@ async function debugSheets() {
   return success_({
     spreadsheetIdPresent: Boolean(SPREADSHEET_ID),
     googleAuthMode: "runtime-default",
+    neon: await neonHealthSafe_(),
     neonBackupConfigured: neonBackupConfigured_(),
     spreadsheetId: maskId_(SPREADSHEET_ID),
     sheetTabsFound,
@@ -2902,7 +3473,8 @@ async function createCustomerFromOrder(
 }
 
 async function findMenuItem(itemId: string, itemName: string): Promise<Row> {
-  const normalizedItem = normalizedMenu.find((item) => {
+  const appMenu = await menuForApp_();
+  const normalizedItem = appMenu.find((item) => {
     if (itemId && item.itemId === itemId) return true;
     return Boolean(
       itemName && item.itemName.toLowerCase() === itemName.toLowerCase(),
@@ -3225,7 +3797,12 @@ function isPickedUpStatus_(status: unknown) {
   const value = clean_(status)
     .toLowerCase()
     .replace(/[-_\s]+/g, "");
-  return value === "done" || value === "pickedup" || value === "pickup";
+  return (
+    value === "done" ||
+    value === "pickedup" ||
+    value === "pickup" ||
+    value === "served"
+  );
 }
 
 function getPayloadCustomerId_(payload: Payload) {
@@ -3261,6 +3838,14 @@ function nextIdFromRows_(prefix: string, rows: Row[]) {
   }, 0);
 
   return `${prefix}-${String(max + 1).padStart(4, "0")}`;
+}
+
+function stableUniqueId_(prefix: string) {
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${random}`;
 }
 
 function createVoucherCode_(customerId: string) {
@@ -3555,6 +4140,18 @@ function neonBackupConfigured_() {
   );
 }
 
+async function neonHealthSafe_() {
+  try {
+    return await neonHealth();
+  } catch (error) {
+    return {
+      configured: neonBackupConfigured_(),
+      message: safeErrorMessage_(error),
+      ok: false,
+    };
+  }
+}
+
 function statusCodeForError_(error: unknown) {
   return error instanceof ApiError ? error.statusCode : 400;
 }
@@ -3766,10 +4363,11 @@ app.post("/", async (request, response) => {
   }
 });
 
-app.get("/health", (_request, response) => {
+app.get("/health", async (_request, response) => {
   response.json({
     success: true,
     service: "Joy Corner Firebase + Google Sheets API",
+    neon: await neonHealthSafe_(),
     neonBackupConfigured: neonBackupConfigured_(),
     spreadsheetId: maskId_(SPREADSHEET_ID),
   });

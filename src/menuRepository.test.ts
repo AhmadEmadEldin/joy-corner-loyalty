@@ -1,4 +1,9 @@
-import { findNormalizedMenuItem, normalizedMenu, resolveMenuPrice } from "./menuRepository";
+import {
+  findNormalizedMenuItem,
+  normalizedMenu,
+  resolveMenuPrice,
+  validateNormalizedMenu,
+} from "./menuRepository";
 
 describe("menuRepository", () => {
   it("normalizes the Joy Corner menu JSON into stable item records", () => {
@@ -30,5 +35,12 @@ describe("menuRepository", () => {
       price: 65,
       size: "Standard",
     });
+  });
+
+  it("validates every normalized menu item against the domain schema", () => {
+    expect(validateNormalizedMenu()).toHaveLength(normalizedMenu.length);
+    expect(
+      normalizedMenu.every((item) => item.sizes.every((size) => size.sizeId)),
+    ).toBe(true);
   });
 });
