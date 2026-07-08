@@ -5,6 +5,11 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { google, sheets_v4 } from "googleapis";
 import { normalizedMenu, resolveMenuPrice } from "../src/menuRepository";
+import {
+  calculateReceiptLine,
+  normalizePaidAmount,
+  normalizePaymentStatus,
+} from "../src/receiptCalculator";
 import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config({ path: [".env.local", ".env"] });
@@ -32,7 +37,11 @@ const SHEETS = {
 const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.customers]: ["Customers", "Customer", "Clients", "Guests"],
   [SHEETS.staffUsers]: ["Staff Users", "Staff", "Users", "Team"],
-  [SHEETS.generatedVouchers]: ["Generated Vouchers", "Vouchers", "Generated Voucher"],
+  [SHEETS.generatedVouchers]: [
+    "Generated Vouchers",
+    "Vouchers",
+    "Generated Voucher",
+  ],
   [SHEETS.rewardRedemptions]: ["Reward Redemptions", "Redemptions"],
   [SHEETS.loyaltyWinners]: ["Loyalty Winners", "Winners"],
   [SHEETS.unpaidTracker]: ["Unpaid Tracker", "Unpaid"],
@@ -57,7 +66,14 @@ const DAY_HISTORY_HEADERS = [
 
 const SHEET_HEADERS: Record<string, string[]> = {
   [SHEETS.dashboard]: ["metric", "value", "description", "updatedAt"],
-  [SHEETS.menu]: ["itemId", "category", "itemName", "price", "loyaltyEligible", "active"],
+  [SHEETS.menu]: [
+    "itemId",
+    "category",
+    "itemName",
+    "price",
+    "loyaltyEligible",
+    "active",
+  ],
   [SHEETS.customers]: [
     "customerId",
     "fullName",
@@ -153,7 +169,10 @@ const SHEET_HEADERS: Record<string, string[]> = {
   [SHEETS.dayHistory]: [...DAY_HISTORY_HEADERS],
 };
 
-const SHEET_TAB_COLORS: Record<string, { blue: number; green: number; red: number }> = {
+const SHEET_TAB_COLORS: Record<
+  string,
+  { blue: number; green: number; red: number }
+> = {
   [SHEETS.dashboard]: { red: 0.18, green: 0.12, blue: 0.08 },
   [SHEETS.menu]: { red: 0.86, green: 0.56, blue: 0.24 },
   [SHEETS.customers]: { red: 0.32, green: 0.46, blue: 0.24 },
@@ -235,12 +254,7 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = {
     "markReceiptDone",
     "debugAuth",
   ]),
-  barista: new Set([
-    "appData",
-    "getAppData",
-    "markReceiptDone",
-    "debugAuth",
-  ]),
+  barista: new Set(["appData", "getAppData", "markReceiptDone", "debugAuth"]),
 };
 
 const ACTION_FEATURE_PERMISSIONS: Record<string, string> = {
@@ -316,7 +330,9 @@ const ROLE_FEATURE_PERMISSIONS: Record<string, Set<string>> = {
 };
 
 const REWARD_THRESHOLD = 5;
-const PORT = Number(process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001);
+const PORT = Number(
+  process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001,
+);
 const VALID_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
 type Row = Record<string, any>;
 type Payload = Record<string, unknown>;
@@ -361,8 +377,7 @@ function initFirebaseAdmin() {
 
   const credential = firebaseCredential();
   const projectId =
-    process.env.JOY_FIREBASE_PROJECT_ID ||
-    process.env.VITE_FIREBASE_PROJECT_ID;
+    process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
   initializeApp({
     ...(credential ? { credential } : {}),
     ...(projectId ? { projectId } : {}),
@@ -372,10 +387,12 @@ function initFirebaseAdmin() {
 function firebaseCredential() {
   const json = process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON;
   const projectId =
-    process.env.JOY_FIREBASE_PROJECT_ID ||
-    process.env.VITE_FIREBASE_PROJECT_ID;
+    process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.JOY_FIREBASE_CLIENT_EMAIL;
-  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const privateKey = (process.env.JOY_FIREBASE_PRIVATE_KEY || "").replace(
+    /\\n/g,
+    "\n",
+  );
 
   if (json) return cert(JSON.parse(json));
 
@@ -428,7 +445,9 @@ function quotedSheet(name: string) {
 }
 
 function normalizeSheetTitle_(value: unknown) {
-  return clean_(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return clean_(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 async function getSheetTitles() {
@@ -466,16 +485,12 @@ async function resolveSheetName(sheetName: string) {
 
   if (normalized) return normalized;
 
-  throw new ApiError(
-    `Google Sheet tab missing: ${sheetName}.`,
-    500,
-    {
-      fallbackUsed: false,
-      foundTabs: titles,
-      missingTab: sheetName,
-      spreadsheetId: maskId_(SPREADSHEET_ID),
-    },
-  );
+  throw new ApiError(`Google Sheet tab missing: ${sheetName}.`, 500, {
+    fallbackUsed: false,
+    foundTabs: titles,
+    missingTab: sheetName,
+    spreadsheetId: maskId_(SPREADSHEET_ID),
+  });
 }
 
 function columnLetter(index: number) {
@@ -506,16 +521,12 @@ async function getSheetValues(sheetName: string) {
     const message = error instanceof Error ? error.message : String(error);
     if (/Unable to parse range|not found|Unable to parse/i.test(message)) {
       const titles = await getSheetTitles();
-      throw new ApiError(
-        `Google Sheet tab missing: ${sheetName}.`,
-        500,
-        {
-          fallbackUsed: false,
-          foundTabs: titles,
-          missingTab: sheetName,
-          spreadsheetId: maskId_(SPREADSHEET_ID),
-        },
-      );
+      throw new ApiError(`Google Sheet tab missing: ${sheetName}.`, 500, {
+        fallbackUsed: false,
+        foundTabs: titles,
+        missingTab: sheetName,
+        spreadsheetId: maskId_(SPREADSHEET_ID),
+      });
     }
     throw new ApiError(`Google Sheet read failed for ${sheetName}.`, 500);
   }
@@ -525,7 +536,12 @@ async function getSheetValues(sheetName: string) {
   );
 }
 
-async function setCell(sheetName: string, row: number, columnIndex: number, value: unknown) {
+async function setCell(
+  sheetName: string,
+  row: number,
+  columnIndex: number,
+  value: unknown,
+) {
   const sheets = await getSheetsClient();
   const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.update({
@@ -548,7 +564,8 @@ async function deleteSheetRow(sheetName: string, row: number) {
   );
   const sheetId = sheet?.properties?.sheetId;
 
-  if (sheetId == null) throw new Error(`${resolvedSheetName} sheet was not found.`);
+  if (sheetId == null)
+    throw new Error(`${resolvedSheetName} sheet was not found.`);
 
   await sheets.spreadsheets.batchUpdate({
     requestBody: {
@@ -601,7 +618,9 @@ async function sheetToObjects(sheetName: string): Promise<Row[]> {
       });
       return record;
     })
-    .filter((record) => (firstHeader ? clean_(record[firstHeader]) !== "" : false));
+    .filter((record) =>
+      firstHeader ? clean_(record[firstHeader]) !== "" : false,
+    );
 }
 
 async function writeDataRow(sheetName: string, rowValues: unknown[]) {
@@ -696,7 +715,9 @@ export async function handleAction(action: string, payload: Payload) {
     case "customerSearch":
       return success_({ customers: await searchCustomers(clean_(payload.q)) });
     case "customerHistory":
-      return success_({ history: await customerHistory(clean_(payload.customerId)) });
+      return success_({
+        history: await customerHistory(clean_(payload.customerId)),
+      });
     case "historyDays":
       return success_({ days: await historyDays() });
     case "dayHistory":
@@ -708,7 +729,10 @@ export async function handleAction(action: string, payload: Payload) {
   }
 }
 
-async function authorizeAction(action: string, payload: Payload): Promise<Actor> {
+async function authorizeAction(
+  action: string,
+  payload: Payload,
+): Promise<Actor> {
   const user = await authorizeFirebaseUser(payload);
   const email = user.email;
   const uid = user.uid;
@@ -744,21 +768,37 @@ async function authorizeFirebaseUser(payload: Payload): Promise<CustomerActor> {
   }
 }
 
-async function authorizeCustomerAction(payload: Payload): Promise<CustomerActor> {
+async function authorizeCustomerAction(
+  payload: Payload,
+): Promise<CustomerActor> {
   const user = await authorizeFirebaseUser(payload);
-  const staffSnapshot = await getFirestore().collection("users").doc(user.uid).get();
+  const staffSnapshot = await getFirestore()
+    .collection("users")
+    .doc(user.uid)
+    .get();
 
   if (staffSnapshot.exists) {
-    throw new ApiError("Staff accounts cannot access the customer portal.", 403, {
-      uid: user.uid,
-    });
+    throw new ApiError(
+      "Staff accounts cannot access the customer portal.",
+      403,
+      {
+        uid: user.uid,
+      },
+    );
   }
 
-  const customerSnapshot = await getFirestore().collection("customers").doc(user.uid).get();
+  const customerSnapshot = await getFirestore()
+    .collection("customers")
+    .doc(user.uid)
+    .get();
   if (!customerSnapshot.exists) {
-    throw new ApiError("No customer profile found. Please sign up first.", 403, {
-      uid: user.uid,
-    });
+    throw new ApiError(
+      "No customer profile found. Please sign up first.",
+      403,
+      {
+        uid: user.uid,
+      },
+    );
   }
 
   const data = customerSnapshot.data() || {};
@@ -766,9 +806,13 @@ async function authorizeCustomerAction(payload: Payload): Promise<CustomerActor>
   const active = activeValue_(data.active);
 
   if (profileEmail && profileEmail !== user.email) {
-    throw new ApiError("Customer profile email does not match signed-in user.", 403, {
-      uid: user.uid,
-    });
+    throw new ApiError(
+      "Customer profile email does not match signed-in user.",
+      403,
+      {
+        uid: user.uid,
+      },
+    );
   }
 
   if (!active) {
@@ -780,7 +824,9 @@ async function authorizeCustomerAction(payload: Payload): Promise<CustomerActor>
   return {
     ...user,
     active,
-    displayName: clean_(data.displayName || data.name || user.name || profileEmail),
+    displayName: clean_(
+      data.displayName || data.name || user.name || profileEmail,
+    ),
     email: profileEmail || user.email,
     phone: clean_(data.phone),
     type: "customer",
@@ -809,11 +855,15 @@ async function staffProfileFromFirestore(uid: string, email: string) {
     const role = clean_(data.role).toLowerCase();
 
     if (profileEmail && profileEmail !== email) {
-      throw new ApiError("Staff profile email does not match signed-in user.", 403, {
-        email,
-        profileFound: true,
-        uid,
-      });
+      throw new ApiError(
+        "Staff profile email does not match signed-in user.",
+        403,
+        {
+          email,
+          profileFound: true,
+          uid,
+        },
+      );
     }
 
     if (!active) {
@@ -840,7 +890,9 @@ async function staffProfileFromFirestore(uid: string, email: string) {
       permissions: stringArray_(data.permissions || data.featurePermissions),
       profileFound: true,
       revokedPermissions: stringArray_(
-        data.revokedPermissions || data.deniedPermissions || data.disabledPermissions,
+        data.revokedPermissions ||
+          data.deniedPermissions ||
+          data.disabledPermissions,
       ),
       role,
       type: "staff" as const,
@@ -889,8 +941,13 @@ async function removeCustomer(payload: Payload) {
   if (values.length < 2) throw new Error("No customer rows found.");
 
   const headers = (values[0] || []).map(normalizeKey_);
-  const customerIdIndex = headerIndex_(headers, ["customerId", "customerID", "id"]);
-  if (customerIdIndex < 0) throw new Error("Customers sheet needs a Customer ID column.");
+  const customerIdIndex = headerIndex_(headers, [
+    "customerId",
+    "customerID",
+    "id",
+  ]);
+  if (customerIdIndex < 0)
+    throw new Error("Customers sheet needs a Customer ID column.");
 
   const rowIndex = values.findIndex(
     (row, index) => index > 0 && clean_(row[customerIdIndex]) === customerId,
@@ -899,12 +956,18 @@ async function removeCustomer(payload: Payload) {
 
   await deleteSheetRow(SHEETS.customers, rowIndex + 1);
 
-  return success_({ removedCustomerId: customerId, data: await buildAppData() });
+  return success_({
+    removedCustomerId: customerId,
+    data: await buildAppData(),
+  });
 }
 
 async function addOrder(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
-  const item = await findMenuItem(clean_(payload.itemId), clean_(payload.itemName));
+  const item = await findMenuItem(
+    clean_(payload.itemId),
+    clean_(payload.itemName),
+  );
   const resolvedPrice = resolveMenuSelection_(payload, item);
   const qty = Number(payload.qty || 1);
   const unitPrice = resolvedPrice.price;
@@ -929,7 +992,10 @@ async function addOrder(payload: Payload) {
     customerName,
     clean_(payload.staff || "Cashier 1"),
     resolvedPrice.category || item.category || clean_(payload.category),
-    itemNameWithSize_(resolvedPrice.itemName || item.itemName || clean_(payload.itemName), resolvedPrice.size),
+    itemNameWithSize_(
+      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+      resolvedPrice.size,
+    ),
     qty,
     unitPrice,
     discount,
@@ -941,7 +1007,10 @@ async function addOrder(payload: Payload) {
     notes,
   ]);
 
-  if ((paymentStatus === "Paid" || paymentStatus === "Partial") && paidAmount > 0) {
+  if (
+    (paymentStatus === "Paid" || paymentStatus === "Partial") &&
+    paidAmount > 0
+  ) {
     await addPayment({
       customerId,
       customerName,
@@ -974,7 +1043,9 @@ async function addReceipt(payload: Payload) {
   const customerName =
     customer.fullName || customer.customerName || clean_(payload.customerName);
   const staff = clean_(payload.staff || "Cashier 1");
-  const paymentStatus = clean_(payload.paymentStatus || "Paid");
+  const paymentStatus = normalizePaymentStatus(
+    clean_(payload.paymentStatus || "Paid"),
+  );
   const paymentMethod = clean_(payload.paymentMethod || "Cash");
   const notes = clean_(payload.notes);
   const orderPlace = clean_(
@@ -990,18 +1061,27 @@ async function addReceipt(payload: Payload) {
   if (!items.length) throw new Error("Receipt has no items.");
 
   let receiptTotal = 0;
+  const requestedPaidAmount = number_(payload.paidAmount);
   let remainingPaidAmount =
-    paymentStatus === "Partial" ? Number(payload.paidAmount || 0) : 0;
+    paymentStatus === "Partial" ? requestedPaidAmount : 0;
   const writtenItems: string[] = [];
 
   for (const rawReceiptItem of items) {
     const receiptItem = rawReceiptItem as Payload;
-    const item = await findMenuItem(clean_(receiptItem.itemId), clean_(receiptItem.itemName));
+    const item = await findMenuItem(
+      clean_(receiptItem.itemId),
+      clean_(receiptItem.itemName),
+    );
     const resolvedPrice = resolveMenuSelection_(receiptItem, item);
-    const qty = Number(receiptItem.qty || 1);
-    const unitPrice = resolvedPrice.price;
-    const discount = Number(receiptItem.discount || 0);
-    const total = Math.max(0, qty * unitPrice - discount);
+    const line = calculateReceiptLine({
+      discount: number_(receiptItem.discount),
+      qty: number_(receiptItem.qty || 1),
+      unitPrice: resolvedPrice.price,
+    });
+    const qty = line.qty;
+    const unitPrice = line.unitPrice;
+    const discount = line.discount;
+    const total = line.total;
     const orderStatus = "Open";
     const rowPaidAmount =
       paymentStatus === "Paid"
@@ -1026,7 +1106,10 @@ async function addReceipt(payload: Payload) {
       customerName,
       staff,
       resolvedPrice.category || item.category || clean_(receiptItem.category),
-      itemNameWithSize_(resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName), resolvedPrice.size),
+      itemNameWithSize_(
+        resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
+        resolvedPrice.size,
+      ),
       qty,
       unitPrice,
       discount,
@@ -1041,13 +1124,22 @@ async function addReceipt(payload: Payload) {
     remainingPaidAmount -= rowPaidAmount;
     receiptTotal += total;
     writtenItems.push(
-      itemNameWithSize_(resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName) || "Item", resolvedPrice.size),
+      itemNameWithSize_(
+        resolvedPrice.itemName ||
+          item.itemName ||
+          clean_(receiptItem.itemName) ||
+          "Item",
+        resolvedPrice.size,
+      ),
     );
   }
 
   if (paymentStatus === "Paid" || paymentStatus === "Partial") {
-    const paidAmount =
-      paymentStatus === "Partial" ? Number(payload.paidAmount || 0) : receiptTotal;
+    const paidAmount = normalizePaidAmount(
+      paymentStatus,
+      requestedPaidAmount,
+      receiptTotal,
+    );
 
     if (paidAmount > 0) {
       await writeDataRow(SHEETS.payments, [
@@ -1093,7 +1185,11 @@ async function customerMenu() {
 
 async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
   const customerName = clean_(
-    payload.customerName || payload.displayName || actor.displayName || actor.name || actor.email,
+    payload.customerName ||
+      payload.displayName ||
+      actor.displayName ||
+      actor.name ||
+      actor.email,
   );
   const phone = clean_(payload.phone || payload.customerPhone || actor.phone);
 
@@ -1130,8 +1226,12 @@ async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
 }
 
 async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
-  const item = await findMenuItem(clean_(payload.itemId), clean_(payload.itemName));
-  if (!item.itemId && !item.itemName) throw new Error("Choose a menu item first.");
+  const item = await findMenuItem(
+    clean_(payload.itemId),
+    clean_(payload.itemName),
+  );
+  if (!item.itemId && !item.itemName)
+    throw new Error("Choose a menu item first.");
   const resolvedPrice = resolveMenuSelection_(payload, item);
 
   const customerName = clean_(
@@ -1146,7 +1246,9 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     customerName,
     phone,
   });
-  const orderPlace = clean_(payload.orderPlace || payload.location || "Customer request");
+  const orderPlace = clean_(
+    payload.orderPlace || payload.location || "Customer request",
+  );
   const notes = [
     "Customer online order request",
     `Firebase UID: ${actor.uid}`,
@@ -1164,7 +1266,10 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     getCustomerName_(customer.customer) || customerName,
     "Customer Request",
     resolvedPrice.category || item.category || clean_(payload.category),
-    itemNameWithSize_(resolvedPrice.itemName || item.itemName || clean_(payload.itemName), resolvedPrice.size),
+    itemNameWithSize_(
+      resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
+      resolvedPrice.size,
+    ),
     qty,
     unitPrice,
     0,
@@ -1187,7 +1292,9 @@ async function collectUnpaidPayment(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
   const amount = Number(payload.amount || payload.paidAmount || 0);
   const method = clean_(payload.method || payload.paymentMethod || "Cash");
-  const collectedBy = clean_(payload.collectedBy || payload.staff || "Cashier 1");
+  const collectedBy = clean_(
+    payload.collectedBy || payload.staff || "Cashier 1",
+  );
 
   if (!customerId) throw new Error("Customer ID is required.");
   if (amount <= 0) throw new Error("Payment amount must be greater than 0.");
@@ -1215,14 +1322,24 @@ async function updateReceiptPayment(payload: Payload) {
   }
 
   const result = await updateReceiptRows(payload, async (context) => {
-    await setCell(SHEETS.orders, context.row, context.statusIndex, paymentStatus);
+    await setCell(
+      SHEETS.orders,
+      context.row,
+      context.statusIndex,
+      paymentStatus,
+    );
 
     if (
       paymentStatus === "Unpaid" &&
       context.orderStatusIndex >= 0 &&
       !isPickedUpStatus_(context.currentOrderStatus)
     ) {
-      await setCell(SHEETS.orders, context.row, context.orderStatusIndex, "Open");
+      await setCell(
+        SHEETS.orders,
+        context.row,
+        context.orderStatusIndex,
+        "Open",
+      );
     }
 
     if (context.notesIndex >= 0) {
@@ -1248,13 +1365,21 @@ async function updateReceiptPayment(payload: Payload) {
     ]);
   }
 
-  return success_({ updatedRows: result.updatedRows, data: await buildAppData() });
+  return success_({
+    updatedRows: result.updatedRows,
+    data: await buildAppData(),
+  });
 }
 
 async function markReceiptDone(payload: Payload) {
   const result = await updateReceiptRows(payload, async (context) => {
     if (context.orderStatusIndex >= 0) {
-      await setCell(SHEETS.orders, context.row, context.orderStatusIndex, "Picked Up");
+      await setCell(
+        SHEETS.orders,
+        context.row,
+        context.orderStatusIndex,
+        "Picked Up",
+      );
     }
 
     if (context.notesIndex >= 0) {
@@ -1268,7 +1393,10 @@ async function markReceiptDone(payload: Payload) {
     }
   });
 
-  return success_({ updatedRows: result.updatedRows, data: await buildAppData() });
+  return success_({
+    updatedRows: result.updatedRows,
+    data: await buildAppData(),
+  });
 }
 
 async function generateVoucher(payload: Payload) {
@@ -1276,7 +1404,8 @@ async function generateVoucher(payload: Payload) {
   const customer = await findCustomer(customerId);
   const favoriteDrink =
     clean_(payload.favoriteDrink) || getFavoriteDrink_(customer) || "Drink";
-  const customerName = getCustomerName_(customer) || clean_(payload.customerName);
+  const customerName =
+    getCustomerName_(customer) || clean_(payload.customerName);
   const voucherCode = createVoucherCode_(customerId);
 
   await writeObjectRow(SHEETS.generatedVouchers, {
@@ -1285,7 +1414,8 @@ async function generateVoucher(payload: Payload) {
     customerName,
     fullName: customerName,
     phone: customer.phone || customer.phoneWhatsApp || clean_(payload.phone),
-    phoneWhatsApp: customer.phoneWhatsApp || customer.phone || clean_(payload.phone),
+    phoneWhatsApp:
+      customer.phoneWhatsApp || customer.phone || clean_(payload.phone),
     favoriteDrink,
     voucherTitle: "FREE DRINK VOUCHER",
     voucherSubtitle: "Joy Corner Loyalty Reward",
@@ -1311,7 +1441,9 @@ async function redeemVoucher(payload: Payload) {
   const codeIndex = headerIndex_(header, ["voucherCode", "code", "id"]);
   const statusIndex = headerIndex_(header, ["redeemStatus", "status"]);
   if (codeIndex < 0 || statusIndex < 0) {
-    throw new Error("Generated Vouchers sheet needs Voucher Code and Redeem Status columns.");
+    throw new Error(
+      "Generated Vouchers sheet needs Voucher Code and Redeem Status columns.",
+    );
   }
 
   for (let row = 1; row < values.length; row += 1) {
@@ -1338,7 +1470,9 @@ async function updateVoucherCanvaLink(payload: Payload) {
   const statusIndex = headerIndex_(header, ["canvaStatus"]);
   const linkIndex = headerIndex_(header, ["canvaLink", "link"]);
   if (codeIndex < 0 || statusIndex < 0 || linkIndex < 0) {
-    throw new Error("Generated Vouchers sheet needs Voucher Code, Canva Status, and Canva Link columns.");
+    throw new Error(
+      "Generated Vouchers sheet needs Voucher Code, Canva Status, and Canva Link columns.",
+    );
   }
 
   for (let row = 1; row < values.length; row += 1) {
@@ -1372,12 +1506,24 @@ async function resetDay(actor: Actor) {
   );
   const resetAt = new Date().toISOString();
 
+  if (await dayArchiveExists_(todayKey)) {
+    throw new ApiError(
+      `Business day ${todayKey} has already been archived. Duplicate End Day reset is blocked.`,
+      409,
+      { businessDate: todayKey },
+    );
+  }
+
   await appendDayArchive_({
     ...summary,
     resetAt,
     resetBy: actor.email,
   });
-  const archivedRows = await archiveTodayOrders_(todayKey, resetAt, actor.email);
+  const archivedRows = await archiveTodayOrders_(
+    todayKey,
+    resetAt,
+    actor.email,
+  );
 
   return success_({
     archivedRows,
@@ -1394,6 +1540,15 @@ async function appendDayArchive_(summary: Row) {
     SHEETS.dayHistory,
     headers.map((header) => summary[header] || ""),
   );
+}
+
+async function dayArchiveExists_(dateKey: string) {
+  try {
+    const rows = await sheetToObjects(SHEETS.dayHistory);
+    return rows.some((row) => dateKeyFromValue_(row.dateKey) === dateKey);
+  } catch {
+    return false;
+  }
 }
 
 async function ensureSheetHeaders_(sheetName: string, headers: string[]) {
@@ -1454,7 +1609,11 @@ async function organizeSpreadsheet() {
 
   for (const [sheetName, headers] of Object.entries(SHEET_HEADERS)) {
     const resolvedSheetName = await ensureSheetExists_(sheetName, headers);
-    await formatSheetTab_(resolvedSheetName, headers.length, SHEET_TAB_COLORS[sheetName]);
+    await formatSheetTab_(
+      resolvedSheetName,
+      headers.length,
+      SHEET_TAB_COLORS[sheetName],
+    );
     repairedTabs.push(resolvedSheetName);
     formattedTabs.push(resolvedSheetName);
   }
@@ -1526,7 +1685,8 @@ async function formatSheetTab_(
   const requests: sheets_v4.Schema$Request[] = [
     {
       updateSheetProperties: {
-        fields: "gridProperties.frozenRowCount,gridProperties.hideGridlines,tabColor",
+        fields:
+          "gridProperties.frozenRowCount,gridProperties.hideGridlines,tabColor",
         properties: {
           gridProperties: {
             frozenRowCount: 1,
@@ -1604,8 +1764,9 @@ async function sheetIdForTitle_(title: string) {
     fields: "sheets.properties(sheetId,title)",
     spreadsheetId: SPREADSHEET_ID,
   });
-  return metadata.data.sheets?.find((sheet) => sheet.properties?.title === title)
-    ?.properties?.sheetId;
+  return metadata.data.sheets?.find(
+    (sheet) => sheet.properties?.title === title,
+  )?.properties?.sheetId;
 }
 
 async function backfillDayHistory_() {
@@ -1646,7 +1807,11 @@ async function backfillDayHistory_() {
   return added;
 }
 
-async function archiveTodayOrders_(dateKey: string, resetAt: string, resetBy: string) {
+async function archiveTodayOrders_(
+  dateKey: string,
+  resetAt: string,
+  resetBy: string,
+) {
   const values = await getSheetValues(SHEETS.orders);
   if (values.length < 2) return 0;
 
@@ -1655,7 +1820,9 @@ async function archiveTodayOrders_(dateKey: string, resetAt: string, resetBy: st
   const notesIndex = headers.indexOf("notes");
 
   if (orderStatusIndex < 0) {
-    throw new Error("Orders sheet needs an Order Status column before reset can run.");
+    throw new Error(
+      "Orders sheet needs an Order Status column before reset can run.",
+    );
   }
 
   let archivedRows = 0;
@@ -1667,7 +1834,8 @@ async function archiveTodayOrders_(dateKey: string, resetAt: string, resetBy: st
       if (header) rowRecord[header] = clean_(row[columnIndex]);
     });
 
-    if (orderDateKey_(rowRecord) !== dateKey || isArchivedOrder_(rowRecord)) continue;
+    if (orderDateKey_(rowRecord) !== dateKey || isArchivedOrder_(rowRecord))
+      continue;
 
     await setCell(SHEETS.orders, index + 1, orderStatusIndex, "Archived");
     if (notesIndex >= 0) {
@@ -1689,7 +1857,9 @@ async function archiveTodayOrders_(dateKey: string, resetAt: string, resetBy: st
 async function buildAppData() {
   const rawCustomers = await sheetToObjects(SHEETS.customers);
   const realCustomers = rawCustomers.filter(isRealCustomerRow_);
-  const orders = (await sheetToObjects(SHEETS.orders)).map(enrichOrder_).reverse();
+  const orders = (await sheetToObjects(SHEETS.orders))
+    .map(enrichOrder_)
+    .reverse();
   const payments = await sheetToObjects(SHEETS.payments);
   const vouchers = (await sheetToObjects(SHEETS.generatedVouchers))
     .map(enrichVoucher_)
@@ -1702,12 +1872,16 @@ async function buildAppData() {
   const unpaid = buildUnpaidTracker_(realCustomers, orders);
   const customers = enrichCustomers_(realCustomers, orders, unpaid);
   const rewards = buildRewards_(customers, orders, vouchers);
-  const winners = rewards.filter((reward) => number_(reward.freeDrinksReady) > 0);
+  const winners = rewards.filter(
+    (reward) => number_(reward.freeDrinksReady) > 0,
+  );
   const todayKey = dateKey_(new Date());
   const todaysOrders = orders.filter(
     (order) => orderDateKey_(order) === todayKey && !isArchivedOrder_(order),
   );
-  const todaysPayments = payments.filter((payment) => paymentDateKey_(payment) === todayKey);
+  const todaysPayments = payments.filter(
+    (payment) => paymentDateKey_(payment) === todayKey,
+  );
   const dashboardOrders = buildDashboardOrders_(todaysOrders);
   const dashboardTopItems = buildDashboardTopItems_(todaysOrders);
   const dashboard = buildDashboard_(
@@ -1719,7 +1893,12 @@ async function buildAppData() {
     unpaid,
   );
   const archivedHistoryDays = await archivedHistoryDays_();
-  const history = buildHistory_(orders, payments, redemptions, archivedHistoryDays);
+  const history = buildHistory_(
+    orders,
+    payments,
+    redemptions,
+    archivedHistoryDays,
+  );
 
   return {
     dashboard,
@@ -1774,15 +1953,27 @@ async function customerHistory(customerId: string) {
   if (!customerId) throw new Error("Customer ID is required.");
   const data = await buildAppData();
   const customer =
-    (data.customers || []).find((row) => getRowCustomerId_(row) === customerId) || {};
+    (data.customers || []).find(
+      (row) => getRowCustomerId_(row) === customerId,
+    ) || {};
 
   return {
     customer,
-    orders: (data.orders || []).filter((row) => rowsMatchCustomer_(row, customer)),
-    payments: (data.payments || []).filter((row) => rowsMatchCustomer_(row, customer)),
-    unpaid: (data.unpaid || []).filter((row) => rowsMatchCustomer_(row, customer)),
-    vouchers: (data.vouchers || []).filter((row) => rowsMatchCustomer_(row, customer)),
-    rewards: (data.rewards || []).filter((row) => rowsMatchCustomer_(row, customer)),
+    orders: (data.orders || []).filter((row) =>
+      rowsMatchCustomer_(row, customer),
+    ),
+    payments: (data.payments || []).filter((row) =>
+      rowsMatchCustomer_(row, customer),
+    ),
+    unpaid: (data.unpaid || []).filter((row) =>
+      rowsMatchCustomer_(row, customer),
+    ),
+    vouchers: (data.vouchers || []).filter((row) =>
+      rowsMatchCustomer_(row, customer),
+    ),
+    rewards: (data.rewards || []).filter((row) =>
+      rowsMatchCustomer_(row, customer),
+    ),
     redemptions: (data.redemptions || []).filter((row) =>
       rowsMatchCustomer_(row, customer),
     ),
@@ -1827,7 +2018,10 @@ async function debugSheets() {
       rowsCountByTab[sheetName] = -1;
       continue;
     }
-    rowsCountByTab[resolvedSheetName] = Math.max(0, (await getSheetValues(sheetName)).length - 1);
+    rowsCountByTab[resolvedSheetName] = Math.max(
+      0,
+      (await getSheetValues(sheetName)).length - 1,
+    );
   }
 
   return success_({
@@ -1843,8 +2037,12 @@ async function debugSheets() {
 async function dayHistory(dateKey: string) {
   if (!dateKey) throw new Error("Date key is required.");
   const data = await buildAppData();
-  const orders = (data.orders || []).filter((row) => orderDateKey_(row) === dateKey);
-  const payments = (data.payments || []).filter((row) => paymentDateKey_(row) === dateKey);
+  const orders = (data.orders || []).filter(
+    (row) => orderDateKey_(row) === dateKey,
+  );
+  const payments = (data.payments || []).filter(
+    (row) => paymentDateKey_(row) === dateKey,
+  );
   const redemptions = (data.redemptions || []).filter(
     (row) => paymentDateKey_(row) === dateKey,
   );
@@ -1956,7 +2154,8 @@ function buildHistory_(
   [...archivedDays, ...derivedDays].forEach((day) => {
     const row = day as Row;
     const dateKey = clean_(row.dateKey || row.date || row.day);
-    if (dateKey) byDateKey[dateKey] = { ...byDateKey[dateKey], ...row, dateKey };
+    if (dateKey)
+      byDateKey[dateKey] = { ...byDateKey[dateKey], ...row, dateKey };
   });
 
   return {
@@ -2032,9 +2231,14 @@ function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
         (voucher) => clean_(voucher.redeemStatus).toLowerCase() === "redeemed",
       ).length;
       const pendingVoucherCount = generatedVoucherCount - redeemedVoucherCount;
-      const freeDrinksReady = Math.max(0, earnedFreeDrinks - generatedVoucherCount);
+      const freeDrinksReady = Math.max(
+        0,
+        earnedFreeDrinks - generatedVoucherCount,
+      );
       const progress = paidDrinks % REWARD_THRESHOLD;
-      const remaining = progress ? REWARD_THRESHOLD - progress : REWARD_THRESHOLD;
+      const remaining = progress
+        ? REWARD_THRESHOLD - progress
+        : REWARD_THRESHOLD;
       const favoriteDrink = getFavoriteDrink_(customer);
 
       return {
@@ -2084,7 +2288,8 @@ function isRewardEligibleOrder_(order: Row) {
 }
 
 function isDrinkOrder_(order: Row) {
-  const text = `${clean_(order.category)} ${orderItemName_(order)}`.toLowerCase();
+  const text =
+    `${clean_(order.category)} ${orderItemName_(order)}`.toLowerCase();
   if (
     [
       "cake",
@@ -2145,7 +2350,8 @@ function enrichCustomers_(customers: Row[], orders: Row[], unpaid: Row[]) {
       totalOrders: String(customerOrders.length),
       totalSpent: String(sum_(customerOrders, "total")),
       unpaidBalance: String(unpaidByCustomer[customerId] || 0),
-      lastVisit: customerOrders[0]?.orderDateTime || normalizedCustomer.lastVisit || "",
+      lastVisit:
+        customerOrders[0]?.orderDateTime || normalizedCustomer.lastVisit || "",
     };
   });
 }
@@ -2177,14 +2383,17 @@ function enrichOrder_(order: Row) {
 }
 
 function buildDashboardOrders_(orders: Row[]) {
-  const grouped: Record<string, Row & {
-    itemCount: number;
-    total: number;
-    paidAmount: number;
-    outstandingAmount: number;
-    orderDescriptions: string[];
-    pickedUpCount: number;
-  }> = {};
+  const grouped: Record<
+    string,
+    Row & {
+      itemCount: number;
+      total: number;
+      paidAmount: number;
+      outstandingAmount: number;
+      orderDescriptions: string[];
+      pickedUpCount: number;
+    }
+  > = {};
 
   orders.forEach((order) => {
     const groupKey =
@@ -2215,7 +2424,10 @@ function buildDashboardOrders_(orders: Row[]) {
     grouped[groupKey].paidAmount += number_(order.paidAmount);
     grouped[groupKey].outstandingAmount += number_(order.outstandingAmount);
     grouped[groupKey].orderPlace =
-      grouped[groupKey].orderPlace || order.orderPlace || orderPlace_(order) || "";
+      grouped[groupKey].orderPlace ||
+      order.orderPlace ||
+      orderPlace_(order) ||
+      "";
     if (isPickedUpStatus_(order.orderStatus)) {
       grouped[groupKey].pickedUpCount += 1;
     }
@@ -2238,13 +2450,16 @@ function buildDashboardOrders_(orders: Row[]) {
 }
 
 function buildDashboardTopItems_(orders: Row[]) {
-  const byItem: Record<string, {
-    category: string;
-    itemName: string;
-    lastSold: string;
-    qtySold: number;
-    totalSales: number;
-  }> = {};
+  const byItem: Record<
+    string,
+    {
+      category: string;
+      itemName: string;
+      lastSold: string;
+      qtySold: number;
+      totalSales: number;
+    }
+  > = {};
 
   orders.forEach((order) => {
     if (!isDrinkOrder_(order)) return;
@@ -2265,11 +2480,15 @@ function buildDashboardTopItems_(orders: Row[]) {
 
     byItem[groupKey].qtySold += orderQty_(order);
     byItem[groupKey].totalSales += number_(order.total);
-    byItem[groupKey].lastSold = order.orderDateTime || byItem[groupKey].lastSold;
+    byItem[groupKey].lastSold =
+      order.orderDateTime || byItem[groupKey].lastSold;
   });
 
   return Object.values(byItem)
-    .sort((left, right) => right.qtySold - left.qtySold || right.totalSales - left.totalSales)
+    .sort(
+      (left, right) =>
+        right.qtySold - left.qtySold || right.totalSales - left.totalSales,
+    )
     .slice(0, 8)
     .map((row, index) => ({
       ...row,
@@ -2286,14 +2505,17 @@ function buildDashboardTopItems_(orders: Row[]) {
 }
 
 function buildUnpaidTracker_(customers: Row[], orders: Row[]) {
-  const byCustomer: Record<string, Row & {
-    openUnpaidOrders: number;
-    orderDescriptions: string[];
-    settledDescriptions: string[];
-    totalAmount: number;
-    totalPaid: number;
-    unpaidBalance: number;
-  }> = {};
+  const byCustomer: Record<
+    string,
+    Row & {
+      openUnpaidOrders: number;
+      orderDescriptions: string[];
+      settledDescriptions: string[];
+      totalAmount: number;
+      totalPaid: number;
+      unpaidBalance: number;
+    }
+  > = {};
 
   customers.forEach((customer) => {
     const customerId = getRowCustomerId_(customer);
@@ -2362,7 +2584,9 @@ function buildUnpaidTracker_(customers: Row[], orders: Row[]) {
         `${orderDescription} | Due ${outstanding} EGP (${order.paymentStatus || "Unpaid"})`,
       );
     } else if (orderNotes.includes("settled unpaid") && total > 0) {
-      byCustomer[customerId].settledDescriptions.push(`${orderDescription} (Paid)`);
+      byCustomer[customerId].settledDescriptions.push(
+        `${orderDescription} (Paid)`,
+      );
     }
 
     byCustomer[customerId].lastVisit =
@@ -2403,7 +2627,10 @@ async function listOptions() {
   return lists;
 }
 
-function buildOrderPlaceOptions_(orders: Row[], lists: Record<string, string[]>) {
+function buildOrderPlaceOptions_(
+  orders: Row[],
+  lists: Record<string, string[]>,
+) {
   return uniqueStrings_([
     ...(lists.orderPlace || []),
     ...(lists.tablePlaces || []),
@@ -2440,9 +2667,14 @@ function normalizeCustomerRecord_(customer: Row): Row {
 
 function enrichVoucher_(voucher: Row) {
   const customerId = getRowCustomerId_(voucher);
-  const customerName = voucher.customerName || voucher.fullName || voucher.name || "";
+  const customerName =
+    voucher.customerName || voucher.fullName || voucher.name || "";
   const favoriteDrink =
-    voucher.favoriteDrink || voucher.drink || voucher.rewardDrink || voucher.item || "";
+    voucher.favoriteDrink ||
+    voucher.drink ||
+    voucher.rewardDrink ||
+    voucher.item ||
+    "";
 
   return {
     ...voucher,
@@ -2478,14 +2710,20 @@ function enrichMenuItem_(item: Row): Row {
 
 function resolveMenuSelection_(payload: Payload, fallbackItem: Row) {
   const itemId = clean_(payload.itemId || fallbackItem.itemId);
-  const itemName = clean_(payload.itemName || fallbackItem.itemName || fallbackItem.name);
-  const requestedSize = clean_(payload.size || payload.menuSize || fallbackItem.standardSize);
+  const itemName = clean_(
+    payload.itemName || fallbackItem.itemName || fallbackItem.name,
+  );
+  const requestedSize = clean_(
+    payload.size || payload.menuSize || fallbackItem.standardSize,
+  );
   const resolved = resolveMenuPrice(itemId, requestedSize, itemName);
 
   if (resolved) return resolved;
 
   const fallbackPrice = parsePrice_(
-    fallbackItem.priceText || fallbackItem.priceTextEditLater || fallbackItem.price,
+    fallbackItem.priceText ||
+      fallbackItem.priceTextEditLater ||
+      fallbackItem.price,
   );
 
   if (fallbackItem.itemId && fallbackPrice > 0) {
@@ -2508,7 +2746,11 @@ function resolveMenuSelection_(payload: Payload, fallbackItem: Row) {
 function itemNameWithSize_(itemName: string, size: string) {
   const cleanName = clean_(itemName);
   const cleanSize = clean_(size);
-  if (!cleanSize || cleanSize === "Standard" || cleanName.includes(`(${cleanSize})`)) {
+  if (
+    !cleanSize ||
+    cleanSize === "Standard" ||
+    cleanName.includes(`(${cleanSize})`)
+  ) {
     return cleanName;
   }
 
@@ -2520,7 +2762,9 @@ async function receiptIdForIdempotencyKey_(idempotencyKey: string) {
   if (!key) return "";
 
   const orders = await sheetToObjects(SHEETS.orders);
-  const match = orders.find((order) => clean_(order.notes).includes(`Idempotency: ${key}`));
+  const match = orders.find((order) =>
+    clean_(order.notes).includes(`Idempotency: ${key}`),
+  );
   return match ? receiptId_(match) : "";
 }
 
@@ -2537,11 +2781,16 @@ async function findCustomer(customerId: string): Promise<Row> {
 async function getOrCreateReceiptCustomer(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
   if (customerId) {
-    return { customerId, customer: await findCustomer(customerId), created: false };
+    return {
+      customerId,
+      customer: await findCustomer(customerId),
+      created: false,
+    };
   }
 
-  const customerName =
-    clean_(payload.customerName || payload.fullName || payload.name);
+  const customerName = clean_(
+    payload.customerName || payload.fullName || payload.name,
+  );
   const phone = clean_(
     payload.customerPhone ||
       payload.phone ||
@@ -2553,18 +2802,30 @@ async function getOrCreateReceiptCustomer(payload: Payload) {
   const existing = await findCustomerByPhoneOrName(phone, customerName);
 
   if (existing.customerId) {
-    return { customerId: existing.customerId, customer: existing, created: false };
+    return {
+      customerId: existing.customerId,
+      customer: existing,
+      created: false,
+    };
   }
 
   if (!isRealCustomerInput_(customerName)) {
     return {
       customerId: "",
-      customer: { customerName: "Walk-in Guest", fullName: "", phoneWhatsApp: "" },
+      customer: {
+        customerName: "Walk-in Guest",
+        fullName: "",
+        phoneWhatsApp: "",
+      },
       created: false,
     };
   }
 
-  const newCustomerId = await createCustomerFromOrder(customerName, phone, payload);
+  const newCustomerId = await createCustomerFromOrder(
+    customerName,
+    phone,
+    payload,
+  );
   return {
     customerId: newCustomerId,
     customer: await findCustomer(newCustomerId),
@@ -2572,7 +2833,10 @@ async function getOrCreateReceiptCustomer(payload: Payload) {
   };
 }
 
-async function findCustomerByPhoneOrName(phone: string, customerName: string): Promise<Row> {
+async function findCustomerByPhoneOrName(
+  phone: string,
+  customerName: string,
+): Promise<Row> {
   const normalizedPhone = digits_(phone);
   const normalizedName = clean_(customerName).toLowerCase();
   const customers = await sheetToObjects(SHEETS.customers);
@@ -2592,15 +2856,23 @@ function isRealCustomerInput_(customerName: string) {
   const name = clean_(customerName).toLowerCase();
   if (!name) return false;
 
-  return !["walk-in guest", "walk in guest", "walkin guest", "guest"].includes(name);
+  return !["walk-in guest", "walk in guest", "walkin guest", "guest"].includes(
+    name,
+  );
 }
 
 function isRealCustomerRow_(customer: Row) {
-  const phone = digits_(customer.phoneWhatsApp || customer.phone || customer.whatsapp);
+  const phone = digits_(
+    customer.phoneWhatsApp || customer.phone || customer.whatsapp,
+  );
   return Boolean(phone || isRealCustomerInput_(getCustomerName_(customer)));
 }
 
-async function createCustomerFromOrder(customerName: string, phone: string, payload: Payload) {
+async function createCustomerFromOrder(
+  customerName: string,
+  phone: string,
+  payload: Payload,
+) {
   const customers = await sheetToObjects(SHEETS.customers);
   const nextId = nextIdFromRows_("CUST", customers);
   const now = new Date();
@@ -2632,7 +2904,9 @@ async function createCustomerFromOrder(customerName: string, phone: string, payl
 async function findMenuItem(itemId: string, itemName: string): Promise<Row> {
   const normalizedItem = normalizedMenu.find((item) => {
     if (itemId && item.itemId === itemId) return true;
-    return Boolean(itemName && item.itemName.toLowerCase() === itemName.toLowerCase());
+    return Boolean(
+      itemName && item.itemName.toLowerCase() === itemName.toLowerCase(),
+    );
   });
 
   if (normalizedItem) return normalizedItem;
@@ -2670,7 +2944,11 @@ async function closeUnpaidOrders(customerId: string, amount: number) {
         ? Math.max(0, total - partialPaidAmount_({ notes }))
         : total;
 
-    if (rowCustomerId !== customerId || paymentStatus === "paid" || outstanding <= 0) {
+    if (
+      rowCustomerId !== customerId ||
+      paymentStatus === "paid" ||
+      outstanding <= 0
+    ) {
       continue;
     }
 
@@ -2730,23 +3008,31 @@ async function updateReceiptRows(
   let resultCustomerId = customerId;
   let resultCustomerName = customerName;
 
-  if (statusIndex < 0) throw new Error("Orders sheet needs a Payment Status column.");
+  if (statusIndex < 0)
+    throw new Error("Orders sheet needs a Payment Status column.");
 
   for (let index = 1; index < values.length; index += 1) {
     const row = values[index] || [];
     const rowNotes = notesIndex >= 0 ? clean_(row[notesIndex]) : "";
     const rowReceiptId = receiptId_({ notes: rowNotes });
-    const rowCustomerId = customerIdIndex >= 0 ? clean_(row[customerIdIndex]) : "";
+    const rowCustomerId =
+      customerIdIndex >= 0 ? clean_(row[customerIdIndex]) : "";
     const rowCustomerName =
       customerNameIndex >= 0 ? clean_(row[customerNameIndex]) : "";
     const rowDate = dateIndex >= 0 ? clean_(row[dateIndex]) : "";
     const rowStatus = clean_(row[statusIndex]);
     const rowOrderStatus =
       orderStatusIndex >= 0 ? clean_(row[orderStatusIndex]) : "";
-    const rowReceiptKey = [rowDate, rowCustomerId, rowCustomerName, rowStatus].join("|");
+    const rowReceiptKey = [
+      rowDate,
+      rowCustomerId,
+      rowCustomerName,
+      rowStatus,
+    ].join("|");
 
     const matchesReceiptId = receiptId && rowReceiptId === receiptId;
-    const matchesReceiptKey = !receiptId && receiptKey && rowReceiptKey === receiptKey;
+    const matchesReceiptKey =
+      !receiptId && receiptKey && rowReceiptKey === receiptKey;
     const matchesFallback =
       !receiptId &&
       !receiptKey &&
@@ -2774,7 +3060,11 @@ async function updateReceiptRows(
     updatedRows += 1;
     resultCustomerId = resultCustomerId || rowCustomerId;
     resultCustomerName = resultCustomerName || rowCustomerName;
-    itemNames.push(itemIndex >= 0 ? row[itemIndex] || `row ${index + 1}` : `row ${index + 1}`);
+    itemNames.push(
+      itemIndex >= 0
+        ? row[itemIndex] || `row ${index + 1}`
+        : `row ${index + 1}`,
+    );
   }
 
   if (!updatedRows) throw new Error("Receipt/order rows were not found.");
@@ -2788,7 +3078,11 @@ async function updateReceiptRows(
   };
 }
 
-async function appendRedemption(voucherRow: string[], header: string[], payload: Payload) {
+async function appendRedemption(
+  voucherRow: string[],
+  header: string[],
+  payload: Payload,
+) {
   const get = (key: string, aliases: string[] = []) => {
     const index = headerIndex_(header, [key].concat(aliases));
     return index >= 0 ? voucherRow[index] || "" : "";
@@ -2811,11 +3105,15 @@ async function appendRedemption(voucherRow: string[], header: string[], payload:
 function serviceOrderPlace_(payload: Payload) {
   const serviceType = clean_(payload.serviceType);
   const place = clean_(
-    payload.orderPlace || payload.tableNumber || payload.place || payload.location,
+    payload.orderPlace ||
+      payload.tableNumber ||
+      payload.place ||
+      payload.location,
   );
   if (
     place &&
-    ((serviceType && place.startsWith(`${serviceType} - `)) || place.includes("Car:"))
+    ((serviceType && place.startsWith(`${serviceType} - `)) ||
+      place.includes("Car:"))
   ) {
     return place;
   }
@@ -2852,7 +3150,10 @@ function rowsMatchCustomer_(row: Row, customer: Row) {
   );
   if (rowPhone && customerPhone && rowPhone === customerPhone) return true;
 
-  return Boolean(customerNameKey_(row) && customerNameKey_(row) === customerNameKey_(customer));
+  return Boolean(
+    customerNameKey_(row) &&
+      customerNameKey_(row) === customerNameKey_(customer),
+  );
 }
 
 function customerMatchKey_(row: Row) {
@@ -2902,7 +3203,9 @@ function orderNotes_(notes: string, paymentStatus: string, paidAmount: number) {
 }
 
 function partialPaidAmount_(order: Row) {
-  const match = String(order.notes || "").match(/Paid now:\s*([\d,]+(?:\.\d+)?)/i);
+  const match = String(order.notes || "").match(
+    /Paid now:\s*([\d,]+(?:\.\d+)?)/i,
+  );
   return match ? Number(String(match[1]).replace(/,/g, "")) : 0;
 }
 
@@ -2919,12 +3222,16 @@ function outstandingAmount_(order: Row) {
 }
 
 function isPickedUpStatus_(status: unknown) {
-  const value = clean_(status).toLowerCase().replace(/[-_\s]+/g, "");
+  const value = clean_(status)
+    .toLowerCase()
+    .replace(/[-_\s]+/g, "");
   return value === "done" || value === "pickedup" || value === "pickup";
 }
 
 function getPayloadCustomerId_(payload: Payload) {
-  return clean_(payload.customerId || payload.customerID || payload.id || payload.ID);
+  return clean_(
+    payload.customerId || payload.customerID || payload.id || payload.ID,
+  );
 }
 
 function getRowCustomerId_(row: Row) {
@@ -2974,7 +3281,9 @@ async function createReceiptSerial() {
     serial = `${prefix}-${String(nextNumber).padStart(4, "0")}`;
   }
 
-  throw new Error("Could not generate a unique receipt serial. Please try again.");
+  throw new Error(
+    "Could not generate a unique receipt serial. Please try again.",
+  );
 }
 
 async function nextDailySerial(prefix: string) {
@@ -3012,12 +3321,18 @@ function orderDateKey_(order: Row) {
 
 function paymentDateKey_(row: Row) {
   return dateKeyFromValue_(
-    row.dateKey || row.paymentDate || row.date || row.generatedAt || row.createdAt,
+    row.dateKey ||
+      row.paymentDate ||
+      row.date ||
+      row.generatedAt ||
+      row.createdAt,
   );
 }
 
 function isArchivedOrder_(order: Row) {
-  const status = clean_(order.orderStatus).toLowerCase().replace(/[-_\s]+/g, "");
+  const status = clean_(order.orderStatus)
+    .toLowerCase()
+    .replace(/[-_\s]+/g, "");
   const notes = clean_(order.notes).toLowerCase();
   return status === "archived" || notes.includes("end day reset archived");
 }
@@ -3062,7 +3377,9 @@ function orderPlace_(order: Row) {
   );
   if (direct) return direct;
 
-  const match = String(order.notes || "").match(/(?:Place|Table|Location):\s*([^|]+)/i);
+  const match = String(order.notes || "").match(
+    /(?:Place|Table|Location):\s*([^|]+)/i,
+  );
   return match ? clean_(match[1]) : "";
 }
 
@@ -3105,7 +3422,9 @@ async function staffOptions_(fallback: string[]) {
         const status = clean_(
           staff.active || staff.status || staff.enabled || "Yes",
         ).toLowerCase();
-        return !["no", "false", "disabled", "inactive", "blocked"].includes(status);
+        return !["no", "false", "disabled", "inactive", "blocked"].includes(
+          status,
+        );
       })
       .map(staffDisplayName_)
       .filter(Boolean);
@@ -3162,7 +3481,13 @@ function valueForHeaderForSheet_(record: Payload, header: string) {
 }
 
 function isPhoneHeader_(header: string) {
-  return ["customerPhone", "mobile", "phone", "phoneWhatsApp", "whatsapp"].includes(header);
+  return [
+    "customerPhone",
+    "mobile",
+    "phone",
+    "phoneWhatsApp",
+    "whatsapp",
+  ].includes(header);
 }
 
 function uniqueStrings_(values: unknown[]) {
@@ -3182,12 +3507,15 @@ function isActionAllowed_(actor: Actor, action: string) {
   const revokedPermissions = new Set(actor.revokedPermissions || []);
 
   if (actor.role === "owner") return true;
-  if (featurePermission && revokedPermissions.has(featurePermission)) return false;
-  if (featurePermission && explicitPermissions.has(featurePermission)) return true;
+  if (featurePermission && revokedPermissions.has(featurePermission))
+    return false;
+  if (featurePermission && explicitPermissions.has(featurePermission))
+    return true;
 
   return (
     ROLE_PERMISSIONS[actor.role]?.has(action) === true &&
-    (!featurePermission || ROLE_FEATURE_PERMISSIONS[actor.role]?.has(featurePermission) === true)
+    (!featurePermission ||
+      ROLE_FEATURE_PERMISSIONS[actor.role]?.has(featurePermission) === true)
   );
 }
 
@@ -3203,7 +3531,9 @@ function activeValue_(value: unknown) {
   if (value == null || value === "") return true;
   if (typeof value === "boolean") return value;
   const normalized = clean_(value).toLowerCase();
-  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(normalized);
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(
+    normalized,
+  );
 }
 
 function stringArray_(value: unknown) {
@@ -3219,7 +3549,10 @@ function maskId_(value: string) {
 }
 
 function neonBackupConfigured_() {
-  return process.env.NEON_BACKUP_ENABLED === "true" && Boolean(process.env.NEON_DATABASE_URL);
+  return (
+    process.env.NEON_BACKUP_ENABLED === "true" &&
+    Boolean(process.env.NEON_DATABASE_URL)
+  );
 }
 
 function statusCodeForError_(error: unknown) {
@@ -3236,7 +3569,13 @@ function safeErrorDetails_(error: unknown) {
 
 function safeServerError_(label: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(label, message.replace(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g, "[redacted private key]"));
+  console.error(
+    label,
+    message.replace(
+      /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g,
+      "[redacted private key]",
+    ),
+  );
 }
 
 function staffForClient_(actor: Actor) {
@@ -3245,9 +3584,10 @@ function staffForClient_(actor: Actor) {
     displayName: actor.displayName || actor.email,
     email: actor.email,
     name: actor.displayName || actor.email,
-    permissions: actor.role === "owner"
-      ? Array.from(ROLE_FEATURE_PERMISSIONS.owner || new Set<string>()).sort()
-      : actor.permissions || [],
+    permissions:
+      actor.role === "owner"
+        ? Array.from(ROLE_FEATURE_PERMISSIONS.owner || new Set<string>()).sort()
+        : actor.permissions || [],
     role: actor.role,
     uid: actor.uid,
   };
@@ -3288,21 +3628,36 @@ function success_(payload: Payload) {
 
 export const app = express();
 
-app.use(express.json({ limit: "1mb", type: ["application/json", "text/plain"] }));
-app.use((error: unknown, _request: express.Request, response: express.Response, next: express.NextFunction) => {
-  if (error instanceof SyntaxError) {
-    response.status(400).json({
-      success: false,
-      message: "Invalid JSON request body.",
-    });
-    return;
-  }
+app.use(
+  express.json({ limit: "1mb", type: ["application/json", "text/plain"] }),
+);
+app.use(
+  (
+    error: unknown,
+    _request: express.Request,
+    response: express.Response,
+    next: express.NextFunction,
+  ) => {
+    if (error instanceof SyntaxError) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid JSON request body.",
+      });
+      return;
+    }
 
-  next(error);
-});
+    next(error);
+  },
+);
 app.use((_request, response, next) => {
-  response.header("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
-  response.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.header(
+    "Access-Control-Allow-Origin",
+    process.env.CORS_ORIGIN || "*",
+  );
+  response.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization",
+  );
   response.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   next();
 });
@@ -3310,7 +3665,9 @@ app.use((_request, response, next) => {
 app.options("/api", (_request, response) => response.sendStatus(204));
 
 app.get("/api/menu", async (request, response) => {
-  await routeDataSlice(requestPayload_(request), response, (data) => ({ menu: data.menu }));
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    menu: data.menu,
+  }));
 });
 
 app.get("/api/dashboard/today", async (request, response) => {
@@ -3420,7 +3777,9 @@ app.get("/health", (_request, response) => {
 
 function requestPayload_(request: express.Request): Payload {
   const body =
-    typeof request.body === "string" ? payloadFromText_(request.body) : request.body || {};
+    typeof request.body === "string"
+      ? payloadFromText_(request.body)
+      : request.body || {};
   return {
     ...(request.method === "GET" ? request.query : body),
     authorization: request.header("authorization"),

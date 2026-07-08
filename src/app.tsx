@@ -1,4 +1,12 @@
-import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  CSSProperties,
+  FormEvent,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { User } from "firebase/auth";
 import {
   StaffProfile,
@@ -13,6 +21,7 @@ import {
   watchStaffAuth,
 } from "./firebase";
 import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
+import { calculateReceiptLine } from "./receiptCalculator";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -198,6 +207,7 @@ export function App() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [autoScroll, setAutoScroll] = useState(false);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
+  const receiptSubmittingRef = useRef(false);
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
       ? "Sign in with your staff account."
@@ -216,7 +226,8 @@ export function App() {
     .slice()
     .sort((left, right) => {
       return (
-        Number(isPickedUp(left.orderStatus)) - Number(isPickedUp(right.orderStatus)) ||
+        Number(isPickedUp(left.orderStatus)) -
+          Number(isPickedUp(right.orderStatus)) ||
         compareRecentOrders(left, right)
       );
     });
@@ -229,7 +240,9 @@ export function App() {
         setStaffProfile(session?.profile || null);
         setAuthLoading(false);
         if (session?.profile) {
-          setAuthStatus(`Signed in as ${session.profile.displayName || session.profile.email}.`);
+          setAuthStatus(
+            `Signed in as ${session.profile.displayName || session.profile.email}.`,
+          );
         }
       },
       (message) => {
@@ -254,7 +267,8 @@ export function App() {
     if (!autoScroll || activeTab !== "dashboard") return undefined;
 
     const timer = window.setInterval(() => {
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
       const nextScroll = window.scrollY + Math.round(window.innerHeight * 0.7);
       window.scrollTo({
         behavior: "smooth",
@@ -287,7 +301,9 @@ export function App() {
         );
       }
       if (!options.silent) {
-        setStatus(`Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`);
+        setStatus(
+          `Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`,
+        );
       }
     } catch (error) {
       console.error("Failed to load app data", error);
@@ -334,17 +350,27 @@ export function App() {
     const query = (filters[id] || "").trim().toLowerCase();
     if (!query) return rows;
     if (query === "__unpaid") {
-      return rows.filter((row) => numberValue(row.outstandingAmount) > 0 || stringValue(row.paymentStatus).toLowerCase() === "unpaid");
+      return rows.filter(
+        (row) =>
+          numberValue(row.outstandingAmount) > 0 ||
+          stringValue(row.paymentStatus).toLowerCase() === "unpaid",
+      );
     }
     if (query === "__paid") {
-      return rows.filter((row) => numberValue(row.outstandingAmount) <= 0 && stringValue(row.paymentStatus).toLowerCase() === "paid");
+      return rows.filter(
+        (row) =>
+          numberValue(row.outstandingAmount) <= 0 &&
+          stringValue(row.paymentStatus).toLowerCase() === "paid",
+      );
     }
     return rows.filter((row) => rowSearchText(row).includes(query));
   }
 
   function addReceiptItemFromForm(form: HTMLFormElement) {
     const itemId = stringValue(form.elements.namedItem("itemId"));
-    const selectedItem = menu.find((item) => stringValue(item.itemId) === itemId);
+    const selectedItem = menu.find(
+      (item) => stringValue(item.itemId) === itemId,
+    );
     const selectedSize =
       stringValue(form.elements.namedItem("size")) ||
       stringValue(selectedItem?.standardSize) ||
@@ -352,49 +378,59 @@ export function App() {
 
     if (!selectedItem) {
       setStatus("Choose a menu item first.");
-      return;
+      return null;
     }
 
-    const qty = numberValue(form.elements.namedItem("qty")) || 1;
-    const resolvedPrice = resolveMenuPrice(itemId, selectedSize, menuName(selectedItem));
-    const unitPrice = resolvedPrice?.price || numberValue(selectedItem.suggestedPrice) || firstPrice(menuPrice(selectedItem));
-    const discount = numberValue(form.elements.namedItem("discount"));
-    const total = Math.max(0, qty * unitPrice - discount);
+    const resolvedPrice = resolveMenuPrice(
+      itemId,
+      selectedSize,
+      menuName(selectedItem),
+    );
+    const line = calculateReceiptLine({
+      discount: numberValue(form.elements.namedItem("discount")),
+      qty: numberValue(form.elements.namedItem("qty")) || 1,
+      unitPrice:
+        resolvedPrice?.price ||
+        numberValue(selectedItem.suggestedPrice) ||
+        firstPrice(menuPrice(selectedItem)),
+    });
+    const nextItem = {
+      category: resolvedPrice?.category || stringValue(selectedItem.category),
+      discount: line.discount,
+      itemId: resolvedPrice?.itemId || itemId,
+      itemName: resolvedPrice?.itemName || menuName(selectedItem),
+      qty: line.qty,
+      size: resolvedPrice?.size || selectedSize,
+      total: line.total,
+      unitPrice: line.unitPrice,
+    };
 
-    setReceiptItems((items) => [
-      {
-        category: resolvedPrice?.category || stringValue(selectedItem.category),
-        itemId: resolvedPrice?.itemId || itemId,
-        itemName: resolvedPrice?.itemName || menuName(selectedItem),
-        qty,
-        size: resolvedPrice?.size || selectedSize,
-        discount,
-        total,
-        unitPrice,
-      },
-      ...items,
-    ]);
+    setReceiptItems((items) => [nextItem, ...items]);
     setStatus(`${menuName(selectedItem)} added to receipt.`);
+    return nextItem;
   }
 
   async function submitReceipt(form: HTMLFormElement) {
+    if (receiptSubmittingRef.current || loading) {
+      setStatus("Receipt is already being submitted.");
+      return;
+    }
+
     let items = receiptItems;
     if (!items.length) {
-      addReceiptItemFromForm(form);
-      items = receiptItems;
+      const pendingItem = addReceiptItemFromForm(form);
+      items = pendingItem ? [pendingItem] : [];
     }
 
     if (!items.length) return;
 
     const customerId = stringValue(form.elements.namedItem("customerId"));
-    const customer = customers.find(
-      (row) => customerIdOf(row) === customerId,
-    );
+    const customer = customers.find((row) => customerIdOf(row) === customerId);
     const payload = formObject(form);
     payload.customerName =
-      customerName(customer) ||
-      stringValue(payload.customerName);
-    payload.phone = phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
+      customerName(customer) || stringValue(payload.customerName);
+    payload.phone =
+      phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
     payload.items = items;
     payload.idempotencyKey =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -406,9 +442,14 @@ export function App() {
     delete payload.carName;
     delete payload.carColor;
 
-    await callAndReload("addReceipt", payload, "Receipt submitted.");
-    setReceiptItems([]);
-    form.reset();
+    try {
+      receiptSubmittingRef.current = true;
+      await callAndReload("addReceipt", payload, "Receipt submitted.");
+      setReceiptItems([]);
+      form.reset();
+    } finally {
+      receiptSubmittingRef.current = false;
+    }
   }
 
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
@@ -475,7 +516,10 @@ export function App() {
     );
   }
 
-  async function setReceiptPayment(encodedPayload: string, paymentStatus: string) {
+  async function setReceiptPayment(
+    encodedPayload: string,
+    paymentStatus: string,
+  ) {
     const payload = receiptPayloadFrom(encodedPayload);
     await callAndReload(
       "updateReceiptPayment",
@@ -529,7 +573,9 @@ export function App() {
       setAuthStatus("Signing in...");
 
       if (!firebaseReady) {
-        throw new Error("Firebase web config is missing. Add the VITE_FIREBASE_* variables.");
+        throw new Error(
+          "Firebase web config is missing. Add the VITE_FIREBASE_* variables.",
+        );
       }
 
       const profile = await signInStaff(email, password);
@@ -581,7 +627,9 @@ export function App() {
             </div>
             <div>
               <h1>Joy Corner Loyalty</h1>
-              <p className="muted">Standalone staff web app connected to Google Sheets</p>
+              <p className="muted">
+                Standalone staff web app connected to Google Sheets
+              </p>
             </div>
           </div>
           <img className="joy-time-signature" alt="" src={joyYourTimeUrl} />
@@ -635,8 +683,14 @@ export function App() {
         {activeTab === "dashboard" && (
           <DashboardView
             dashboard={connectedData.dashboard || {}}
-            orders={filteredRows(dashboardOrders, "dashboardOrders").slice(0, 12)}
-            topItems={filteredRows(connectedData.dashboardTopItems || [], "topItems")}
+            orders={filteredRows(dashboardOrders, "dashboardOrders").slice(
+              0,
+              12,
+            )}
+            topItems={filteredRows(
+              connectedData.dashboardTopItems || [],
+              "topItems",
+            )}
             role={currentRole}
             onFilter={setFilter}
             filters={filters}
@@ -670,7 +724,9 @@ export function App() {
             onFilter={setFilter}
             filters={filters}
             onRemoveItem={(index) =>
-              setReceiptItems((items) => items.filter((_, itemIndex) => itemIndex !== index))
+              setReceiptItems((items) =>
+                items.filter((_, itemIndex) => itemIndex !== index),
+              )
             }
             onSetPayment={(payload, paymentStatus) =>
               void setReceiptPayment(payload, paymentStatus)
@@ -727,8 +783,18 @@ export function App() {
 
         {activeTab === "owner" && currentRole === "owner" && (
           <OwnerTools
-            onCheckHealth={() => void runOwnerAction("debugSheets", "Google Sheets health checked.")}
-            onOrganizeSheets={() => void runOwnerAction("organizeSpreadsheet", "Google Sheets hierarchy synchronized.")}
+            onCheckHealth={() =>
+              void runOwnerAction(
+                "debugSheets",
+                "Google Sheets health checked.",
+              )
+            }
+            onOrganizeSheets={() =>
+              void runOwnerAction(
+                "organizeSpreadsheet",
+                "Google Sheets hierarchy synchronized.",
+              )
+            }
             onResetDay={() => void resetDay()}
             staffProfile={staffProfile}
             status={status}
@@ -793,8 +859,20 @@ function AuthScreen({
         </div>
         <img className="auth-signature" alt="" src={joyYourTimeUrl} />
         <form className="auth-form" onSubmit={onSubmit}>
-          <Field label="Staff Email" name="email" placeholder="staff@joycorner.com" required type="email" />
-          <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
+          <Field
+            label="Staff Email"
+            name="email"
+            placeholder="staff@joycorner.com"
+            required
+            type="email"
+          />
+          <Field
+            label="Password"
+            name="password"
+            placeholder="At least 6 characters"
+            required
+            type="password"
+          />
           <button className="primary" disabled={authLoading} type="submit">
             Sign In
           </button>
@@ -809,7 +887,10 @@ function AuthScreen({
           </div>
         ) : (
           <div className="muted auth-note">
-            <p>Firebase web config is missing. Add the required Firebase environment variables.</p>
+            <p>
+              Firebase web config is missing. Add the required Firebase
+              environment variables.
+            </p>
           </div>
         )}
       </section>
@@ -864,7 +945,9 @@ function CustomerOrderPage() {
 
     try {
       setLoading(true);
-      setStatus(authMode === "signup" ? "Creating account..." : "Signing in...");
+      setStatus(
+        authMode === "signup" ? "Creating account..." : "Signing in...",
+      );
       if (authMode === "signup") {
         await signUpCustomer(email, password, displayName, phone);
         await callServer("registerCustomerProfile", {
@@ -888,12 +971,15 @@ function CustomerOrderPage() {
     event.preventDefault();
     const form = event.currentTarget;
     const payload = formObject(form);
-    const item = menu.find((row) => stringValue(row.itemId) === stringValue(payload.itemId));
+    const item = menu.find(
+      (row) => stringValue(row.itemId) === stringValue(payload.itemId),
+    );
 
     if (item) {
       payload.itemName = menuName(item);
       payload.category = stringValue(item.category);
-      payload.unitPrice = numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
+      payload.unitPrice =
+        numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
     }
 
     try {
@@ -944,11 +1030,18 @@ function CustomerOrderPage() {
         <section className="panel customer-order-panel">
           <PanelHead
             title={customerUser ? "Request an Order" : "Customer Access"}
-            note={customerUser ? "Your request goes to the cafe staff dashboard" : "Sign up or sign in"}
+            note={
+              customerUser
+                ? "Your request goes to the cafe staff dashboard"
+                : "Sign up or sign in"
+            }
           />
           <div className="panel-body">
             {!customerUser ? (
-              <form className="auth-form customer-order-form" onSubmit={submitCustomerAuth}>
+              <form
+                className="auth-form customer-order-form"
+                onSubmit={submitCustomerAuth}
+              >
                 <div className="segmented">
                   <button
                     className={authMode === "signup" ? "primary" : "secondary"}
@@ -967,41 +1060,105 @@ function CustomerOrderPage() {
                 </div>
                 {authMode === "signup" && (
                   <>
-                    <Field label="Name" name="displayName" placeholder="Your name" required />
-                    <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+                    <Field
+                      label="Name"
+                      name="displayName"
+                      placeholder="Your name"
+                      required
+                    />
+                    <Field
+                      label="Phone / WhatsApp"
+                      name="phone"
+                      placeholder="01xxxxxxxxx"
+                      required
+                    />
                   </>
                 )}
-                <Field label="Email" name="email" placeholder="you@example.com" required type="email" />
-                <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
-                <button className="primary" disabled={loading || !firebaseReady} type="submit">
+                <Field
+                  label="Email"
+                  name="email"
+                  placeholder="you@example.com"
+                  required
+                  type="email"
+                />
+                <Field
+                  label="Password"
+                  name="password"
+                  placeholder="At least 6 characters"
+                  required
+                  type="password"
+                />
+                <button
+                  className="primary"
+                  disabled={loading || !firebaseReady}
+                  type="submit"
+                >
                   Continue
                 </button>
               </form>
             ) : (
-              <form className="customer-order-form" onSubmit={submitCustomerOrder}>
-                <Field label="Your Name" name="customerName" placeholder="Name for the order" required />
-                <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+              <form
+                className="customer-order-form"
+                onSubmit={submitCustomerOrder}
+              >
+                <Field
+                  label="Your Name"
+                  name="customerName"
+                  placeholder="Name for the order"
+                  required
+                />
+                <Field
+                  label="Phone / WhatsApp"
+                  name="phone"
+                  placeholder="01xxxxxxxxx"
+                  required
+                />
                 <label>
                   Item
                   <select name="itemId" required>
                     <option value="">Choose from menu</option>
                     {menu.map((item) => (
-                      <option key={stringValue(item.itemId)} value={stringValue(item.itemId)}>
-                        {menuName(item)} - {money(numberValue(item.suggestedPrice) || firstPrice(menuPrice(item)))} EGP
+                      <option
+                        key={stringValue(item.itemId)}
+                        value={stringValue(item.itemId)}
+                      >
+                        {menuName(item)} -{" "}
+                        {money(
+                          numberValue(item.suggestedPrice) ||
+                            firstPrice(menuPrice(item)),
+                        )}{" "}
+                        EGP
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
                   Quantity
-                  <input defaultValue="1" min="1" name="qty" required type="number" />
+                  <input
+                    defaultValue="1"
+                    min="1"
+                    name="qty"
+                    required
+                    type="number"
+                  />
                 </label>
-                <Field label="Pickup / Table / Notes" name="orderPlace" placeholder="Pickup, table, car, or note" />
+                <Field
+                  label="Pickup / Table / Notes"
+                  name="orderPlace"
+                  placeholder="Pickup, table, car, or note"
+                />
                 <label>
                   Extra Notes
-                  <textarea name="notes" placeholder="Sugar, ice, timing, or anything helpful" />
+                  <textarea
+                    name="notes"
+                    placeholder="Sugar, ice, timing, or anything helpful"
+                  />
                 </label>
-                <button className="primary" disabled={loading || !menu.length} type="submit">
+                <button
+                  className="primary"
+                  disabled={loading || !menu.length}
+                  type="submit"
+                >
                   Send Request
                 </button>
               </form>
@@ -1038,7 +1195,11 @@ function OwnerTools({
           <button className="secondary" onClick={onCheckHealth} type="button">
             Check Sheets Health
           </button>
-          <button className="secondary" onClick={onOrganizeSheets} type="button">
+          <button
+            className="secondary"
+            onClick={onOrganizeSheets}
+            type="button"
+          >
             Sync Sheet Hierarchy
           </button>
           <div className="owner-status">
@@ -1054,9 +1215,9 @@ function OwnerTools({
           <div>
             <h3>End Day / Reset</h3>
             <p className="muted">
-              Archives the current business day, marks today&apos;s order rows as
-              archived, and preserves customer history, loyalty totals, and unpaid
-              balances.
+              Archives the current business day, marks today&apos;s order rows
+              as archived, and preserves customer history, loyalty totals, and
+              unpaid balances.
             </p>
           </div>
           <label>
@@ -1124,7 +1285,10 @@ function DashboardView({
 
       <div className={isBarista ? "dashboard-grid single" : "dashboard-grid"}>
         <section className="panel">
-          <PanelHead title="Barista Pickup Board" note={`${orders.length} receipt(s)`} />
+          <PanelHead
+            title="Barista Pickup Board"
+            note={`${orders.length} receipt(s)`}
+          />
           <FilterBar
             id="dashboardOrders"
             placeholder="Filter order board"
@@ -1175,7 +1339,10 @@ function DashboardView({
             {topItems.length ? (
               <div className="stock-list">
                 {topItems.map((item, index) => (
-                  <StockCard item={item} key={`${stringValue(item.itemName)}-${index}`} />
+                  <StockCard
+                    item={item}
+                    key={`${stringValue(item.itemName)}-${index}`}
+                  />
                 ))}
               </div>
             ) : (
@@ -1312,10 +1479,25 @@ function OrdersView({
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerNameInput, setCustomerNameInput] = useState("");
   const [customerPhoneInput, setCustomerPhoneInput] = useState("");
-  const categories = ["All", ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean))];
+  const categories = [
+    "All",
+    ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
+  ];
   const placeOptions = buildPlaceOptions(lists, dashboardOrders);
-  const serviceOptions = lists.serviceType || ["Hall", "Outside", "Car", "Takeaway"];
-  const carColorOptions = lists.carColor || ["Black", "White", "Silver", "Gray", "Red", "Blue"];
+  const serviceOptions = lists.serviceType || [
+    "Hall",
+    "Outside",
+    "Car",
+    "Takeaway",
+  ];
+  const carColorOptions = lists.carColor || [
+    "Black",
+    "White",
+    "Silver",
+    "Gray",
+    "Red",
+    "Blue",
+  ];
   const visibleCustomers = useMemo(
     () => filterCustomersByNameOrPhone(customers, customerQuery),
     [customers, customerQuery],
@@ -1331,8 +1513,14 @@ function OrdersView({
     menu.find((item) => stringValue(item.itemId) === selectedItemId) ||
     visibleMenu[0];
   const selectedSizes = selectedItem ? menuSizesFor(selectedItem) : [];
-  const receiptTotal = receiptItems.reduce((total, item) => total + item.total, 0);
-  const singleTotal = Math.max(0, numberValue(qty) * numberValue(unitPrice) - numberValue(discount));
+  const receiptTotal = receiptItems.reduce(
+    (total, item) => total + item.total,
+    0,
+  );
+  const singleTotal = Math.max(
+    0,
+    numberValue(qty) * numberValue(unitPrice) - numberValue(discount),
+  );
   const total = receiptItems.length ? receiptTotal : singleTotal;
   const remaining = Math.max(0, total - numberValue(paidAmount));
 
@@ -1378,7 +1566,9 @@ function OrdersView({
       const phoneDigits = digitsOnly(phoneOf(customer));
       const name = customerName(customer).toLowerCase();
       return (
-        (queryDigits.length >= 7 && phoneDigits && phoneDigits.endsWith(queryDigits)) ||
+        (queryDigits.length >= 7 &&
+          phoneDigits &&
+          phoneDigits.endsWith(queryDigits)) ||
         (normalizedQuery.length >= 2 && name === normalizedQuery)
       );
     });
@@ -1389,7 +1579,11 @@ function OrdersView({
     }
 
     const onlyVisibleCustomer = visibleCustomers[0];
-    if (onlyVisibleCustomer && visibleCustomers.length === 1 && normalizedQuery.length >= 3) {
+    if (
+      onlyVisibleCustomer &&
+      visibleCustomers.length === 1 &&
+      normalizedQuery.length >= 3
+    ) {
       fillCustomer(onlyVisibleCustomer);
       return;
     }
@@ -1421,7 +1615,10 @@ function OrdersView({
   return (
     <>
       <section className="panel">
-        <PanelHead title="Waiter New Receipt" note={`${receiptItems.length} item(s)`} />
+        <PanelHead
+          title="Waiter New Receipt"
+          note={`${receiptItems.length} item(s)`}
+        />
         <div className="panel-body">
           <form
             className="form-grid"
@@ -1452,8 +1649,12 @@ function OrdersView({
               >
                 <option value="">New customer / walk-in</option>
                 {visibleCustomers.map((customer) => (
-                  <option key={customerIdOf(customer)} value={customerIdOf(customer)}>
-                    {customerName(customer)}{phoneOf(customer) ? ` - ${phoneOf(customer)}` : ""}
+                  <option
+                    key={customerIdOf(customer)}
+                    value={customerIdOf(customer)}
+                  >
+                    {customerName(customer)}
+                    {phoneOf(customer) ? ` - ${phoneOf(customer)}` : ""}
                   </option>
                 ))}
               </select>
@@ -1474,7 +1675,10 @@ function OrdersView({
               value={customerPhoneInput}
             />
             {customerMatches.length > 0 && (
-              <div className="customer-match-list wide" aria-label="Customer matches">
+              <div
+                className="customer-match-list wide"
+                aria-label="Customer matches"
+              >
                 {customerMatches.map((customer) => (
                   <button
                     className={`customer-match ${selectedCustomerId === customerIdOf(customer) ? "active" : ""}`}
@@ -1514,8 +1718,12 @@ function OrdersView({
                 value={selectedItemId}
               >
                 {visibleMenu.map((item) => (
-                  <option key={stringValue(item.itemId)} value={stringValue(item.itemId)}>
-                    {menuName(item)}{menuPrice(item) ? ` - ${menuPrice(item)}` : ""}
+                  <option
+                    key={stringValue(item.itemId)}
+                    value={stringValue(item.itemId)}
+                  >
+                    {menuName(item)}
+                    {menuPrice(item) ? ` - ${menuPrice(item)}` : ""}
                   </option>
                 ))}
               </select>
@@ -1535,12 +1743,25 @@ function OrdersView({
                 ))}
               </select>
             </label>
-            <Field label="Qty" name="qty" onChange={setQty} required type="number" value={qty} />
+            <Field
+              label="Qty"
+              name="qty"
+              onChange={setQty}
+              required
+              type="number"
+              value={qty}
+            />
             <input name="unitPrice" type="hidden" value={unitPrice} />
             <p className="price-lock">
               Price locked from menu: <strong>{money(unitPrice)} EGP</strong>
             </p>
-            <Field label="Discount" name="discount" onChange={setDiscount} type="number" value={discount} />
+            <Field
+              label="Discount"
+              name="discount"
+              onChange={setDiscount}
+              type="number"
+              value={discount}
+            />
             <Field
               label="Place Detail"
               list="orderPlaceOptions"
@@ -1562,13 +1783,31 @@ function OrdersView({
                 ))}
               </select>
             </label>
-            <Field label="Car Name" list="carNameOptions" name="carName" placeholder="Toyota, BMW, Hyundai" />
+            <Field
+              label="Car Name"
+              list="carNameOptions"
+              name="carName"
+              placeholder="Toyota, BMW, Hyundai"
+            />
             <datalist id="carNameOptions">
-              {["Toyota", "Hyundai", "Kia", "Mercedes", "BMW", "Nissan", "Chevrolet"].map((name) => (
+              {[
+                "Toyota",
+                "Hyundai",
+                "Kia",
+                "Mercedes",
+                "BMW",
+                "Nissan",
+                "Chevrolet",
+              ].map((name) => (
                 <option key={name} value={name} />
               ))}
             </datalist>
-            <Field label="Car Color" list="carColorOptions" name="carColor" placeholder="Black, White, Silver" />
+            <Field
+              label="Car Color"
+              list="carColorOptions"
+              name="carColor"
+              placeholder="Black, White, Silver"
+            />
             <datalist id="carColorOptions">
               {carColorOptions.map((color) => (
                 <option key={color} value={color} />
@@ -1581,22 +1820,32 @@ function OrdersView({
                 onChange={(event) => setPaymentStatus(event.target.value)}
                 value={paymentStatus}
               >
-                {(lists.paymentStatus || ["Paid", "Unpaid", "Partial"]).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {(lists.paymentStatus || ["Paid", "Unpaid", "Partial"]).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
-            <Field label="Paid Amount" name="paidAmount" onChange={setPaidAmount} type="number" value={paidAmount} />
+            <Field
+              label="Paid Amount"
+              name="paidAmount"
+              onChange={setPaidAmount}
+              type="number"
+              value={paidAmount}
+            />
             <label>
               Payment Method
               <select name="paymentMethod">
-                {(lists.paymentMethod || ["Cash", "Visa", "Wallet"]).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {(lists.paymentMethod || ["Cash", "Visa", "Wallet"]).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
             <label>
@@ -1615,20 +1864,29 @@ function OrdersView({
                 : "No menu item selected."}
             </p>
             <p className="wide total-hint">
-              Receipt total: {money(total)} EGP | Paid now: {money(paidAmount)} EGP | Remaining: {money(remaining)} EGP
+              Receipt total: {money(total)} EGP | Paid now: {money(paidAmount)}{" "}
+              EGP | Remaining: {money(remaining)} EGP
             </p>
             <label className="wide">
               Notes
               <textarea name="notes" />
             </label>
             <div className="actions wide">
-              <button className="secondary" onClick={(event) => onAddItem(event.currentTarget.form!)} type="button">
+              <button
+                className="secondary"
+                onClick={(event) => onAddItem(event.currentTarget.form!)}
+                type="button"
+              >
                 Add Item
               </button>
               <button className="primary" type="submit">
                 Submit Receipt
               </button>
-              <button className="secondary" onClick={onClearReceipt} type="button">
+              <button
+                className="secondary"
+                onClick={onClearReceipt}
+                type="button"
+              >
                 Clear Receipt
               </button>
             </div>
@@ -1636,17 +1894,25 @@ function OrdersView({
               {receiptItems.length ? (
                 <>
                   {receiptItems.map((item, index) => (
-                    <div className="receipt-row" key={`${item.itemId}-${index}`}>
+                    <div
+                      className="receipt-row"
+                      key={`${item.itemId}-${index}`}
+                    >
                       <div>
                         <strong>{item.itemName}</strong>
                         <br />
                         <span className="muted">
-                          {item.category}{item.size ? ` | ${item.size}` : ""}
+                          {item.category}
+                          {item.size ? ` | ${item.size}` : ""}
                         </span>
                       </div>
                       <div>x{item.qty}</div>
                       <div>{money(item.unitPrice)} EGP</div>
-                      <button className="danger" onClick={() => onRemoveItem(index)} type="button">
+                      <button
+                        className="danger"
+                        onClick={() => onRemoveItem(index)}
+                        type="button"
+                      >
                         Remove
                       </button>
                     </div>
@@ -1719,7 +1985,11 @@ function RewardsView({
     <section className="panel">
       <PanelHead
         title={isRewards ? "Rewards" : "Free Drink Winners"}
-        note={isRewards ? `${rewards.length} customer(s)` : `${winners.length} winner(s)`}
+        note={
+          isRewards
+            ? `${rewards.length} customer(s)`
+            : `${winners.length} winner(s)`
+        }
       />
       <div className="view-switch" aria-label="Rewards view">
         <button
@@ -1739,60 +2009,64 @@ function RewardsView({
       </div>
       {isRewards ? (
         <>
-        <FilterBar
-          id="rewards"
-          placeholder="Filter rewards"
-          value={filters.rewards}
-          onChange={onFilter}
-        />
-        <DataTable
-          columns={[
-            ["customerId", "ID"],
-            ["customerName", "Customer"],
-            ["phone", "Phone"],
-            ["favoriteDrink", "Favorite"],
-            ["paidDrinks", "Paid Drinks"],
-            ["earnedFreeDrinks", "Earned"],
-            ["generatedVouchers", "Generated"],
-            ["pendingVouchers", "Pending"],
-            ["redeemedVouchers", "Redeemed"],
-            ["freeDrinksReady", "Free Drinks"],
-            ["nextRewardProgress", "Progress"],
-            ["winner", "Winner"],
-            ["winnerMessage", "Message"],
-          ]}
-          rows={rewards}
-        />
+          <FilterBar
+            id="rewards"
+            placeholder="Filter rewards"
+            value={filters.rewards}
+            onChange={onFilter}
+          />
+          <DataTable
+            columns={[
+              ["customerId", "ID"],
+              ["customerName", "Customer"],
+              ["phone", "Phone"],
+              ["favoriteDrink", "Favorite"],
+              ["paidDrinks", "Paid Drinks"],
+              ["earnedFreeDrinks", "Earned"],
+              ["generatedVouchers", "Generated"],
+              ["pendingVouchers", "Pending"],
+              ["redeemedVouchers", "Redeemed"],
+              ["freeDrinksReady", "Free Drinks"],
+              ["nextRewardProgress", "Progress"],
+              ["winner", "Winner"],
+              ["winnerMessage", "Message"],
+            ]}
+            rows={rewards}
+          />
         </>
       ) : (
         <>
-        <FilterBar
-          id="winners"
-          placeholder="Filter winners"
-          value={filters.winners}
-          onChange={onFilter}
-        />
-        <DataTable
-          action={(row) =>
-            numberValue(row.freeDrinksReady) > 0 ? (
-              <button className="secondary" onClick={() => onGenerateVoucher(row)} type="button">
-                Generate Voucher
-              </button>
-            ) : (
-              <Pill value="Not ready" />
-            )
-          }
-          columns={[
-            ["customerId", "ID"],
-            ["customerName", "Customer"],
-            ["phone", "Phone"],
-            ["favoriteDrink", "Favorite"],
-            ["paidDrinks", "Paid Drinks"],
-            ["freeDrinksReady", "Free Drinks"],
-            ["winnerMessage", "Message"],
-          ]}
-          rows={winners}
-        />
+          <FilterBar
+            id="winners"
+            placeholder="Filter winners"
+            value={filters.winners}
+            onChange={onFilter}
+          />
+          <DataTable
+            action={(row) =>
+              numberValue(row.freeDrinksReady) > 0 ? (
+                <button
+                  className="secondary"
+                  onClick={() => onGenerateVoucher(row)}
+                  type="button"
+                >
+                  Generate Voucher
+                </button>
+              ) : (
+                <Pill value="Not ready" />
+              )
+            }
+            columns={[
+              ["customerId", "ID"],
+              ["customerName", "Customer"],
+              ["phone", "Phone"],
+              ["favoriteDrink", "Favorite"],
+              ["paidDrinks", "Paid Drinks"],
+              ["freeDrinksReady", "Free Drinks"],
+              ["winnerMessage", "Message"],
+            ]}
+            rows={winners}
+          />
         </>
       )}
     </section>
@@ -1822,19 +2096,32 @@ function VouchersView({
       <DataTable
         action={(row) => {
           const code = stringValue(row.voucherCode || row.code);
-          const redeemed = stringValue(row.redeemStatus).toLowerCase() === "redeemed";
+          const redeemed =
+            stringValue(row.redeemStatus).toLowerCase() === "redeemed";
           return (
             <div className="actions">
-              <button className="secondary" onClick={() => printVoucher(row)} type="button">
+              <button
+                className="secondary"
+                onClick={() => printVoucher(row)}
+                type="button"
+              >
                 Print
               </button>
-              <button className="secondary" onClick={() => void sendVoucherWhatsApp(row)} type="button">
+              <button
+                className="secondary"
+                onClick={() => void sendVoucherWhatsApp(row)}
+                type="button"
+              >
                 WhatsApp
               </button>
               {redeemed ? (
                 <Pill value="Redeemed" />
               ) : (
-                <button className="danger" onClick={() => onRedeem(code)} type="button">
+                <button
+                  className="danger"
+                  onClick={() => onRedeem(code)}
+                  type="button"
+                >
                   Redeem
                 </button>
               )}
@@ -1887,7 +2174,10 @@ function UnpaidView({
         title="Unpaid Tracker"
         note={`${visibleUnpaid.length} shown${paidCount ? `, ${paidCount} paid hidden/optional` : ""}`}
       />
-      <div className="view-switch unpaid-switch" aria-label="Unpaid receipt visibility">
+      <div
+        className="view-switch unpaid-switch"
+        aria-label="Unpaid receipt visibility"
+      >
         <button
           className={!showPaidReceipts ? "active" : ""}
           onClick={() => setShowPaidReceipts(false)}
@@ -1912,18 +2202,26 @@ function UnpaidView({
       {visibleUnpaid.length ? (
         <div className="unpaid-card-list">
           {visibleUnpaid.map((row, index) => {
-            const paid = stringValue(row.paymentStatus).toLowerCase() === "paid";
+            const paid =
+              stringValue(row.paymentStatus).toLowerCase() === "paid";
             const descriptionParts = unpaidDescriptionParts(row);
             const paidTotal = numberValue(row.totalPaid);
             const totalAmount = numberValue(row.totalAmount);
             const key = customerIdOf(row) || customerName(row);
             return (
-              <article className="unpaid-card" key={`${rowSearchText(row)}-${index}`}>
+              <article
+                className="unpaid-card"
+                key={`${rowSearchText(row)}-${index}`}
+              >
                 <div className="unpaid-card-head">
                   <div>
-                    <span className="mobile-card-label">{customerIdOf(row) || "Customer"}</span>
+                    <span className="mobile-card-label">
+                      {customerIdOf(row) || "Customer"}
+                    </span>
                     <strong>{customerName(row)}</strong>
-                    <span className="mobile-card-subtitle">{phoneOf(row) || "No phone"}</span>
+                    <span className="mobile-card-subtitle">
+                      {phoneOf(row) || "No phone"}
+                    </span>
                   </div>
                   <Pill value={paid ? "Paid" : "Unpaid"} />
                 </div>
@@ -1975,7 +2273,9 @@ function UnpaidView({
                     <button
                       className="secondary"
                       onClick={() =>
-                        setHiddenPaidCustomers((current) => new Set(current).add(key))
+                        setHiddenPaidCustomers((current) =>
+                          new Set(current).add(key),
+                        )
                       }
                       type="button"
                     >
@@ -1983,7 +2283,11 @@ function UnpaidView({
                     </button>
                   </div>
                 ) : (
-                  <button className="primary" onClick={() => onCollect(row)} type="button">
+                  <button
+                    className="primary"
+                    onClick={() => onCollect(row)}
+                    type="button"
+                  >
                     Collect Payment
                   </button>
                 )}
@@ -2043,10 +2347,16 @@ function HistoryView({
                 </div>
               </div>
               <div className="history-meta">
-                <span>Top: {stringValue(day.bestSellingItem) || "No drinks yet"}</span>
+                <span>
+                  Top: {stringValue(day.bestSellingItem) || "No drinks yet"}
+                </span>
                 <span>Qty: {stringValue(day.bestSellingQty || 0)}</span>
-                <span>Free drinks: {stringValue(day.redemptionCount || 0)}</span>
-                <span>Latest: {stringValue(day.latestReceiptSerial) || "None"}</span>
+                <span>
+                  Free drinks: {stringValue(day.redemptionCount || 0)}
+                </span>
+                <span>
+                  Latest: {stringValue(day.latestReceiptSerial) || "None"}
+                </span>
               </div>
             </article>
           ))}
@@ -2068,7 +2378,10 @@ function MenuView({
   onFilter: (id: string, value: string) => void;
 }) {
   const [category, setCategory] = useState("All");
-  const categories = ["All", ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean))];
+  const categories = [
+    "All",
+    ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
+  ];
   const visibleMenu =
     category === "All"
       ? menu
@@ -2101,7 +2414,11 @@ function MenuView({
           <article
             className="menu-circle"
             key={`${stringValue(item.itemId)}-${index}`}
-            style={{ "--section-color": categoryColor(stringValue(item.category)) } as CSSProperties}
+            style={
+              {
+                "--section-color": categoryColor(stringValue(item.category)),
+              } as CSSProperties
+            }
           >
             <span>{stringValue(item.category) || "Menu"}</span>
             <strong>{menuName(item)}</strong>
@@ -2135,26 +2452,30 @@ function OrderTicket({
   const title = [place, stringValue(order.customerName) || "Walk-in customer"]
     .filter(Boolean)
     .join(" - ");
-  const items =
-    Array.isArray(order.orderItems)
-      ? order.orderItems
-      : stringValue(order.orderDescription)
-          .split("+")
-          .map((item) => item.trim())
-          .filter(Boolean);
+  const items = Array.isArray(order.orderItems)
+    ? order.orderItems
+    : stringValue(order.orderDescription)
+        .split("+")
+        .map((item) => item.trim())
+        .filter(Boolean);
 
   return (
-    <article className={`order-ticket ${pickedUp && showPickupStrike ? "picked-up" : ""}`}>
+    <article
+      className={`order-ticket ${pickedUp && showPickupStrike ? "picked-up" : ""}`}
+    >
       <div className="ticket-head">
         <div className="ticket-title">
           <strong>{title}</strong>
           <span className="muted">
-            {stringValue(order.orderDateTime)} {order.staff ? `| ${stringValue(order.staff)}` : ""}
+            {stringValue(order.orderDateTime)}{" "}
+            {order.staff ? `| ${stringValue(order.staff)}` : ""}
           </span>
           {place && <span className="ticket-place">{place}</span>}
         </div>
         <div className="actions">
-          {showPaymentActions && <Pill value={stringValue(order.paymentStatus) || "Paid"} />}
+          {showPaymentActions && (
+            <Pill value={stringValue(order.paymentStatus) || "Paid"} />
+          )}
           {pickedUp && <Pill value="Picked Up" />}
         </div>
       </div>
@@ -2188,19 +2509,34 @@ function OrderTicket({
           </span>
         </div>
       )}
-      <div className={`ticket-actions ${ticketActionClass(showPaymentActions, showPickupAction)}`}>
+      <div
+        className={`ticket-actions ${ticketActionClass(showPaymentActions, showPickupAction)}`}
+      >
         {showPaymentActions && (
           <>
-            <button className="secondary" onClick={() => onSetPayment(payload, "Paid")} type="button">
+            <button
+              className="secondary"
+              onClick={() => onSetPayment(payload, "Paid")}
+              type="button"
+            >
               Paid
             </button>
-            <button className="secondary" onClick={() => onSetPayment(payload, "Unpaid")} type="button">
+            <button
+              className="secondary"
+              onClick={() => onSetPayment(payload, "Unpaid")}
+              type="button"
+            >
               Unpaid
             </button>
           </>
         )}
         {showPickupAction && (
-          <button className="primary" disabled={pickedUp} onClick={() => onDone(payload)} type="button">
+          <button
+            className="primary"
+            disabled={pickedUp}
+            onClick={() => onDone(payload)}
+            type="button"
+          >
             Picked Up
           </button>
         )}
@@ -2222,7 +2558,9 @@ function StockCard({ item }: { item: Row }) {
       <div className="stock-row">
         <div className="stock-row inner">
           <span className="stock-rank">{stringValue(item.rank)}</span>
-          <strong className="stock-name">{stringValue(item.itemName) || "Item"}</strong>
+          <strong className="stock-name">
+            {stringValue(item.itemName) || "Item"}
+          </strong>
         </div>
         <span className={`pill ${isAlert ? "unpaid" : "paid"}`}>{alert}</span>
       </div>
@@ -2237,7 +2575,10 @@ function StockCard({ item }: { item: Row }) {
   );
 }
 
-function ticketActionClass(showPaymentActions: boolean, showPickupAction: boolean) {
+function ticketActionClass(
+  showPaymentActions: boolean,
+  showPickupAction: boolean,
+) {
   if (showPaymentActions && !showPickupAction) return "payment-only";
   if (!showPaymentActions && showPickupAction) return "pickup-only";
   return "";
@@ -2294,7 +2635,10 @@ function DataTable({
           );
 
           return (
-            <article className="mobile-data-card" key={`${rowSearchText(row)}-${index}`}>
+            <article
+              className="mobile-data-card"
+              key={`${rowSearchText(row)}-${index}`}
+            >
               <div className="mobile-card-head">
                 <div>
                   <span className="mobile-card-label">{titleColumn[1]}</span>
@@ -2307,7 +2651,9 @@ function DataTable({
                     </span>
                   )}
                 </div>
-                {action && <div className="mobile-card-actions">{action(row)}</div>}
+                {action && (
+                  <div className="mobile-card-actions">{action(row)}</div>
+                )}
               </div>
               <dl className="mobile-card-grid">
                 {detailColumns.map(([key, label]) => (
@@ -2343,7 +2689,8 @@ function FormattedValue({ value }: { value: unknown }) {
     "picked-up",
   ];
 
-  if (pillValues.includes(key)) return <span className={`pill ${key}`}>{text}</span>;
+  if (pillValues.includes(key))
+    return <span className={`pill ${key}`}>{text}</span>;
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
     return <span className="date-pill">{text.slice(0, 10)}</span>;
   }
@@ -2443,7 +2790,9 @@ function FilterBar({
           ))}
         </div>
       )}
-      <span className="muted">Search by name, item, status, staff, phone, or code</span>
+      <span className="muted">
+        Search by name, item, status, staff, phone, or code
+      </span>
     </div>
   );
 }
@@ -2538,7 +2887,10 @@ function buildDashboardCounts(data: AppData): Dashboard {
     totalItems: base.totalItems ?? orders.length ?? 0,
     totalPaid:
       base.totalPaid ??
-      dashboardOrders.reduce((total, order) => total + numberValue(order.paidAmount), 0),
+      dashboardOrders.reduce(
+        (total, order) => total + numberValue(order.paidAmount),
+        0,
+      ),
     totalUnpaid:
       base.totalUnpaid ??
       unpaid.reduce((total, row) => total + numberValue(row.unpaidBalance), 0),
@@ -2581,9 +2933,11 @@ function buildDashboardOrders(orders: Row[]) {
     const group = grouped[key];
     group.itemCount = numberValue(group.itemCount) + 1;
     group.total = numberValue(group.total) + numberValue(order.total);
-    group.paidAmount = numberValue(group.paidAmount) + numberValue(order.paidAmount);
+    group.paidAmount =
+      numberValue(group.paidAmount) + numberValue(order.paidAmount);
     group.outstandingAmount =
-      numberValue(group.outstandingAmount) + numberValue(order.outstandingAmount);
+      numberValue(group.outstandingAmount) +
+      numberValue(order.outstandingAmount);
     group.orderPlace = group.orderPlace || orderPlaceOf(order);
     if (isPickedUp(order.orderStatus)) {
       group.pickedUpCount += 1;
@@ -2611,7 +2965,13 @@ function buildDashboardOrders(orders: Row[]) {
 function buildDashboardTopItems(orders: Row[]) {
   const grouped: Record<
     string,
-    { itemName: string; category: string; qtySold: number; totalSales: number; lastSold: string }
+    {
+      itemName: string;
+      category: string;
+      qtySold: number;
+      totalSales: number;
+      lastSold: string;
+    }
   > = {};
 
   orders.forEach((order) => {
@@ -2633,11 +2993,15 @@ function buildDashboardTopItems(orders: Row[]) {
 
     grouped[groupKey].qtySold += qtySold;
     grouped[groupKey].totalSales += numberValue(order.total);
-    grouped[groupKey].lastSold = stringValue(order.orderDateTime) || grouped[groupKey].lastSold;
+    grouped[groupKey].lastSold =
+      stringValue(order.orderDateTime) || grouped[groupKey].lastSold;
   });
 
   return Object.values(grouped)
-    .sort((left, right) => right.qtySold - left.qtySold || right.totalSales - left.totalSales)
+    .sort(
+      (left, right) =>
+        right.qtySold - left.qtySold || right.totalSales - left.totalSales,
+    )
     .slice(0, 8)
     .map((row, index) => ({
       ...row,
@@ -2655,15 +3019,18 @@ function buildDashboardTopItems(orders: Row[]) {
 
 function orderItemName(order: Row) {
   return (
-    stringValue(order.item || order.itemName || order.menuItem || order.productName) ||
-    "Item"
+    stringValue(
+      order.item || order.itemName || order.menuItem || order.productName,
+    ) || "Item"
   );
 }
 
 function orderQty(order: Row) {
   return Math.max(
     1,
-    numberValue(order.qty || order.quantity || order.count || order.itemCount) || 1,
+    numberValue(
+      order.qty || order.quantity || order.count || order.itemCount,
+    ) || 1,
   );
 }
 
@@ -2683,7 +3050,8 @@ function buildRewards(customers: Row[], orders: Row[], vouchers: Row[]) {
       );
       const generatedVouchers = customerVouchers.length;
       const redeemedVouchers = customerVouchers.filter(
-        (voucher) => stringValue(voucher.redeemStatus).toLowerCase() === "redeemed",
+        (voucher) =>
+          stringValue(voucher.redeemStatus).toLowerCase() === "redeemed",
       ).length;
       const pendingVouchers = generatedVouchers - redeemedVouchers;
       const freeDrinksReady = Math.max(0, earnedFreeDrinks - generatedVouchers);
@@ -2726,7 +3094,9 @@ function paidEligibleDrinkQty(order: Row) {
 function isOrderPaidForRewards(order: Row) {
   const status = stringValue(order.paymentStatus).toLowerCase();
   if (status === "paid") return true;
-  return numberValue(order.total) > 0 && numberValue(order.outstandingAmount) <= 0;
+  return (
+    numberValue(order.total) > 0 && numberValue(order.outstandingAmount) <= 0
+  );
 }
 
 function isRewardEligibleOrder(order: Row) {
@@ -2735,7 +3105,8 @@ function isRewardEligibleOrder(order: Row) {
 }
 
 function isDrinkOrder(order: Row) {
-  const text = `${stringValue(order.category)} ${orderItemName(order)}`.toLowerCase();
+  const text =
+    `${stringValue(order.category)} ${orderItemName(order)}`.toLowerCase();
   if (
     [
       "cake",
@@ -2783,7 +3154,9 @@ function rowsMatchCustomer(row: Row, customer: Row) {
   const customerPhone = digitsOnly(phoneOf(customer) || customer.customerPhone);
   if (rowPhone && customerPhone && rowPhone === customerPhone) return true;
 
-  return customerNameKey(row) && customerNameKey(row) === customerNameKey(customer);
+  return (
+    customerNameKey(row) && customerNameKey(row) === customerNameKey(customer)
+  );
 }
 
 function customerNameKey(row: Row) {
@@ -2871,8 +3244,14 @@ function receiptPayloadFrom(value: string) {
 }
 
 function isPickedUp(value: unknown) {
-  const normalized = stringValue(value).toLowerCase().replace(/[-_\s]+/g, "");
-  return normalized === "done" || normalized === "pickedup" || normalized === "pickup";
+  const normalized = stringValue(value)
+    .toLowerCase()
+    .replace(/[-_\s]+/g, "");
+  return (
+    normalized === "done" ||
+    normalized === "pickedup" ||
+    normalized === "pickup"
+  );
 }
 
 function orderPlaceOf(row: Row) {
@@ -2881,7 +3260,9 @@ function orderPlaceOf(row: Row) {
   );
   if (direct) return direct;
 
-  const match = stringValue(row.notes).match(/(?:Place|Table|Location):\s*([^|]+)/i);
+  const match = stringValue(row.notes).match(
+    /(?:Place|Table|Location):\s*([^|]+)/i,
+  );
   return match ? stringValue(match[1]) : "";
 }
 
@@ -2890,7 +3271,8 @@ function printVoucher(row: Row) {
   const drink = favoriteDrink(row) || "your favorite drink";
   const code = stringValue(row.voucherCode || row.code);
   const reward = stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`;
-  const generatedAt = stringValue(row.generatedAt || row.date) || new Date().toLocaleDateString();
+  const generatedAt =
+    stringValue(row.generatedAt || row.date) || new Date().toLocaleDateString();
   const win = window.open("", "_blank", "width=460,height=760");
   if (!win) return;
 
@@ -2978,9 +3360,13 @@ function voucherWhatsAppText(row: Row) {
 async function shareVoucherImage(row: Row) {
   try {
     const blob = await voucherPngBlob(row);
-    const file = new File([blob], `${stringValue(row.voucherCode || "joy-corner-voucher")}.png`, {
-      type: "image/png",
-    });
+    const file = new File(
+      [blob],
+      `${stringValue(row.voucherCode || "joy-corner-voucher")}.png`,
+      {
+        type: "image/png",
+      },
+    );
     const nav = navigator as Navigator & {
       canShare?: (data: ShareData) => boolean;
       share?: (data: ShareData) => Promise<void>;
@@ -3017,12 +3403,18 @@ async function voucherPngBlob(row: Row) {
   URL.revokeObjectURL(url);
 
   return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Voucher image failed."))), "image/png");
+    canvas.toBlob(
+      (blob) =>
+        blob ? resolve(blob) : reject(new Error("Voucher image failed.")),
+      "image/png",
+    );
   });
 }
 
 function openVoucherImage(row: Row) {
-  const url = URL.createObjectURL(new Blob([voucherSvg(row)], { type: "image/svg+xml" }));
+  const url = URL.createObjectURL(
+    new Blob([voucherSvg(row)], { type: "image/svg+xml" }),
+  );
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
@@ -3031,7 +3423,9 @@ function voucherSvg(row: Row) {
   const customer = escapeHtml(customerName(row) || "Joy Corner Guest");
   const drink = escapeHtml(favoriteDrink(row) || "your favorite drink");
   const code = escapeHtml(stringValue(row.voucherCode || row.code));
-  const reward = escapeHtml(stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`);
+  const reward = escapeHtml(
+    stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`,
+  );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
     <defs>
@@ -3071,7 +3465,10 @@ function whatsAppPhone(phone: string) {
 }
 
 function formObject(form: HTMLFormElement) {
-  return Object.fromEntries(new FormData(form).entries()) as Record<string, unknown>;
+  return Object.fromEntries(new FormData(form).entries()) as Record<
+    string,
+    unknown
+  >;
 }
 
 function tabsForRole(role: StaffRole) {
@@ -3147,12 +3544,7 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "markReceiptDone",
     "debugAuth",
   ]),
-  barista: new Set([
-    "appData",
-    "getAppData",
-    "markReceiptDone",
-    "debugAuth",
-  ]),
+  barista: new Set(["appData", "getAppData", "markReceiptDone", "debugAuth"]),
 };
 
 function canRunAction(role: StaffRole, action: string) {
@@ -3185,9 +3577,7 @@ function unpaidDescriptionParts(row: Row) {
   return description
     .split(/\s*\|\s*|\n+|;+/)
     .flatMap((part) =>
-      part
-        .split(/(?=\d{4}-\d{2}-\d{2}\s+-\s+)/)
-        .map((item) => item.trim()),
+      part.split(/(?=\d{4}-\d{2}-\d{2}\s+-\s+)/).map((item) => item.trim()),
     )
     .filter(Boolean)
     .slice(0, 6);
@@ -3219,7 +3609,9 @@ function enrichOrderCustomerPhone(order: Row, customers: Row[]) {
   const orderCustomerName = stringValue(order.customerName).toLowerCase();
   const customer = customers.find((row) => {
     if (orderCustomerId && customerIdOf(row) === orderCustomerId) return true;
-    return orderCustomerName && customerName(row).toLowerCase() === orderCustomerName;
+    return (
+      orderCustomerName && customerName(row).toLowerCase() === orderCustomerName
+    );
   });
 
   const phone = phoneOf(customer);
@@ -3259,7 +3651,9 @@ function localPhoneDisplay(value: string) {
 
 function favoriteDrink(row?: Row) {
   if (!row) return "";
-  return stringValue(row.favoriteDrink || row.favouriteDrink || row.favorite || row.drink);
+  return stringValue(
+    row.favoriteDrink || row.favouriteDrink || row.favorite || row.drink,
+  );
 }
 
 function menuName(row: Row) {
@@ -3268,7 +3662,10 @@ function menuName(row: Row) {
 
 function menuPrice(row: Row) {
   return stringValue(
-    row.priceText || row.priceTextEditLater || row["priceTextEditLater)"] || row.price,
+    row.priceText ||
+      row.priceTextEditLater ||
+      row["priceTextEditLater)"] ||
+      row.price,
   );
 }
 
@@ -3358,9 +3755,10 @@ function errorMessage(error: unknown) {
 
 function isFirebaseAuthConfigurationError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = typeof error === "object" && error && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : "";
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
 
   return (
     code === "auth/configuration-not-found" ||
@@ -3370,9 +3768,10 @@ function isFirebaseAuthConfigurationError(error: unknown) {
 
 function isFirebaseInvalidCredentialError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = typeof error === "object" && error && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : "";
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
 
   return (
     code === "auth/invalid-credential" ||

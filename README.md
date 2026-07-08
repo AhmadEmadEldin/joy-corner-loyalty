@@ -28,6 +28,7 @@ Laptop / VS Code
 - Backend auth, role checks, and Google Sheets access: `server/googleSheetsBackend.ts`
 - Sheet write schema: `server/sheetSchema.ts`
 - Normalized menu source and price resolver: `src/menuRepository.ts`
+- Shared receipt money/payment calculation: `src/receiptCalculator.ts`
 - Neon reporting schema: `docs/neon-schema.sql`
 - Firebase Hosting/Functions config: `firebase.json`
 - Firestore rules: `firestore.rules`
@@ -67,6 +68,10 @@ Expected tabs:
 The backend also supports existing helper tabs used by the app, such as `Generated Vouchers`, `Staff`/`Staff Users`, and `History`/`Day History`.
 
 The staff and customer ordering interfaces use `src/joy_corner_menu_with_sizes.json` through `src/menuRepository.ts` as the menu price source of truth. Waiters select a menu item and size; visible unit-price editing is disabled, and the backend resolves the submitted item/size price again before writing the order.
+
+Receipt line totals and paid amounts are recalculated with `src/receiptCalculator.ts` on both the frontend and backend. The waiter UI blocks concurrent submissions, sends an idempotency key with each receipt, and the backend returns the existing receipt when the same idempotency key is seen again.
+
+End Day reset is owner-only and writes an immutable Day History row before marking same-day order rows as archived. If the current `YYYY-MM-DD` business date already exists in Day History, the backend rejects the reset with HTTP `409` to prevent duplicate closure. Customer rows, loyalty history, generated vouchers, payments, and unpaid balances are not deleted by the reset flow.
 
 ## Firestore Staff Users
 
