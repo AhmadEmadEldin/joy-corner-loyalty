@@ -12,6 +12,7 @@ import {
   watchFirebaseUser,
   watchStaffAuth,
 } from "./firebase";
+import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -61,13 +62,14 @@ type ApiResponse = {
 };
 
 type ReceiptItem = {
+  category: string;
   itemId: string;
   itemName: string;
-  category: string;
   qty: number;
-  unitPrice: number;
+  size: string;
   discount: number;
   total: number;
+  unitPrice: number;
 };
 
 type ReceiptPayload = {
@@ -87,7 +89,8 @@ type TabId =
   | "vouchers"
   | "unpaid"
   | "history"
-  | "menu";
+  | "menu"
+  | "owner";
 
 const tabs: Array<[TabId, string]> = [
   ["dashboard", "Dashboard"],
@@ -98,6 +101,7 @@ const tabs: Array<[TabId, string]> = [
   ["unpaid", "Unpaid"],
   ["history", "History"],
   ["menu", "Menu"],
+  ["owner", "Owner"],
 ];
 
 function TabIcon({ id }: { id: TabId }) {
@@ -140,6 +144,12 @@ function TabIcon({ id }: { id: TabId }) {
         <path d="M7 8h10" />
         <path d="M8 12h8" />
         <path d="M8 16h5" />
+      </>
+    ),
+    owner: (
+      <>
+        <path d="M12 3 20 7v5c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V7z" />
+        <path d="M9 12l2 2 4-5" />
       </>
     ),
     rewards: (
@@ -199,7 +209,7 @@ export function App() {
   const visibleTabs = useMemo(() => tabsForRole(currentRole), [currentRole]);
   const connectedData = useMemo(() => ensureConnectedData(data), [data]);
   const customers = connectedData.customers || [];
-  const menu = connectedData.menu || [];
+  const menu = connectedData.menu?.length ? connectedData.menu : normalizedMenu;
   const lists = connectedData.lists || {};
   const dashboardOrders = (connectedData.dashboardOrders || [])
     .map((order) => enrichOrderCustomerPhone(order, customers))
@@ -335,6 +345,10 @@ export function App() {
   function addReceiptItemFromForm(form: HTMLFormElement) {
     const itemId = stringValue(form.elements.namedItem("itemId"));
     const selectedItem = menu.find((item) => stringValue(item.itemId) === itemId);
+    const selectedSize =
+      stringValue(form.elements.namedItem("size")) ||
+      stringValue(selectedItem?.standardSize) ||
+      "Standard";
 
     if (!selectedItem) {
       setStatus("Choose a menu item first.");
@@ -342,22 +356,21 @@ export function App() {
     }
 
     const qty = numberValue(form.elements.namedItem("qty")) || 1;
-    const unitPrice =
-      numberValue(form.elements.namedItem("unitPrice")) ||
-      numberValue(selectedItem.suggestedPrice) ||
-      firstPrice(menuPrice(selectedItem));
+    const resolvedPrice = resolveMenuPrice(itemId, selectedSize, menuName(selectedItem));
+    const unitPrice = resolvedPrice?.price || numberValue(selectedItem.suggestedPrice) || firstPrice(menuPrice(selectedItem));
     const discount = numberValue(form.elements.namedItem("discount"));
     const total = Math.max(0, qty * unitPrice - discount);
 
     setReceiptItems((items) => [
       {
-        itemId,
-        itemName: menuName(selectedItem),
-        category: stringValue(selectedItem.category),
+        category: resolvedPrice?.category || stringValue(selectedItem.category),
+        itemId: resolvedPrice?.itemId || itemId,
+        itemName: resolvedPrice?.itemName || menuName(selectedItem),
         qty,
-        unitPrice,
+        size: resolvedPrice?.size || selectedSize,
         discount,
         total,
+        unitPrice,
       },
       ...items,
     ]);
@@ -383,6 +396,10 @@ export function App() {
       stringValue(payload.customerName);
     payload.phone = phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
     payload.items = items;
+    payload.idempotencyKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     payload.orderPlace = composeServicePlace(payload);
     delete payload.customerSearch;
     delete payload.serviceType;
@@ -477,6 +494,26 @@ export function App() {
 
   async function resetDay() {
     await callAndReload("resetDay", {}, "Day archived and dashboard reset.");
+  }
+
+  async function runOwnerAction(action: string, message: string) {
+    if (!canRunAction(currentRole, action)) {
+      setStatus("This account does not have permission for that action.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setStatus("Checking system...");
+      const response = await callServer(action, {});
+      const detail = response.message ? ` ${response.message}` : "";
+      setStatus(`${message}${detail}`);
+    } catch (error) {
+      console.error(`Owner action ${action} failed`, error);
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submitAuthForm(event: FormEvent<HTMLFormElement>) {
@@ -688,7 +725,15 @@ export function App() {
           />
         )}
 
-        {currentRole === "owner" && <OwnerTools onResetDay={() => void resetDay()} />}
+        {activeTab === "owner" && currentRole === "owner" && (
+          <OwnerTools
+            onCheckHealth={() => void runOwnerAction("debugSheets", "Google Sheets health checked.")}
+            onOrganizeSheets={() => void runOwnerAction("organizeSpreadsheet", "Google Sheets hierarchy synchronized.")}
+            onResetDay={() => void resetDay()}
+            staffProfile={staffProfile}
+            status={status}
+          />
+        )}
 
         <div className="scroll-dock">
           <button
@@ -969,45 +1014,75 @@ function CustomerOrderPage() {
   );
 }
 
-function OwnerTools({ onResetDay }: { onResetDay: () => void }) {
+function OwnerTools({
+  onCheckHealth,
+  onOrganizeSheets,
+  onResetDay,
+  staffProfile,
+  status,
+}: {
+  onCheckHealth: () => void;
+  onOrganizeSheets: () => void;
+  onResetDay: () => void;
+  staffProfile: StaffProfile;
+  status: string;
+}) {
   const [confirmation, setConfirmation] = useState("");
   const canReset = confirmation === "RESET JOY CORNER DAY";
 
   return (
-    <section className="panel owner-tools">
-      <PanelHead title="Owner Controls" note="Danger zone" />
-      <div className="panel-body owner-tools-body">
-        <div>
-          <h3>End Day / Reset</h3>
-          <p className="muted">
-            Only owner accounts can see this area. Before connecting a destructive
-            backend reset, archive the day first so customer history and reward
-            counts stay safe.
-          </p>
+    <div className="owner-grid">
+      <section className="panel owner-tools">
+        <PanelHead title="Owner Controls" note={staffProfile.email} />
+        <div className="panel-body owner-action-grid">
+          <button className="secondary" onClick={onCheckHealth} type="button">
+            Check Sheets Health
+          </button>
+          <button className="secondary" onClick={onOrganizeSheets} type="button">
+            Sync Sheet Hierarchy
+          </button>
+          <div className="owner-status">
+            <span className="muted">Latest system message</span>
+            <strong>{status}</strong>
+          </div>
         </div>
-        <label>
-          Confirmation
-          <input
-            onChange={(event) => setConfirmation(event.target.value)}
-            placeholder="Type RESET JOY CORNER DAY"
-            value={confirmation}
-          />
-        </label>
-        <button
-          className="danger"
-          disabled={!canReset}
-          onClick={() => {
-            const confirmed = window.confirm(
-              "Archive today's sales and reset the live dashboard? Customer history and rewards stay in the sheet.",
-            );
-            if (confirmed) onResetDay();
-          }}
-          type="button"
-        >
-          End Day Reset
-        </button>
-      </div>
-    </section>
+      </section>
+
+      <section className="panel owner-tools">
+        <PanelHead title="Danger Zone" note="End day archive" />
+        <div className="panel-body owner-tools-body">
+          <div>
+            <h3>End Day / Reset</h3>
+            <p className="muted">
+              Archives the current business day, marks today&apos;s order rows as
+              archived, and preserves customer history, loyalty totals, and unpaid
+              balances.
+            </p>
+          </div>
+          <label>
+            Confirmation
+            <input
+              onChange={(event) => setConfirmation(event.target.value)}
+              placeholder="Type RESET JOY CORNER DAY"
+              value={confirmation}
+            />
+          </label>
+          <button
+            className="danger"
+            disabled={!canReset}
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Archive today's sales and reset the live dashboard? Customer history, rewards, and unpaid balances stay available.",
+              );
+              if (confirmed) onResetDay();
+            }}
+            type="button"
+          >
+            End Day Reset
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1227,6 +1302,7 @@ function OrdersView({
 }) {
   const [category, setCategory] = useState("All");
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [selectedSize, setSelectedSize] = useState("");
   const [qty, setQty] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
   const [discount, setDiscount] = useState("0");
@@ -1254,6 +1330,7 @@ function OrdersView({
   const selectedItem =
     menu.find((item) => stringValue(item.itemId) === selectedItemId) ||
     visibleMenu[0];
+  const selectedSizes = selectedItem ? menuSizesFor(selectedItem) : [];
   const receiptTotal = receiptItems.reduce((total, item) => total + item.total, 0);
   const singleTotal = Math.max(0, numberValue(qty) * numberValue(unitPrice) - numberValue(discount));
   const total = receiptItems.length ? receiptTotal : singleTotal;
@@ -1265,11 +1342,27 @@ function OrdersView({
       return;
     }
     if (selectedItem) {
-      const price = stringValue(selectedItem.suggestedPrice) || String(firstPrice(menuPrice(selectedItem)) || "");
-      setUnitPrice(price);
+      const sizes = menuSizesFor(selectedItem);
+      const nextSize =
+        sizes.find((size) => size.size === selectedSize)?.size ||
+        stringValue(selectedItem.standardSize) ||
+        sizes[0]?.size ||
+        "Standard";
+      const resolvedPrice = resolveMenuPrice(
+        stringValue(selectedItem.itemId),
+        nextSize,
+        menuName(selectedItem),
+      );
+      const price =
+        resolvedPrice?.price ||
+        sizes.find((size) => size.size === nextSize)?.price ||
+        numberValue(selectedItem.suggestedPrice) ||
+        firstPrice(menuPrice(selectedItem));
+      setUnitPrice(price ? String(price) : "");
+      setSelectedSize(nextSize);
       setSelectedItemId(stringValue(selectedItem.itemId));
     }
-  }, [category, selectedItemId, menu.length]);
+  }, [category, selectedItemId, selectedSize, menu.length]);
 
   useEffect(() => {
     if (paymentStatus === "Paid") setPaidAmount(total ? String(total) : "");
@@ -1413,7 +1506,10 @@ function OrdersView({
               Menu Item
               <select
                 name="itemId"
-                onChange={(event) => setSelectedItemId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedItemId(event.target.value);
+                  setSelectedSize("");
+                }}
                 required
                 value={selectedItemId}
               >
@@ -1424,8 +1520,26 @@ function OrdersView({
                 ))}
               </select>
             </label>
+            <label>
+              Size
+              <select
+                name="size"
+                onChange={(event) => setSelectedSize(event.target.value)}
+                required
+                value={selectedSize}
+              >
+                {selectedSizes.map((size) => (
+                  <option key={size.size} value={size.size}>
+                    {size.size} - {money(size.price)} EGP
+                  </option>
+                ))}
+              </select>
+            </label>
             <Field label="Qty" name="qty" onChange={setQty} required type="number" value={qty} />
-            <Field label="Unit Price" name="unitPrice" onChange={setUnitPrice} type="number" value={unitPrice} />
+            <input name="unitPrice" type="hidden" value={unitPrice} />
+            <p className="price-lock">
+              Price locked from menu: <strong>{money(unitPrice)} EGP</strong>
+            </p>
             <Field label="Discount" name="discount" onChange={setDiscount} type="number" value={discount} />
             <Field
               label="Place Detail"
@@ -1526,7 +1640,9 @@ function OrdersView({
                       <div>
                         <strong>{item.itemName}</strong>
                         <br />
-                        <span className="muted">{item.category}</span>
+                        <span className="muted">
+                          {item.category}{item.size ? ` | ${item.size}` : ""}
+                        </span>
                       </div>
                       <div>x{item.qty}</div>
                       <div>{money(item.unitPrice)} EGP</div>
@@ -2961,7 +3077,8 @@ function formObject(form: HTMLFormElement) {
 function tabsForRole(role: StaffRole) {
   if (role === "barista") return tabs.filter(([id]) => id === "dashboard");
   if (role === "waiter") return tabs.filter(([id]) => id === "orders");
-  return tabs;
+  if (role === "owner") return tabs;
+  return tabs.filter(([id]) => id !== "owner");
 }
 
 const rolePermissions: Record<StaffRole, Set<string>> = {
@@ -2981,6 +3098,7 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "customerHistory",
     "historyDays",
     "dayHistory",
+    "organizeSpreadsheet",
     "debugAuth",
     "debugSheets",
   ]),
@@ -3152,6 +3270,27 @@ function menuPrice(row: Row) {
   return stringValue(
     row.priceText || row.priceTextEditLater || row["priceTextEditLater)"] || row.price,
   );
+}
+
+function menuSizesFor(row: Row) {
+  if (Array.isArray(row.sizes)) {
+    return row.sizes
+      .map((size) => {
+        const record = size as Row;
+        return {
+          price: numberValue(record.price),
+          size: stringValue(record.size) || "Standard",
+        };
+      })
+      .filter((size) => size.price > 0);
+  }
+
+  return [
+    {
+      price: numberValue(row.suggestedPrice) || firstPrice(menuPrice(row)),
+      size: stringValue(row.standardSize) || "Standard",
+    },
+  ].filter((size) => size.price > 0);
 }
 
 function categoryColor(category: string) {

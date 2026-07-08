@@ -58,6 +58,15 @@ Compatibility Google Sheets variable still accepted by local code:
 GOOGLE_SHEETS_SPREADSHEET_ID
 ```
 
+Optional backend-only Neon reporting variables:
+
+```text
+NEON_DATABASE_URL
+NEON_BACKUP_ENABLED
+```
+
+Do not prefix Neon values with `VITE_`; the browser must never receive the database connection string. Apply `docs/neon-schema.sql` before enabling a live Neon backup/reconciliation worker.
+
 Do not keep a root `.env` file before deploying Firebase Functions. Firebase CLI loads root `.env` as Functions runtime env and rejects reserved `FIREBASE_*` keys. Use `.env.local` for local builds and scripts.
 
 ## Firebase Setup

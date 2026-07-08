@@ -522,6 +522,22 @@ textarea {
   font-weight: 800;
 }
 
+.price-lock {
+  align-self: end;
+  background: rgba(255, 246, 229, 0.78);
+  border: 1px solid rgba(217, 173, 99, 0.28);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.price-lock strong {
+  color: var(--brand);
+}
+
 .filter-bar {
   align-items: center;
   background:
@@ -1413,6 +1429,31 @@ tbody tr:hover {
   border-color: #d8a59a;
 }
 
+.owner-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.owner-action-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(180px, 220px)) minmax(260px, 1fr);
+}
+
+.owner-status {
+  background: rgba(255, 246, 229, 0.74);
+  border: 1px solid rgba(217, 173, 99, 0.24);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.owner-status strong {
+  color: var(--brand);
+  font-size: 13px;
+}
+
 .owner-tools-body {
   display: grid;
   gap: 12px;
@@ -1491,6 +1532,10 @@ tbody tr:hover {
   }
 
   .owner-tools-body {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-action-grid {
     grid-template-columns: 1fr;
   }
 

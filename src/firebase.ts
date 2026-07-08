@@ -33,6 +33,7 @@ export type StaffProfile = {
   createdAt?: unknown;
   displayName: string;
   email: string;
+  permissions?: string[];
   role: StaffRole;
   type?: "staff";
   uid: string;

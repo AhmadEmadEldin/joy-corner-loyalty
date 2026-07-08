@@ -19,6 +19,7 @@
     "importHelpers": true,
     "noImplicitOverride": true,
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "rootDir": ".",
     "outDir": "dist",

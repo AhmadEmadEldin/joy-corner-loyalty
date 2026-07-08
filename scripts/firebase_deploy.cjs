@@ -11,7 +11,7 @@ if (only) {
 const result = spawnSync("firebase", args, {
   env: {
     ...process.env,
-    FUNCTIONS_DISCOVERY_TIMEOUT: process.env.FUNCTIONS_DISCOVERY_TIMEOUT || "60",
+    FUNCTIONS_DISCOVERY_TIMEOUT: process.env.FUNCTIONS_DISCOVERY_TIMEOUT || "180",
   },
   shell: process.platform === "win32",
   stdio: "inherit",

@@ -27,6 +27,8 @@ Laptop / VS Code
 - Firebase Function entry: `firebase-functions.cjs`
 - Backend auth, role checks, and Google Sheets access: `server/googleSheetsBackend.ts`
 - Sheet write schema: `server/sheetSchema.ts`
+- Normalized menu source and price resolver: `src/menuRepository.ts`
+- Neon reporting schema: `docs/neon-schema.sql`
 - Firebase Hosting/Functions config: `firebase.json`
 - Firestore rules: `firestore.rules`
 - Required environment variables: `.env.example`
@@ -64,6 +66,8 @@ Expected tabs:
 
 The backend also supports existing helper tabs used by the app, such as `Generated Vouchers`, `Staff`/`Staff Users`, and `History`/`Day History`.
 
+The staff and customer ordering interfaces use `src/joy_corner_menu_with_sizes.json` through `src/menuRepository.ts` as the menu price source of truth. Waiters select a menu item and size; visible unit-price editing is disabled, and the backend resolves the submitted item/size price again before writing the order.
+
 ## Firestore Staff Users
 
 Every staff member must have a Firebase Auth email/password account and a matching Firestore document:
@@ -92,6 +96,17 @@ Required fields:
 
 Allowed roles are `owner`, `manager`, `cashier`, `waiter`, and `barista`.
 Use Firestore field types exactly: `email`, `displayName`, `type`, and `role` are strings; `active` is a boolean set to `true`.
+
+Optional feature-level permission fields:
+
+```json
+{
+  "permissions": ["payments.create", "unpaid.update"],
+  "revokedPermissions": ["customers.delete"]
+}
+```
+
+Owners receive all backend permissions automatically. Other staff keep their role defaults unless an owner grants a permission in `permissions` or blocks one in `revokedPermissions`.
 
 If your `Staff` sheet has `Email`, `Password`, `Role`, `Name`, and `Active`, run:
 
@@ -216,3 +231,14 @@ firebase functions:secrets:set CANVA_CLIENT_ID
 firebase functions:secrets:set CANVA_CLIENT_SECRET
 firebase functions:secrets:set CANVA_REFRESH_TOKEN
 ```
+
+## Optional Neon Reporting Database
+
+Neon is prepared as a server-side reporting and backup target. Add these backend-only values when the database is provisioned:
+
+```text
+NEON_DATABASE_URL
+NEON_BACKUP_ENABLED=true
+```
+
+Apply `docs/neon-schema.sql` to the Neon database before enabling backup writes. The current production source of truth remains Firebase Functions + Google Sheets until a live Neon connection and reconciliation job are configured.
