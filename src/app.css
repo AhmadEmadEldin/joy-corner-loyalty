@@ -1264,7 +1264,7 @@ tbody tr:hover {
 }
 
 .ticket-actions.pickup-only {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .ticket-actions.payment-only {
@@ -1275,6 +1275,27 @@ tbody tr:hover {
   font-size: 13px;
   min-height: 44px;
   padding: 9px 8px;
+}
+
+.ticket-actions .accept {
+  background: linear-gradient(180deg, #f4c66f, #d99b2d);
+  border-color: rgba(122, 74, 10, 0.34);
+  color: #2b1a09;
+  font-weight: 900;
+}
+
+.ticket-actions .pickup {
+  background: linear-gradient(180deg, #5f7845, #3f5b2c);
+  border-color: rgba(45, 74, 31, 0.38);
+  color: #fff8dd;
+  font-weight: 900;
+}
+
+.order-ticket.accepted {
+  background:
+    radial-gradient(circle at 0 0, rgba(235, 177, 73, 0.2), transparent 30%),
+    linear-gradient(180deg, #fffaf0, #fff0cc);
+  border-left-color: #d99b2d;
 }
 
 .order-ticket.picked-up,
@@ -1564,6 +1585,45 @@ tbody tr:hover {
   grid-template-columns: repeat(2, minmax(180px, 220px)) minmax(260px, 1fr);
 }
 
+.owner-simple-grid {
+  align-items: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(280px, 1.25fr) minmax(220px, 0.9fr) repeat(
+      3,
+      minmax(130px, 0.5fr)
+    );
+}
+
+.owner-reset-card {
+  background: rgba(255, 246, 229, 0.84);
+  border: 1px solid rgba(217, 173, 99, 0.28);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.owner-reset-card h3,
+.owner-admin-stack h3 {
+  margin: 0;
+}
+
+.owner-advanced {
+  padding: 0;
+}
+
+.owner-advanced summary {
+  cursor: pointer;
+  font-weight: 900;
+  padding: 16px;
+}
+
+.owner-admin-stack {
+  display: grid;
+  gap: 18px;
+}
+
 .owner-status {
   background: rgba(255, 246, 229, 0.74);
   border: 1px solid rgba(217, 173, 99, 0.24);
@@ -1660,6 +1720,10 @@ tbody tr:hover {
   }
 
   .owner-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-simple-grid {
     grid-template-columns: 1fr;
   }
 

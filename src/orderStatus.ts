@@ -2,8 +2,8 @@ import { OrderStatus } from "./domain";
 
 export const orderStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
   Draft: ["Submitted", "Cancelled"],
-  Submitted: ["Accepted", "Preparing", "Cancelled"],
-  Accepted: ["Preparing", "Ready", "Cancelled"],
+  Submitted: ["Accepted", "Preparing", "Served", "Cancelled"],
+  Accepted: ["Preparing", "Ready", "Served", "Cancelled"],
   Preparing: ["Ready", "Cancelled"],
   Ready: ["Served", "Awaiting Payment", "Paid", "Unpaid"],
   Served: ["Awaiting Payment", "Paid", "Unpaid"],

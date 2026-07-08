@@ -1342,283 +1342,281 @@ function OwnerTools({
   return (
     <div className="owner-grid">
       <section className="panel owner-tools">
-        <PanelHead title="Owner Controls" note={staffProfile.email} />
-        <div className="panel-body owner-action-grid">
+        <PanelHead title="Owner" note={staffProfile.email} />
+        <div className="panel-body owner-simple-grid">
+          <div className="owner-reset-card">
+            <h3>End Day Reset</h3>
+            <p className="muted">
+              Archives today&apos;s sales and clears the live dashboard while
+              keeping customers, rewards, and unpaid balances.
+            </p>
+            <label>
+              Confirmation
+              <input
+                onChange={(event) => setConfirmation(event.target.value)}
+                placeholder="Type RESET JOY CORNER DAY"
+                value={confirmation}
+              />
+            </label>
+            <button
+              className="danger"
+              disabled={!canReset || loading}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  "Archive today's sales and reset the live dashboard? Customer history, rewards, and unpaid balances stay available.",
+                );
+                if (confirmed) onResetDay();
+              }}
+              type="button"
+            >
+              Reset Done
+            </button>
+          </div>
+          <div className="owner-status">
+            <span className="muted">Latest system message</span>
+            <strong>{status}</strong>
+          </div>
           <button
             className="secondary"
             disabled={loading}
             onClick={onRefresh}
             type="button"
           >
-            Refresh Owner Data
-          </button>
-          <button className="secondary" onClick={onCheckHealth} type="button">
-            Check Sheets Health
+            Refresh
           </button>
           <button
-            className="secondary"
+            className="primary"
+            disabled={loading}
             onClick={onOrganizeSheets}
             type="button"
           >
-            Sync Sheet Hierarchy
+            Fix Excel Sheet
           </button>
-          <button
-            className="secondary"
-            disabled={loading}
-            onClick={onSyncMenu}
-            type="button"
-          >
-            Seed Menu Sheet
+          <button className="secondary" onClick={onCheckHealth} type="button">
+            Check Sheet
           </button>
-          <button
-            className="secondary"
-            disabled={loading}
-            onClick={onRetrySync}
-            type="button"
-          >
-            Retry Sync Failures
-          </button>
-          <div className="owner-status">
-            <span className="muted">Latest system message</span>
-            <strong>{status}</strong>
-          </div>
         </div>
       </section>
 
-      <section className="panel owner-tools">
-        <PanelHead
-          title="Staff Management"
-          note={`${ownerData.staff?.length || 0} staff account(s)`}
-        />
-        <div className="panel-body">
-          <form
-            className="form-grid"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const payload = formObject(event.currentTarget);
-              onUpsertStaff(payload);
-              event.currentTarget.reset();
-            }}
-          >
-            <Field label="Email" name="email" required type="email" />
-            <Field label="Display Name" name="displayName" required />
-            <label>
-              Role
-              <select name="role" defaultValue="waiter">
-                {["owner", "manager", "cashier", "waiter", "barista"].map(
-                  (role) => (
-                    <option key={role} value={role}>
-                      {roleLabel(role as StaffRole)}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <Field
-              label="New Account Password"
-              name="password"
-              type="password"
-            />
-            <button className="primary" disabled={loading} type="submit">
-              Save Staff
+      <details className="panel owner-tools owner-advanced">
+        <summary>Staff, menu, and sync tools</summary>
+        <div className="panel-body owner-admin-stack">
+          <div className="owner-action-grid">
+            <button
+              className="secondary"
+              disabled={loading}
+              onClick={onSyncMenu}
+              type="button"
+            >
+              Seed Menu Sheet
             </button>
-          </form>
-          <div className="table-like compact">
-            {(ownerData.staff || []).map((staff) => {
-              const uid = stringValue(staff.uid);
-              return (
-                <div className="data-row" key={uid || stringValue(staff.email)}>
-                  <div>
-                    <strong>
-                      {stringValue(staff.displayName || staff.email)}
-                    </strong>
-                    <small>{stringValue(staff.email)}</small>
-                  </div>
-                  <select
-                    aria-label="Staff role"
-                    defaultValue={stringValue(staff.role || "waiter")}
-                    onChange={(event) =>
-                      onSetStaffRole({ role: event.target.value, uid })
-                    }
+            <button
+              className="secondary"
+              disabled={loading}
+              onClick={onRetrySync}
+              type="button"
+            >
+              Retry Sync Failures
+            </button>
+          </div>
+
+          <section>
+            <h3>Staff Management</h3>
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const payload = formObject(event.currentTarget);
+                onUpsertStaff(payload);
+                event.currentTarget.reset();
+              }}
+            >
+              <Field label="Email" name="email" required type="email" />
+              <Field label="Display Name" name="displayName" required />
+              <label>
+                Role
+                <select name="role" defaultValue="waiter">
+                  {["owner", "manager", "cashier", "waiter", "barista"].map(
+                    (role) => (
+                      <option key={role} value={role}>
+                        {roleLabel(role as StaffRole)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <Field
+                label="New Account Password"
+                name="password"
+                type="password"
+              />
+              <button className="primary" disabled={loading} type="submit">
+                Save Staff
+              </button>
+            </form>
+            <div className="table-like compact">
+              {(ownerData.staff || []).map((staff) => {
+                const uid = stringValue(staff.uid);
+                return (
+                  <div
+                    className="data-row"
+                    key={uid || stringValue(staff.email)}
                   >
-                    {["owner", "manager", "cashier", "waiter", "barista"].map(
-                      (role) => (
+                    <div>
+                      <strong>
+                        {stringValue(staff.displayName || staff.email)}
+                      </strong>
+                      <small>{stringValue(staff.email)}</small>
+                    </div>
+                    <select
+                      aria-label="Staff role"
+                      defaultValue={stringValue(staff.role || "waiter")}
+                      onChange={(event) =>
+                        onSetStaffRole({ role: event.target.value, uid })
+                      }
+                    >
+                      {[
+                        "owner",
+                        "manager",
+                        "cashier",
+                        "waiter",
+                        "barista",
+                      ].map((role) => (
                         <option key={role} value={role}>
                           {roleLabel(role as StaffRole)}
                         </option>
-                      ),
-                    )}
-                  </select>
-                  <button
-                    className={
-                      activeValue(staff.active) ? "danger" : "secondary"
-                    }
-                    disabled={loading || uid === staffProfile.uid}
-                    onClick={() =>
-                      onSetStaffActive({
-                        active: !activeValue(staff.active),
-                        uid,
-                      })
-                    }
-                    type="button"
-                  >
-                    {activeValue(staff.active) ? "Deactivate" : "Activate"}
-                  </button>
-                  <PermissionEditor
-                    catalog={ownerData.permissionCatalog || []}
-                    revokedPermissions={stringArrayValue(
-                      staff.revokedPermissions,
-                    )}
-                    permissions={stringArrayValue(staff.permissions)}
-                    uid={uid}
-                    onSave={onSetStaffPermissions}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+                      ))}
+                    </select>
+                    <button
+                      className={
+                        activeValue(staff.active) ? "danger" : "secondary"
+                      }
+                      disabled={loading || uid === staffProfile.uid}
+                      onClick={() =>
+                        onSetStaffActive({
+                          active: !activeValue(staff.active),
+                          uid,
+                        })
+                      }
+                      type="button"
+                    >
+                      {activeValue(staff.active) ? "Deactivate" : "Activate"}
+                    </button>
+                    <PermissionEditor
+                      catalog={ownerData.permissionCatalog || []}
+                      revokedPermissions={stringArrayValue(
+                        staff.revokedPermissions,
+                      )}
+                      permissions={stringArrayValue(staff.permissions)}
+                      uid={uid}
+                      onSave={onSetStaffPermissions}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
-      <section className="panel owner-tools">
-        <PanelHead title="Menu Management" note={`${menu.length} item(s)`} />
-        <div className="panel-body">
-          <form
-            className="form-grid"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onUpdateMenuItem(formObject(event.currentTarget));
-            }}
-          >
-            <label className="wide">
-              Menu Item
-              <select
-                name="itemId"
-                onChange={(event) => setSelectedMenuItemId(event.target.value)}
-                value={selectedMenuItemId}
-              >
-                {menu.map((item) => (
-                  <option
-                    key={stringValue(item.itemId)}
-                    value={stringValue(item.itemId)}
-                  >
-                    {menuName(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Field
-              label="Item Name"
-              name="itemName"
-              required
-              value={menuName(selectedMenuItem || {})}
-            />
-            <Field
-              label="Category"
-              name="category"
-              required
-              value={stringValue(selectedMenuItem?.category)}
-            />
-            <Field
-              label="Price Text"
-              name="price"
-              required
-              value={menuPrice(selectedMenuItem || {})}
-            />
-            <label>
-              Active
-              <select
-                name="active"
-                defaultValue={
-                  activeValue(selectedMenuItem?.active) ? "true" : "false"
-                }
-              >
-                <option value="true">Active</option>
-                <option value="false">Archived / Sold Out</option>
-              </select>
-            </label>
-            <button className="primary" disabled={loading} type="submit">
-              Update Menu Item
-            </button>
-          </form>
-        </div>
-      </section>
+          <section>
+            <h3>Menu Management</h3>
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onUpdateMenuItem(formObject(event.currentTarget));
+              }}
+            >
+              <label className="wide">
+                Menu Item
+                <select
+                  name="itemId"
+                  onChange={(event) =>
+                    setSelectedMenuItemId(event.target.value)
+                  }
+                  value={selectedMenuItemId}
+                >
+                  {menu.map((item) => (
+                    <option
+                      key={stringValue(item.itemId)}
+                      value={stringValue(item.itemId)}
+                    >
+                      {menuName(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Item Name"
+                name="itemName"
+                required
+                value={menuName(selectedMenuItem || {})}
+              />
+              <Field
+                label="Category"
+                name="category"
+                required
+                value={stringValue(selectedMenuItem?.category)}
+              />
+              <Field
+                label="Price Text"
+                name="price"
+                required
+                value={menuPrice(selectedMenuItem || {})}
+              />
+              <label>
+                Active
+                <select
+                  name="active"
+                  defaultValue={
+                    activeValue(selectedMenuItem?.active) ? "true" : "false"
+                  }
+                >
+                  <option value="true">Active</option>
+                  <option value="false">Archived / Sold Out</option>
+                </select>
+              </label>
+              <button className="primary" disabled={loading} type="submit">
+                Update Menu Item
+              </button>
+            </form>
+          </section>
 
-      <section className="panel owner-tools">
-        <PanelHead
-          title="Audit And Sync"
-          note={`${ownerData.syncFailures?.length || 0} sync issue(s)`}
-        />
-        <div className="panel-body owner-tools-body">
-          <div>
-            <h3>Recent Audit Events</h3>
-            {(ownerData.auditLogs || []).slice(0, 6).map((event, index) => (
-              <p
-                className="muted"
-                key={`${stringValue(event.auditId)}-${index}`}
-              >
-                {stringValue(event.timestamp)} | {stringValue(event.action)} |{" "}
-                {stringValue(event.entityType)}
-              </p>
-            ))}
-            {!(ownerData.auditLogs || []).length && (
-              <p className="muted">No audit events loaded.</p>
-            )}
-          </div>
-          <div>
-            <h3>Sync Failures</h3>
-            {(ownerData.syncFailures || [])
-              .slice(0, 6)
-              .map((failure, index) => (
+          <section className="owner-tools-body">
+            <div>
+              <h3>Recent Audit Events</h3>
+              {(ownerData.auditLogs || []).slice(0, 6).map((event, index) => (
                 <p
                   className="muted"
-                  key={`${stringValue(failure.syncFailureId)}-${index}`}
+                  key={`${stringValue(event.auditId)}-${index}`}
                 >
-                  {stringValue(failure.entityType)} |{" "}
-                  {stringValue(failure.errorMessage)}
+                  {stringValue(event.timestamp)} | {stringValue(event.action)} |{" "}
+                  {stringValue(event.entityType)}
                 </p>
               ))}
-            {!(ownerData.syncFailures || []).length && (
-              <p className="muted">No sync failures loaded.</p>
-            )}
-          </div>
+              {!(ownerData.auditLogs || []).length && (
+                <p className="muted">No audit events loaded.</p>
+              )}
+            </div>
+            <div>
+              <h3>Sync Failures</h3>
+              {(ownerData.syncFailures || [])
+                .slice(0, 6)
+                .map((failure, index) => (
+                  <p
+                    className="muted"
+                    key={`${stringValue(failure.syncFailureId)}-${index}`}
+                  >
+                    {stringValue(failure.entityType)} |{" "}
+                    {stringValue(failure.errorMessage)}
+                  </p>
+                ))}
+              {!(ownerData.syncFailures || []).length && (
+                <p className="muted">No sync failures loaded.</p>
+              )}
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section className="panel owner-tools">
-        <PanelHead title="Danger Zone" note="End day archive" />
-        <div className="panel-body owner-tools-body">
-          <div>
-            <h3>End Day / Reset</h3>
-            <p className="muted">
-              Archives the current business day, marks today&apos;s order rows
-              as archived, and preserves customer history, loyalty totals, and
-              unpaid balances.
-            </p>
-          </div>
-          <label>
-            Confirmation
-            <input
-              onChange={(event) => setConfirmation(event.target.value)}
-              placeholder="Type RESET JOY CORNER DAY"
-              value={confirmation}
-            />
-          </label>
-          <button
-            className="danger"
-            disabled={!canReset}
-            onClick={() => {
-              const confirmed = window.confirm(
-                "Archive today's sales and reset the live dashboard? Customer history, rewards, and unpaid balances stay available.",
-              );
-              if (confirmed) onResetDay();
-            }}
-            type="button"
-          >
-            End Day Reset
-          </button>
-        </div>
-      </section>
+      </details>
     </div>
   );
 }
@@ -2887,6 +2885,7 @@ function OrderTicket({
   showPickupStrike?: boolean;
 }) {
   const due = numberValue(order.outstandingAmount);
+  const statusTone = orderStatusTone(order.orderStatus);
   const pickedUp = isPickedUp(order.orderStatus);
   const payload = receiptActionPayload(order);
   const place = orderPlaceOf(order);
@@ -2902,7 +2901,7 @@ function OrderTicket({
 
   return (
     <article
-      className={`order-ticket ${pickedUp && showPickupStrike ? "picked-up" : ""}`}
+      className={`order-ticket ${statusTone} ${pickedUp && showPickupStrike ? "picked-up" : ""}`}
     >
       <div className="ticket-head">
         <div className="ticket-title">
@@ -2917,6 +2916,7 @@ function OrderTicket({
           {showPaymentActions && (
             <Pill value={stringValue(order.paymentStatus) || "Paid"} />
           )}
+          {statusTone === "accepted" && <Pill value="Accepted" />}
           {pickedUp && <Pill value="Picked Up" />}
         </div>
       </div>
@@ -2974,8 +2974,8 @@ function OrderTicket({
         {showPickupAction && (
           <>
             <button
-              className="secondary"
-              disabled={pickedUp}
+              className="accept"
+              disabled={pickedUp || statusTone === "accepted"}
               onClick={() =>
                 onStatus(payload, "markReceiptAccepted", "Receipt accepted.")
               }
@@ -2984,36 +2984,12 @@ function OrderTicket({
               Accept
             </button>
             <button
-              className="secondary"
-              disabled={pickedUp}
-              onClick={() =>
-                onStatus(
-                  payload,
-                  "markReceiptPreparing",
-                  "Receipt marked preparing.",
-                )
-              }
-              type="button"
-            >
-              Preparing
-            </button>
-            <button
-              className="secondary"
-              disabled={pickedUp}
-              onClick={() =>
-                onStatus(payload, "markReceiptReady", "Receipt marked ready.")
-              }
-              type="button"
-            >
-              Ready
-            </button>
-            <button
-              className="primary"
+              className="pickup"
               disabled={pickedUp}
               onClick={() => onDone(payload)}
               type="button"
             >
-              Served
+              Pickup
             </button>
           </>
         )}
@@ -3728,8 +3704,20 @@ function isPickedUp(value: unknown) {
   return (
     normalized === "done" ||
     normalized === "pickedup" ||
-    normalized === "pickup"
+    normalized === "pickup" ||
+    normalized === "served"
   );
+}
+
+function orderStatusTone(value: unknown) {
+  const normalized = stringValue(value)
+    .toLowerCase()
+    .replace(/[-_\s]+/g, "");
+  if (["done", "pickedup", "pickup", "served"].includes(normalized)) {
+    return "picked-up";
+  }
+  if (normalized === "accepted") return "accepted";
+  return "";
 }
 
 function orderPlaceOf(row: Row) {

@@ -8,7 +8,7 @@ test("staff login shell renders with Joy Corner branding and favicon", async ({
     if (message.type() === "error") consoleErrors.push(message.text());
   });
 
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await expect(page).toHaveTitle(/Joy Corner Cafe Management/);
   await expect(
@@ -25,7 +25,7 @@ test("staff login shell renders with Joy Corner branding and favicon", async ({
 test("mobile layout does not overflow horizontally on the login screen", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const overflow = await page.evaluate(() => {
     return (
       document.documentElement.scrollWidth -
@@ -38,7 +38,7 @@ test("mobile layout does not overflow horizontally on the login screen", async (
 test("customer order route renders and keeps protected staff routes separate", async ({
   page,
 }) => {
-  await page.goto("/order");
+  await page.goto("/order", { waitUntil: "domcontentloaded" });
   await expect(
     page.getByRole("heading", { name: /^Joy Corner$/i }),
   ).toBeVisible();

@@ -1941,7 +1941,9 @@ async function ensureSheetHeaders_(sheetName: string, headers: string[]) {
 
   try {
     const values = await getSheetValues(sheetName);
-    if (values.length && values[0]?.some(Boolean)) return;
+    const resolvedSheetName = await resolveSheetName(sheetName);
+    await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
+    return;
   } catch {
     await sheets.spreadsheets.batchUpdate({
       requestBody: {
@@ -1962,6 +1964,31 @@ async function ensureSheetHeaders_(sheetName: string, headers: string[]) {
   await sheets.spreadsheets.values.update({
     range: `${quotedSheet(sheetName)}!A1:${columnLetter(headers.length - 1)}1`,
     requestBody: { values: [headers] },
+    spreadsheetId: SPREADSHEET_ID,
+    valueInputOption: "USER_ENTERED",
+  });
+}
+
+async function repairSheetHeaders_(
+  sheetName: string,
+  currentHeaderRow: unknown[],
+  requiredHeaders: string[],
+) {
+  const currentHeaders = currentHeaderRow.map(clean_).filter(Boolean);
+  const currentHeaderKeys = new Set(currentHeaders.map(normalizeKey_));
+  const missingHeaders = requiredHeaders.filter(
+    (header) => !currentHeaderKeys.has(normalizeKey_(header)),
+  );
+
+  if (currentHeaders.length && !missingHeaders.length) return;
+
+  const nextHeaders = currentHeaders.length
+    ? [...currentHeaders, ...missingHeaders]
+    : requiredHeaders;
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    range: `${quotedSheet(sheetName)}!A1:${columnLetter(nextHeaders.length - 1)}1`,
+    requestBody: { values: [nextHeaders] },
     spreadsheetId: SPREADSHEET_ID,
     valueInputOption: "USER_ENTERED",
   });
@@ -2019,14 +2046,7 @@ async function ensureSheetExists_(sheetName: string, headers: string[]) {
   try {
     const resolvedSheetName = await resolveSheetName(sheetName);
     const values = await getSheetValues(sheetName);
-    if (!values.length || !(values[0] || []).some(Boolean)) {
-      await sheets.spreadsheets.values.update({
-        range: `${quotedSheet(resolvedSheetName)}!A1:${columnLetter(headers.length - 1)}1`,
-        requestBody: { values: [headers] },
-        spreadsheetId: SPREADSHEET_ID,
-        valueInputOption: "USER_ENTERED",
-      });
-    }
+    await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
 
     return resolvedSheetName;
   } catch {
