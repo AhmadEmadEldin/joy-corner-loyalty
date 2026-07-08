@@ -5,7 +5,7 @@
   "main": "firebase-functions.cjs",
   "scripts": {
     "backend": "tsx ./server/googleSheetsBackend.ts",
-    "build": "webpack --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts",
+    "build": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts",
     "deploy": "npm run deploy:firebase",
     "deploy:firebase": "npm run build && node ./scripts/firebase_deploy.cjs hosting,functions,firestore:rules",
     "deploy:firebase:functions": "node ./scripts/firebase_deploy.cjs functions",

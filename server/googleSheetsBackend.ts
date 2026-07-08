@@ -20,6 +20,13 @@ import {
   normalizePaymentStatus,
 } from "../src/receiptCalculator";
 import { neonHealth, writeNeonAuditLog } from "./neon";
+import { buildNormalizedMenuSeed } from "./sheets/menuMigration";
+import {
+  NORMALIZED_OPERATIONAL_SHEETS,
+  NORMALIZED_SHEET_HEADERS,
+  NORMALIZED_SHEETS,
+  NormalizedSheetName,
+} from "./sheets/schema";
 import { schemaForSheet } from "./sheetSchema";
 
 dotenv.config({ path: [".env.local", ".env"] });
@@ -30,26 +37,41 @@ const SPREADSHEET_ID = spreadsheetIdFromEnv(
 
 const SHEETS = {
   dashboard: "Dashboard",
+  businessSettings: "Business Settings",
+  extras: "Extras",
   generatedVouchers: "Generated Vouchers",
   menu: "Menu",
+  menuCategories: "Menu Categories",
+  menuItems: "Menu Items",
+  menuItemSizes: "Menu Item Sizes",
+  menuItemFlavors: "Menu Item Flavors",
   customers: "Customers",
   orders: "Orders",
   orderItems: "Order Items",
+  orderItemExtras: "Order Item Extras",
   payments: "Payments",
   unpaidTracker: "Unpaid Tracker",
   rewards: "Rewards",
   lists: "Lists",
   loyaltyWinners: "Loyalty Winners",
   rewardRedemptions: "Reward Redemptions",
+  staff: "Staff",
   staffUsers: "Staff Users",
   dayHistory: "Day History",
   auditLog: "Audit Log",
   syncFailures: "Sync Failures",
+  migrationExceptions: "Migration Exceptions",
 } as const;
 
 const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.customers]: ["Customers", "Customer", "Clients", "Guests"],
+  [SHEETS.menuCategories]: ["Menu Categories", "Categories"],
+  [SHEETS.menuItems]: ["Menu Items", "Items Master"],
+  [SHEETS.menuItemSizes]: ["Menu Item Sizes", "Item Sizes", "Sizes"],
+  [SHEETS.menuItemFlavors]: ["Menu Item Flavors", "Flavors"],
+  [SHEETS.extras]: ["Extras", "Menu Extras"],
   [SHEETS.staffUsers]: ["Staff Users", "Staff", "Users", "Team"],
+  [SHEETS.staff]: ["Staff"],
   [SHEETS.generatedVouchers]: [
     "Generated Vouchers",
     "Vouchers",
@@ -61,7 +83,10 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.dayHistory]: ["Day History", "History"],
   [SHEETS.auditLog]: ["Audit Log", "Audit Logs", "Audits"],
   [SHEETS.orderItems]: ["Order Items", "Items"],
+  [SHEETS.orderItemExtras]: ["Order Item Extras", "Item Extras"],
   [SHEETS.syncFailures]: ["Sync Failures", "Sync Failure"],
+  [SHEETS.businessSettings]: ["Business Settings", "Settings"],
+  [SHEETS.migrationExceptions]: ["Migration Exceptions", "Exceptions"],
 };
 
 const DAY_HISTORY_HEADERS = [
@@ -314,6 +339,7 @@ class ApiError extends Error {
 }
 
 let sheetsClientPromise: Promise<sheets_v4.Sheets> | null = null;
+let driveClientPromise: Promise<ReturnType<typeof google.drive>> | null = null;
 let sheetTitlesPromise: Promise<string[]> | null = null;
 
 function initFirebaseAdmin() {
@@ -374,14 +400,37 @@ async function getSheetsClient() {
   if (!sheetsClientPromise) {
     sheetsClientPromise = (async () => {
       validateGoogleSheetsConfig();
-      const auth = new google.auth.GoogleAuth({
-        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-      });
+      const auth = googleAuth_([
+        "https://www.googleapis.com/auth/spreadsheets",
+      ]);
       return google.sheets({ auth, version: "v4" });
     })();
   }
 
   return await sheetsClientPromise;
+}
+
+async function getDriveClient_() {
+  if (!driveClientPromise) {
+    driveClientPromise = (async () => {
+      validateGoogleSheetsConfig();
+      const auth = googleAuth_(["https://www.googleapis.com/auth/drive"]);
+      return google.drive({ auth, version: "v3" });
+    })();
+  }
+
+  return await driveClientPromise;
+}
+
+function googleAuth_(scopes: string[]) {
+  const keyFile =
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
+    process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  return new google.auth.GoogleAuth({
+    ...(keyFile ? { keyFile } : {}),
+    scopes,
+  });
 }
 
 function quotedSheet(name: string) {
@@ -674,6 +723,8 @@ export async function handleAction(action: string, payload: Payload) {
       });
     case "addCustomer":
       return await addCustomer(payload);
+    case "updateCustomer":
+      return await updateCustomer(payload);
     case "removeCustomer":
       return await removeCustomer(payload);
     case "addOrder":
@@ -692,6 +743,8 @@ export async function handleAction(action: string, payload: Payload) {
       return await updateReceiptPreparationStatus(payload, "Preparing");
     case "markReceiptReady":
       return await updateReceiptPreparationStatus(payload, "Ready");
+    case "cancelReceipt":
+      return await updateReceiptPreparationStatus(payload, "Cancelled");
     case "markReceiptDone":
       return await markReceiptDone(payload);
     case "generateVoucher":
@@ -714,10 +767,60 @@ export async function handleAction(action: string, payload: Payload) {
       return success_({ history: await dayHistory(clean_(payload.dateKey)) });
     case "organizeSpreadsheet":
       return await organizeSpreadsheet();
+    case "inspectSheetsWorkbook":
+      return await inspectSheetsWorkbook(actor);
+    case "backupSheetsWorkbook":
+      return await backupSheetsWorkbook(actor);
+    case "migrateSheetsWorkbook":
+      return await migrateSheetsWorkbook(actor);
+    case "reconcileSheetsWorkbook":
+      return await reconcileSheetsWorkbook(actor);
     case "syncMenuToSheets":
       return await syncMenuToSheets(actor);
     case "updateMenuItem":
       return await updateMenuItem(payload, actor);
+    case "upsertMenuCategory":
+      return await upsertNormalizedMenuRecord_(
+        SHEETS.menuCategories,
+        "Category ID",
+        payload,
+        actor,
+      );
+    case "upsertMenuItem":
+      return await upsertNormalizedMenuRecord_(
+        SHEETS.menuItems,
+        "Item ID",
+        payload,
+        actor,
+      );
+    case "upsertMenuSize":
+      return await upsertNormalizedMenuRecord_(
+        SHEETS.menuItemSizes,
+        "Size ID",
+        payload,
+        actor,
+      );
+    case "archiveMenuCategory":
+      return await archiveNormalizedMenuRecord_(
+        SHEETS.menuCategories,
+        "Category ID",
+        payload,
+        actor,
+      );
+    case "archiveMenuItem":
+      return await archiveNormalizedMenuRecord_(
+        SHEETS.menuItems,
+        "Item ID",
+        payload,
+        actor,
+      );
+    case "archiveMenuSize":
+      return await archiveNormalizedMenuRecord_(
+        SHEETS.menuItemSizes,
+        "Size ID",
+        payload,
+        actor,
+      );
     case "ownerOverview":
       return await ownerOverview(actor);
     case "upsertStaff":
@@ -1153,27 +1256,58 @@ async function removeCustomer(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
   if (!customerId) throw new Error("Customer ID is required.");
 
-  const values = await getSheetValues(SHEETS.customers);
-  if (values.length < 2) throw new Error("No customer rows found.");
-
-  const headers = (values[0] || []).map(normalizeKey_);
-  const customerIdIndex = headerIndex_(headers, [
-    "customerId",
-    "customerID",
-    "id",
-  ]);
-  if (customerIdIndex < 0)
-    throw new Error("Customers sheet needs a Customer ID column.");
-
-  const rowIndex = values.findIndex(
-    (row, index) => index > 0 && clean_(row[customerIdIndex]) === customerId,
-  );
-  if (rowIndex < 1) throw new Error("Customer was not found.");
-
-  await deleteSheetRow(SHEETS.customers, rowIndex + 1);
+  await updateCustomer({
+    active: "No",
+    customerId,
+    notes: clean_(payload.reason || "Archived by owner action."),
+    status: "Archived",
+  });
 
   return success_({
-    removedCustomerId: customerId,
+    archivedCustomerId: customerId,
+    data: await buildAppData(),
+  });
+}
+
+async function updateCustomer(payload: Payload) {
+  const customerId = getPayloadCustomerId_(payload);
+  if (!customerId) throw new Error("Customer ID is required.");
+
+  const existing = await findCustomer(customerId);
+  if (!existing.customerId) throw new Error("Customer was not found.");
+
+  const allowed = {
+    birthday: clean_(payload.birthday || existing.birthday),
+    customerId,
+    email: clean_(payload.email || existing.email),
+    favoriteDrinkItemId: clean_(
+      payload.favoriteDrinkItemId || existing.favoriteDrinkItemId,
+    ),
+    fullName: clean_(payload.fullName || existing.fullName),
+    joinDate: clean_(existing.joinDate || payload.joinDate || new Date()),
+    notes: clean_(payload.notes || existing.notes),
+    phone: clean_(payload.phone || existing.phone || existing.phoneWhatsApp),
+    phoneWhatsApp: clean_(
+      payload.whatsApp ||
+        payload.whatsapp ||
+        payload.phoneWhatsApp ||
+        existing.phoneWhatsApp ||
+        existing.phone,
+    ),
+    status: clean_(payload.status || existing.status || "Active"),
+    updatedAt: new Date(),
+    version: number_(existing.version) + 1 || 1,
+  };
+
+  await upsertSheetObject_(
+    SHEETS.customers,
+    "Customer ID",
+    customerId,
+    allowed,
+  );
+
+  return success_({
+    customerId,
     data: await buildAppData(),
   });
 }
@@ -1464,17 +1598,18 @@ async function syncMenuToSheets(actor: Actor) {
       price: item.priceText,
     });
   }
+  const normalizedSeed = await seedNormalizedMenu_(actor);
 
   await recordAuditLog_(actor, {
     action: "menu.seed.sync",
     entityType: "menu",
-    newValue: { itemCount: normalizedMenu.length },
+    newValue: { itemCount: normalizedMenu.length, normalizedSeed },
     success: true,
   });
 
   return success_({
     data: await buildAppDataForRole(actor.role),
-    message: `Synchronized ${normalizedMenu.length} menu item(s) to Google Sheets.`,
+    message: `Synchronized ${normalizedMenu.length} menu item(s) and normalized menu tables to Google Sheets.`,
   });
 }
 
@@ -1512,6 +1647,65 @@ async function updateMenuItem(payload: Payload, actor: Actor) {
   });
 
   return success_({ data: await buildAppDataForRole(actor.role) });
+}
+
+async function upsertNormalizedMenuRecord_(
+  sheetName: string,
+  idHeader: string,
+  payload: Payload,
+  actor: Actor,
+) {
+  await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || [idHeader]);
+  const idKey = normalizeKey_(idHeader);
+  const idValue = clean_(payload[idKey] || payload.id || payload.itemId);
+  if (!idValue) throw new ApiError(`${idHeader} is required.`);
+  const record = {
+    ...payload,
+    [idKey]: idValue,
+    active: clean_(payload.active || "Yes"),
+    updatedAt: new Date(),
+  };
+  if (!payload.createdAt) record.createdAt = new Date();
+
+  await upsertSheetObject_(sheetName, idHeader, idValue, record);
+  await recordAuditLog_(actor, {
+    action: `${sheetName}.upsert`,
+    entityId: idValue,
+    entityType: sheetName,
+    newValue: record,
+    success: true,
+  });
+
+  return success_({ id: idValue, data: await buildAppDataForRole(actor.role) });
+}
+
+async function archiveNormalizedMenuRecord_(
+  sheetName: string,
+  idHeader: string,
+  payload: Payload,
+  actor: Actor,
+) {
+  const idKey = normalizeKey_(idHeader);
+  const idValue = clean_(payload[idKey] || payload.id || payload.itemId);
+  if (!idValue) throw new ApiError(`${idHeader} is required.`);
+
+  await upsertSheetObject_(sheetName, idHeader, idValue, {
+    [idKey]: idValue,
+    active: "No",
+    updatedAt: new Date(),
+  });
+  await recordAuditLog_(actor, {
+    action: `${sheetName}.archive`,
+    entityId: idValue,
+    entityType: sheetName,
+    reason: clean_(payload.reason),
+    success: true,
+  });
+
+  return success_({
+    archivedId: idValue,
+    data: await buildAppDataForRole(actor.role),
+  });
 }
 
 async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
@@ -1732,7 +1926,7 @@ async function updateReceiptPayment(payload: Payload) {
 
 async function updateReceiptPreparationStatus(
   payload: Payload,
-  nextStatus: "Accepted" | "Preparing" | "Ready" | "Served",
+  nextStatus: "Accepted" | "Preparing" | "Ready" | "Served" | "Cancelled",
 ) {
   const result = await updateReceiptRows(payload, async (context) => {
     const currentStatus = normalizeOrderStatus(context.currentOrderStatus);
@@ -2038,6 +2232,349 @@ async function organizeSpreadsheet() {
     message: `Organized ${formattedTabs.length} sheet tab(s). Added ${historyRowsAdded} history day row(s).`,
     repairedTabs,
   });
+}
+
+async function inspectSheetsWorkbook(actor: Actor) {
+  const sheets = await getSheetsClient();
+  const metadata = await sheets.spreadsheets.get({
+    fields:
+      "properties.title,sheets.properties,sheets.data.rowData.values(formattedValue,userEnteredValue,dataValidation)",
+    includeGridData: true,
+    spreadsheetId: SPREADSHEET_ID,
+  });
+  const tabs = (metadata.data.sheets || []).map((sheet) => {
+    const rows = sheet.data?.[0]?.rowData || [];
+    const headers = (rows[0]?.values || [])
+      .map((cell) => clean_(cell.formattedValue || cell.userEnteredValue))
+      .filter(Boolean);
+    const formulaErrors: Row[] = [];
+    const formulas: Row[] = [];
+    const validations: Row[] = [];
+
+    rows.slice(0, 100).forEach((row, rowIndex) => {
+      (row.values || []).slice(0, 60).forEach((cell, columnIndex) => {
+        const value = clean_(cell.formattedValue);
+        const formula = clean_(cell.userEnteredValue?.formulaValue);
+        if (/^#(NAME|REF|VALUE|DIV\/0)!?$/i.test(value)) {
+          formulaErrors.push({
+            column: columnIndex + 1,
+            row: rowIndex + 1,
+            value,
+          });
+        }
+        if (formula) {
+          formulas.push({
+            column: columnIndex + 1,
+            formula,
+            row: rowIndex + 1,
+          });
+        }
+        if (cell.dataValidation) {
+          validations.push({ column: columnIndex + 1, row: rowIndex + 1 });
+        }
+      });
+    });
+
+    return {
+      formulaErrors,
+      formulas: formulas.slice(0, 10),
+      headers,
+      rows: Math.max(0, Number(sheet.properties?.gridProperties?.rowCount) - 1),
+      sheetId: sheet.properties?.sheetId,
+      title: clean_(sheet.properties?.title),
+      validations: validations.slice(0, 10),
+    };
+  });
+
+  await recordAuditLog_(actor, {
+    action: "sheets.inspect",
+    entityType: "workbook",
+    newValue: { tabCount: tabs.length },
+    success: true,
+  });
+
+  return success_({
+    spreadsheetId: maskId_(SPREADSHEET_ID),
+    title: metadata.data.properties?.title,
+    tabs,
+  });
+}
+
+async function backupSheetsWorkbook(actor: Actor) {
+  const drive = await getDriveClient_();
+  const timestamp = migrationTimestamp_();
+  const copy = await drive.files.copy({
+    fileId: SPREADSHEET_ID,
+    fields: "id,name,webViewLink",
+    requestBody: {
+      name: `Joy Corner Sheets Backup ${timestamp}`,
+    },
+  });
+
+  await upsertSheetObject_(
+    SHEETS.businessSettings,
+    "Setting Key",
+    "last_workbook_backup_id",
+    {
+      description: "Latest automated migration backup workbook ID.",
+      settingKey: "last_workbook_backup_id",
+      settingValue: copy.data.id,
+      updatedAt: new Date(),
+      updatedBy: actor.email,
+      valueType: "string",
+    },
+  );
+  await recordAuditLog_(actor, {
+    action: "sheets.backup",
+    entityId: clean_(copy.data.id),
+    entityType: "workbook",
+    newValue: { backupName: copy.data.name },
+    success: true,
+  });
+
+  return success_({
+    backupId: copy.data.id,
+    backupName: copy.data.name,
+    backupUrl: copy.data.webViewLink,
+  });
+}
+
+async function migrateSheetsWorkbook(actor: Actor) {
+  const backup = await backupSheetsWorkbook(actor);
+  const migrationVersion = `sheets-normalized-${migrationTimestamp_()}`;
+  const createdOrRepairedTabs = await ensureNormalizedWorkbook_();
+  const menuSeed = await seedNormalizedMenu_(actor);
+  const reconciliation = await reconcileSheetsWorkbook(actor);
+
+  await upsertSheetObject_(
+    SHEETS.businessSettings,
+    "Setting Key",
+    "google_sheets_migration_version",
+    {
+      description: "Last completed normalized Google Sheets migration.",
+      settingKey: "google_sheets_migration_version",
+      settingValue: migrationVersion,
+      updatedAt: new Date(),
+      updatedBy: actor.email,
+      valueType: "string",
+    },
+  );
+  await writeObjectRow(SHEETS.auditLog, {
+    action: "sheets.migrate",
+    auditId: stableUniqueId_("audit"),
+    createdAt: new Date(),
+    entityId: migrationVersion,
+    entityType: "workbook",
+    newValueJson: JSON.stringify({
+      backupId: (backup as Payload).backupId,
+      createdOrRepairedTabs,
+      menuSeed,
+      reconciliation,
+    }),
+    requestId: stableUniqueId_("req"),
+    result: "success",
+    userId: actor.uid,
+    userRole: actor.role,
+  });
+
+  return success_({
+    backup,
+    createdOrRepairedTabs,
+    menuSeed,
+    migrationVersion,
+    reconciliation,
+  });
+}
+
+async function ensureNormalizedWorkbook_() {
+  const repairedTabs: string[] = [];
+  for (const sheetName of NORMALIZED_OPERATIONAL_SHEETS) {
+    const headers = NORMALIZED_SHEET_HEADERS[sheetName] || [];
+    const resolved = await ensureSheetExists_(sheetName, headers);
+    await formatSheetTab_(
+      resolved,
+      headers.length,
+      SHEET_TAB_COLORS[resolved] || SHEET_TAB_COLORS[sheetName],
+    );
+    repairedTabs.push(resolved);
+  }
+
+  await seedBusinessSettings_();
+  return repairedTabs;
+}
+
+async function seedBusinessSettings_() {
+  const defaults: Array<[string, string, string, string]> = [
+    ["business_timezone", "Africa/Cairo", "string", "Business timezone"],
+    ["closing_time", "23:59", "time", "Default closing time"],
+    ["currency", "EGP", "string", "Receipt currency"],
+    ["loyalty_drinks_required", "7", "number", "Paid drinks per reward"],
+    ["tax_percentage", "0", "number", "Default tax percentage"],
+    ["receipt_prefix", "REC", "string", "Receipt number prefix"],
+    ["automatic_end_day_enabled", "false", "boolean", "Automatic close flag"],
+  ];
+  for (const [settingKey, settingValue, valueType, description] of defaults) {
+    await upsertSheetObject_(
+      SHEETS.businessSettings,
+      "Setting Key",
+      settingKey,
+      {
+        description,
+        settingKey,
+        settingValue,
+        updatedAt: new Date(),
+        updatedBy: "system",
+        valueType,
+      },
+    );
+  }
+}
+
+async function seedNormalizedMenu_(actor: Actor) {
+  const seed = buildNormalizedMenuSeed(normalizedMenu);
+  await ensureNormalizedWorkbook_();
+
+  for (const category of seed.categories) {
+    await upsertSheetObject_(
+      SHEETS.menuCategories,
+      "Category ID",
+      clean_(category.categoryId),
+      category,
+    );
+  }
+  for (const item of seed.items) {
+    await upsertSheetObject_(
+      SHEETS.menuItems,
+      "Item ID",
+      clean_(item.itemId),
+      item,
+    );
+  }
+  for (const size of seed.sizes) {
+    await upsertSheetObject_(
+      SHEETS.menuItemSizes,
+      "Size ID",
+      clean_(size.sizeId),
+      size,
+    );
+  }
+  for (const flavor of seed.flavors) {
+    await upsertSheetObject_(
+      SHEETS.menuItemFlavors,
+      "Flavor ID",
+      clean_(flavor.flavorId),
+      flavor,
+    );
+  }
+  for (const extra of seed.extras) {
+    await upsertSheetObject_(
+      SHEETS.extras,
+      "Extra ID",
+      clean_(extra.extraId),
+      extra,
+    );
+  }
+
+  await recordAuditLog_(actor, {
+    action: "menu.normalized.seed",
+    entityType: "menu",
+    newValue: {
+      categories: seed.categories.length,
+      extras: seed.extras.length,
+      flavors: seed.flavors.length,
+      items: seed.items.length,
+      sizes: seed.sizes.length,
+    },
+    success: true,
+  });
+
+  return {
+    categories: seed.categories.length,
+    extras: seed.extras.length,
+    flavors: seed.flavors.length,
+    items: seed.items.length,
+    sizes: seed.sizes.length,
+  };
+}
+
+async function reconcileSheetsWorkbook(actor: Actor) {
+  await ensureSheetHeaders_(
+    SHEETS.customers,
+    SHEET_HEADERS[SHEETS.customers] || NORMALIZED_SHEET_HEADERS.Customers,
+  );
+  await ensureSheetHeaders_(
+    SHEETS.unpaidTracker,
+    SHEET_HEADERS[SHEETS.unpaidTracker] ||
+      NORMALIZED_SHEET_HEADERS["Unpaid Tracker"],
+  );
+  const customers = await sheetToObjects(SHEETS.customers);
+  const unpaid = await sheetToObjects(SHEETS.unpaidTracker);
+  const balances = new Map<string, number>();
+
+  for (const debt of unpaid) {
+    const status = clean_(debt.status || "Open").toLowerCase();
+    if (["closed", "paid", "cancelled", "canceled", "void"].includes(status))
+      continue;
+    const customerId = getRowCustomerId_(debt);
+    if (!customerId) continue;
+    balances.set(
+      customerId,
+      (balances.get(customerId) || 0) +
+        number_(debt.remainingAmountEgp || debt.unpaidBalance || debt.amount),
+    );
+  }
+
+  let correctedCustomers = 0;
+  for (const customer of customers) {
+    const customerId = getRowCustomerId_(customer);
+    if (!customerId) continue;
+    const calculated = balances.get(customerId) || 0;
+    const current = number_(
+      customer.unpaidBalanceEgp ||
+        customer.unpaidBalance ||
+        customer.currentBalance ||
+        0,
+    );
+    if (Math.abs(calculated - current) < 0.01) continue;
+    await upsertSheetObject_(SHEETS.customers, "Customer ID", customerId, {
+      ...customer,
+      customerId,
+      unpaidBalanceEgp: calculated,
+      updatedAt: new Date(),
+      version: number_(customer.version) + 1 || 1,
+    });
+    correctedCustomers += 1;
+    await writeObjectRow(SHEETS.auditLog, {
+      action: "unpaid.reconcile",
+      auditId: stableUniqueId_("audit"),
+      createdAt: new Date(),
+      entityId: customerId,
+      entityType: "customer",
+      newValueJson: JSON.stringify({ unpaidBalanceEgp: calculated }),
+      previousValueJson: JSON.stringify({ unpaidBalanceEgp: current }),
+      reason: "Reconciled customer aggregate from Unpaid Tracker records.",
+      requestId: stableUniqueId_("req"),
+      result: "success",
+      userId: actor.uid,
+      userRole: actor.role,
+    });
+  }
+
+  return success_({
+    correctedCustomers,
+    openUnpaidRecords: unpaid.length,
+    totalOpenUnpaidEgp: Array.from(balances.values()).reduce(
+      (total, value) => total + value,
+      0,
+    ),
+  });
+}
+
+function migrationTimestamp_() {
+  return new Date()
+    .toISOString()
+    .replace(/[-:T.Z]/g, "")
+    .slice(0, 14);
 }
 
 async function ensureSheetExists_(sheetName: string, headers: string[]) {
@@ -4236,7 +4773,10 @@ function normalizeKey_(value: unknown) {
     .replace(/[^a-zA-Z0-9]+(.)/g, (_match, chr: string) => chr.toUpperCase())
     .replace(/^[A-Z]/, (chr) => chr.toLowerCase());
 
-  return key.replace(/ID$/, "Id");
+  return key
+    .replace(/EGP/g, "Egp")
+    .replace(/JSON/g, "Json")
+    .replace(/ID(?=$|[A-Z])/g, "Id");
 }
 
 function success_(payload: Payload) {
@@ -4275,7 +4815,10 @@ app.use((_request, response, next) => {
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization",
   );
-  response.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  response.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PATCH, DELETE, OPTIONS",
+  );
   next();
 });
 
@@ -4299,6 +4842,40 @@ app.get("/api/customers/search", async (request, response) => {
   await routeAction("customerSearch", requestPayload_(request), response);
 });
 
+app.get("/api/customers", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    customers: data.customers,
+  }));
+});
+
+app.get("/api/customers/:customerId", async (request, response) => {
+  await routeAction(
+    "customerHistory",
+    { ...requestPayload_(request), customerId: request.params.customerId },
+    response,
+  );
+});
+
+app.post("/api/customers", async (request, response) => {
+  await routeAction("addCustomer", requestPayload_(request), response);
+});
+
+app.patch("/api/customers/:customerId", async (request, response) => {
+  await routeAction(
+    "updateCustomer",
+    { ...requestPayload_(request), customerId: request.params.customerId },
+    response,
+  );
+});
+
+app.delete("/api/customers/:customerId", async (request, response) => {
+  await routeAction(
+    "removeCustomer",
+    { ...requestPayload_(request), customerId: request.params.customerId },
+    response,
+  );
+});
+
 app.get("/api/customers/:customerId/history", async (request, response) => {
   await routeAction(
     "customerHistory",
@@ -4318,6 +4895,209 @@ app.get("/api/history/:dateKey", async (request, response) => {
     response,
   );
 });
+
+app.get("/api/orders", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    orders: data.orders,
+  }));
+});
+
+app.get("/api/orders/:id", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    order:
+      (data.orders || []).find((order) => {
+        const row = order as Row;
+        return (
+          clean_(row.orderId) === request.params.id ||
+          clean_(row.receiptNumber || row.receiptId) === request.params.id
+        );
+      }) || null,
+  }));
+});
+
+app.post("/api/orders", async (request, response) => {
+  await routeAction("addReceipt", requestPayload_(request), response);
+});
+
+app.patch("/api/orders/:id", async (request, response) => {
+  await routeAction(
+    "updateReceiptPayment",
+    { ...requestPayload_(request), orderId: request.params.id },
+    response,
+  );
+});
+
+app.post("/api/orders/:id/status", async (request, response) => {
+  await routeAction(
+    clean_(request.body?.action || "markReceiptDone"),
+    { ...requestPayload_(request), orderId: request.params.id },
+    response,
+  );
+});
+
+app.post("/api/orders/:id/cancel", async (request, response) => {
+  await routeAction(
+    "cancelReceipt",
+    {
+      ...requestPayload_(request),
+      orderId: request.params.id,
+    },
+    response,
+  );
+});
+
+app.post("/api/orders/:id/payments", async (request, response) => {
+  await routeAction(
+    "addPayment",
+    { ...requestPayload_(request), orderId: request.params.id },
+    response,
+  );
+});
+
+app.get("/api/orders/:id/payments", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    payments: (data.payments || []).filter(
+      (row) => clean_(row.orderId) === request.params.id,
+    ),
+  }));
+});
+
+app.get("/api/unpaid", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    unpaid: data.unpaid,
+  }));
+});
+
+app.get("/api/customers/:id/unpaid", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    unpaid: (data.unpaid || []).filter(
+      (row) => getRowCustomerId_(row) === request.params.id,
+    ),
+  }));
+});
+
+app.post("/api/unpaid/:id/payments", async (request, response) => {
+  await routeAction(
+    "collectUnpaidPayment",
+    { ...requestPayload_(request), unpaidId: request.params.id },
+    response,
+  );
+});
+
+app.get("/api/customers/:id/rewards", async (request, response) => {
+  await routeDataSlice(requestPayload_(request), response, (data) => ({
+    rewards: (data.rewards || []).filter(
+      (row) => getRowCustomerId_(row) === request.params.id,
+    ),
+  }));
+});
+
+app.post("/api/menu/categories", async (request, response) => {
+  await routeAction("upsertMenuCategory", requestPayload_(request), response);
+});
+
+app.patch("/api/menu/categories/:id", async (request, response) => {
+  await routeAction(
+    "upsertMenuCategory",
+    { ...requestPayload_(request), categoryId: request.params.id },
+    response,
+  );
+});
+
+app.delete("/api/menu/categories/:id", async (request, response) => {
+  await routeAction(
+    "archiveMenuCategory",
+    { ...requestPayload_(request), categoryId: request.params.id },
+    response,
+  );
+});
+
+app.post("/api/menu/items", async (request, response) => {
+  await routeAction("upsertMenuItem", requestPayload_(request), response);
+});
+
+app.patch("/api/menu/items/:id", async (request, response) => {
+  await routeAction(
+    "upsertMenuItem",
+    { ...requestPayload_(request), itemId: request.params.id },
+    response,
+  );
+});
+
+app.delete("/api/menu/items/:id", async (request, response) => {
+  await routeAction(
+    "archiveMenuItem",
+    { ...requestPayload_(request), itemId: request.params.id },
+    response,
+  );
+});
+
+app.post("/api/menu/items/:id/sizes", async (request, response) => {
+  await routeAction(
+    "upsertMenuSize",
+    { ...requestPayload_(request), itemId: request.params.id },
+    response,
+  );
+});
+
+app.patch("/api/menu/sizes/:id", async (request, response) => {
+  await routeAction(
+    "upsertMenuSize",
+    { ...requestPayload_(request), sizeId: request.params.id },
+    response,
+  );
+});
+
+app.delete("/api/menu/sizes/:id", async (request, response) => {
+  await routeAction(
+    "archiveMenuSize",
+    { ...requestPayload_(request), sizeId: request.params.id },
+    response,
+  );
+});
+
+app.post("/api/admin/sheets/backup", async (request, response) => {
+  await routeAction("backupSheetsWorkbook", requestPayload_(request), response);
+});
+
+app.post("/api/admin/sheets/migrate", async (request, response) => {
+  await routeAction(
+    "migrateSheetsWorkbook",
+    requestPayload_(request),
+    response,
+  );
+});
+
+app.post("/api/admin/sheets/reconcile", async (request, response) => {
+  await routeAction(
+    "reconcileSheetsWorkbook",
+    requestPayload_(request),
+    response,
+  );
+});
+
+app.get("/api/admin/sheets/health", async (request, response) => {
+  await routeAction(
+    "inspectSheetsWorkbook",
+    requestPayload_(request),
+    response,
+  );
+});
+
+app.get("/api/admin/sheets/sync-failures", async (request, response) => {
+  await routeAction("ownerOverview", requestPayload_(request), response);
+});
+
+app.post(
+  "/api/admin/sheets/sync-failures/:id/retry",
+  async (request, response) => {
+    await routeAction(
+      "retrySyncFailures",
+      { ...requestPayload_(request), syncFailureId: request.params.id },
+      response,
+    );
+  },
+);
 
 app.get("/api", async (request, response) => {
   const payload = requestPayload_(request);
