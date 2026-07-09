@@ -47,6 +47,7 @@ export const orderStatuses = [
   "Accepted",
   "Preparing",
   "Ready",
+  "Picked Up",
   "Served",
   "Awaiting Payment",
   "Partially Paid",
@@ -58,6 +59,8 @@ export const orderStatuses = [
 ] as const;
 
 export const paymentStatuses = [
+  "Awaiting Payment",
+  "Partially Paid",
   "Paid",
   "Partial",
   "Unpaid",

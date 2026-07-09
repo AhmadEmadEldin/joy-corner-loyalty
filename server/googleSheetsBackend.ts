@@ -1880,19 +1880,6 @@ async function updateReceiptPayment(payload: Payload) {
       paymentStatus,
     );
 
-    if (
-      paymentStatus === "Unpaid" &&
-      context.orderStatusIndex >= 0 &&
-      !isPickedUpStatus_(context.currentOrderStatus)
-    ) {
-      await setCell(
-        SHEETS.orders,
-        context.row,
-        context.orderStatusIndex,
-        "Open",
-      );
-    }
-
     if (context.notesIndex >= 0) {
       const note = `Payment changed to ${paymentStatus} on ${new Date().toLocaleString()}`;
       await setCell(
@@ -1926,7 +1913,7 @@ async function updateReceiptPayment(payload: Payload) {
 
 async function updateReceiptPreparationStatus(
   payload: Payload,
-  nextStatus: "Accepted" | "Preparing" | "Ready" | "Served" | "Cancelled",
+  nextStatus: "Accepted" | "Preparing" | "Ready" | "Picked Up" | "Cancelled",
 ) {
   const result = await updateReceiptRows(payload, async (context) => {
     const currentStatus = normalizeOrderStatus(context.currentOrderStatus);
@@ -1964,7 +1951,7 @@ async function updateReceiptPreparationStatus(
 }
 
 async function markReceiptDone(payload: Payload) {
-  return await updateReceiptPreparationStatus(payload, "Served");
+  return await updateReceiptPreparationStatus(payload, "Picked Up");
 }
 
 async function generateVoucher(payload: Payload) {

@@ -22,6 +22,15 @@ import {
 } from "./firebase";
 import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
 import { calculateReceiptLine } from "./receiptCalculator";
+import {
+  getPaymentStatusClass,
+  getPreparationStatusClass,
+  isFinishedPreparationStatus,
+  isPickedUpStatus,
+  normalizePaymentStatusForDisplay,
+  normalizePreparationStatus,
+  PreparationStatus,
+} from "./receiptVisualState";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -235,8 +244,8 @@ export function App() {
     .slice()
     .sort((left, right) => {
       return (
-        Number(isPickedUp(left.orderStatus)) -
-          Number(isPickedUp(right.orderStatus)) ||
+        Number(isPickedUpStatus(left.orderStatus)) -
+          Number(isPickedUpStatus(right.orderStatus)) ||
         compareRecentOrders(left, right)
       );
     });
@@ -756,13 +765,9 @@ export function App() {
             role={currentRole}
             onFilter={setFilter}
             filters={filters}
-            onSetPayment={(payload, paymentStatus) =>
-              void setReceiptPayment(payload, paymentStatus)
-            }
-            onDone={(payload) => void markReceiptDone(payload)}
-            onStatus={(payload, action, message) =>
-              void markReceiptStatus(payload, action, message)
-            }
+            onSetPayment={setReceiptPayment}
+            onDone={markReceiptDone}
+            onStatus={markReceiptStatus}
           />
         )}
 
@@ -1475,17 +1480,13 @@ function OwnerTools({
                         onSetStaffRole({ role: event.target.value, uid })
                       }
                     >
-                      {[
-                        "owner",
-                        "manager",
-                        "cashier",
-                        "waiter",
-                        "barista",
-                      ].map((role) => (
-                        <option key={role} value={role}>
-                          {roleLabel(role as StaffRole)}
-                        </option>
-                      ))}
+                      {["owner", "manager", "cashier", "waiter", "barista"].map(
+                        (role) => (
+                          <option key={role} value={role}>
+                            {roleLabel(role as StaffRole)}
+                          </option>
+                        ),
+                      )}
                     </select>
                     <button
                       className={
@@ -1752,7 +1753,7 @@ function DashboardView({
                   onStatus={onStatus}
                   showPaymentActions={false}
                   showPickupAction
-                  showPickupStrike
+                  view="barista"
                 />
               ))}
             </div>
@@ -2389,7 +2390,7 @@ function OrdersView({
                 onSetPayment={onSetPayment}
                 onStatus={onStatus}
                 showPickupAction={false}
-                showPickupStrike={false}
+                view="orders"
                 showPaymentActions={role !== "waiter"}
               />
             ))}
@@ -2867,26 +2868,39 @@ function MenuView({
   );
 }
 
-function OrderTicket({
+export function OrderTicket({
   order,
   onDone,
   onSetPayment,
   onStatus,
   showPaymentActions = true,
   showPickupAction = true,
-  showPickupStrike = true,
+  view = "orders",
 }: {
   order: Row;
-  onDone: (payload: string) => void;
-  onSetPayment: (payload: string, paymentStatus: string) => void;
-  onStatus: (payload: string, action: string, message: string) => void;
+  onDone: (payload: string) => Promise<void> | void;
+  onSetPayment: (
+    payload: string,
+    paymentStatus: string,
+  ) => Promise<void> | void;
+  onStatus: (
+    payload: string,
+    action: string,
+    message: string,
+  ) => Promise<void> | void;
   showPaymentActions?: boolean;
   showPickupAction?: boolean;
-  showPickupStrike?: boolean;
+  view?: "barista" | "orders";
 }) {
   const due = numberValue(order.outstandingAmount);
-  const statusTone = orderStatusTone(order.orderStatus);
-  const pickedUp = isPickedUp(order.orderStatus);
+  const preparationStatus = normalizePreparationStatus(order.orderStatus);
+  const paymentStatus = normalizePaymentStatusForDisplay(order.paymentStatus);
+  const preparationClass = getPreparationStatusClass(preparationStatus);
+  const paymentClass = getPaymentStatusClass(paymentStatus);
+  const pickedUp = isPickedUpStatus(preparationStatus);
+  const finished = isFinishedPreparationStatus(preparationStatus);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingActionRef = useRef<string | null>(null);
   const payload = receiptActionPayload(order);
   const place = orderPlaceOf(order);
   const title = [place, stringValue(order.customerName) || "Walk-in customer"]
@@ -2898,58 +2912,91 @@ function OrderTicket({
         .split("+")
         .map((item) => item.trim())
         .filter(Boolean);
+  const prepAction = nextPreparationAction(preparationStatus);
+
+  async function runTicketAction(
+    actionKey: string,
+    callback: () => Promise<void> | void,
+  ) {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = actionKey;
+    setPendingAction(actionKey);
+    try {
+      await callback();
+    } finally {
+      pendingActionRef.current = null;
+      setPendingAction(null);
+    }
+  }
 
   return (
     <article
-      className={`order-ticket ${statusTone} ${pickedUp && showPickupStrike ? "picked-up" : ""}`}
+      className={[
+        "order-ticket",
+        view === "barista" ? "barista-receipt" : "orders-receipt",
+        preparationClass,
+        paymentClass,
+        finished && view === "barista" ? "is-finished" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-payment-status={paymentStatus}
+      data-preparation-status={preparationStatus}
     >
-      <div className="ticket-head">
-        <div className="ticket-title">
-          <strong>{title}</strong>
-          <span className="muted">
-            {stringValue(order.orderDateTime)}{" "}
-            {order.staff ? `| ${stringValue(order.staff)}` : ""}
-          </span>
-          {place && <span className="ticket-place">{place}</span>}
+      <div
+        className={
+          view === "barista"
+            ? "barista-receipt-content"
+            : "orders-receipt-content"
+        }
+      >
+        <div className="ticket-head">
+          <div className="ticket-title">
+            <strong>{title}</strong>
+            <span className="muted">
+              {stringValue(order.orderDateTime)}{" "}
+              {order.staff ? `| ${stringValue(order.staff)}` : ""}
+            </span>
+            {place && <span className="ticket-place">{place}</span>}
+          </div>
+          <div className="actions">
+            <PreparationStatusBadge status={preparationStatus} />
+            <PaymentStatusBadge status={paymentStatus} />
+          </div>
         </div>
-        <div className="actions">
-          {showPaymentActions && (
-            <Pill value={stringValue(order.paymentStatus) || "Paid"} />
-          )}
-          {statusTone === "accepted" && <Pill value="Accepted" />}
-          {pickedUp && <Pill value="Picked Up" />}
-        </div>
-      </div>
 
-      <div className="ticket-items">
-        {items.length ? (
-          items.map((item, index) => {
-            const text = stringValue(item);
-            const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
-            return (
-              <div className="ticket-item" key={`${text}-${index}`}>
-                <span>{match ? match[1] : text}</span>
-                <span>x{match ? match[2] : "1"}</span>
-              </div>
-            );
-          })
-        ) : (
-          <div className="muted">No item description.</div>
+        <div className="ticket-items">
+          {items.length ? (
+            items.map((item, index) => {
+              const text = stringValue(item);
+              const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
+              return (
+                <div className="ticket-item" key={`${text}-${index}`}>
+                  <span>{match ? match[1] : text}</span>
+                  <span>x{match ? match[2] : "1"}</span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="muted">No item description.</div>
+          )}
+        </div>
+
+        <div className="ticket-total">
+          <span>Total</span>
+          <span>{money(order.total)} EGP</span>
+        </div>
+        {showPaymentActions && (
+          <div className="stock-meta">
+            <span>Paid: {money(order.paidAmount)} EGP</span>
+            <span className={`pill ${paymentClass}`}>
+              {paymentStatus === "Partially Paid" && due > 0
+                ? `Remaining ${money(due)} EGP`
+                : paymentStatus}
+            </span>
+          </div>
         )}
       </div>
-
-      <div className="ticket-total">
-        <span>Total</span>
-        <span>{money(order.total)} EGP</span>
-      </div>
-      {showPaymentActions && (
-        <div className="stock-meta">
-          <span>Paid: {money(order.paidAmount)} EGP</span>
-          <span className={`pill ${due > 0 ? "unpaid" : "paid"}`}>
-            {due > 0 ? `Due ${money(due)} EGP` : "Ready"}
-          </span>
-        </div>
-      )}
       <div
         className={`ticket-actions ${ticketActionClass(showPaymentActions, showPickupAction)}`}
       >
@@ -2957,14 +3004,24 @@ function OrderTicket({
           <>
             <button
               className="secondary"
-              onClick={() => onSetPayment(payload, "Paid")}
+              disabled={Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("payment-paid", () =>
+                  onSetPayment(payload, "Paid"),
+                )
+              }
               type="button"
             >
               Paid
             </button>
             <button
               className="secondary"
-              onClick={() => onSetPayment(payload, "Unpaid")}
+              disabled={Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("payment-unpaid", () =>
+                  onSetPayment(payload, "Unpaid"),
+                )
+              }
               type="button"
             >
               Unpaid
@@ -2975,18 +3032,29 @@ function OrderTicket({
           <>
             <button
               className="accept"
-              disabled={pickedUp || statusTone === "accepted"}
+              disabled={!prepAction || Boolean(pendingAction)}
               onClick={() =>
-                onStatus(payload, "markReceiptAccepted", "Receipt accepted.")
+                prepAction &&
+                void runTicketAction(prepAction.action, () =>
+                  onStatus(payload, prepAction.action, prepAction.message),
+                )
               }
               type="button"
             >
-              Accept
+              {pendingAction === prepAction?.action
+                ? "Saving..."
+                : prepAction?.label || "Accepted"}
             </button>
             <button
               className="pickup"
-              disabled={pickedUp}
-              onClick={() => onDone(payload)}
+              disabled={
+                pickedUp ||
+                preparationStatus !== "Ready" ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runTicketAction("markReceiptDone", () => onDone(payload))
+              }
               type="button"
             >
               Pickup
@@ -2996,6 +3064,52 @@ function OrderTicket({
       </div>
     </article>
   );
+}
+
+function PreparationStatusBadge({ status }: { status: PreparationStatus }) {
+  return (
+    <span
+      className={`pill status-badge preparation-status-badge ${getPreparationStatusClass(status)}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  const normalized = normalizePaymentStatusForDisplay(status);
+  return (
+    <span
+      className={`pill status-badge payment-status-badge ${getPaymentStatusClass(normalized)}`}
+    >
+      {normalized}
+    </span>
+  );
+}
+
+function nextPreparationAction(status: PreparationStatus) {
+  if (status === "Submitted") {
+    return {
+      action: "markReceiptAccepted",
+      label: "Accept",
+      message: "Receipt accepted.",
+    };
+  }
+  if (status === "Accepted") {
+    return {
+      action: "markReceiptPreparing",
+      label: "Start",
+      message: "Receipt marked preparing.",
+    };
+  }
+  if (status === "Preparing") {
+    return {
+      action: "markReceiptReady",
+      label: "Ready",
+      message: "Receipt marked ready.",
+    };
+  }
+  return null;
 }
 
 function StockCard({ item }: { item: Row }) {
@@ -3329,7 +3443,7 @@ function buildDashboardCounts(data: AppData): Dashboard {
   const unpaid = data.unpaid || [];
   const base = data.dashboard || {};
   const pickedUpReceipts = dashboardOrders.filter((order) =>
-    isPickedUp(order.orderStatus),
+    isPickedUpStatus(order.orderStatus),
   ).length;
   const unpaidReceipts = dashboardOrders.filter(
     (order) => numberValue(order.outstandingAmount) > 0,
@@ -3393,7 +3507,7 @@ function buildDashboardOrders(orders: Row[]) {
       numberValue(group.outstandingAmount) +
       numberValue(order.outstandingAmount);
     group.orderPlace = group.orderPlace || orderPlaceOf(order);
-    if (isPickedUp(order.orderStatus)) {
+    if (isPickedUpStatus(order.orderStatus)) {
       group.pickedUpCount += 1;
     }
     group.orderDescriptions.push(
@@ -3697,29 +3811,6 @@ function receiptPayloadFrom(value: string) {
   return JSON.parse(decodeURIComponent(value)) as ReceiptPayload;
 }
 
-function isPickedUp(value: unknown) {
-  const normalized = stringValue(value)
-    .toLowerCase()
-    .replace(/[-_\s]+/g, "");
-  return (
-    normalized === "done" ||
-    normalized === "pickedup" ||
-    normalized === "pickup" ||
-    normalized === "served"
-  );
-}
-
-function orderStatusTone(value: unknown) {
-  const normalized = stringValue(value)
-    .toLowerCase()
-    .replace(/[-_\s]+/g, "");
-  if (["done", "pickedup", "pickup", "served"].includes(normalized)) {
-    return "picked-up";
-  }
-  if (normalized === "accepted") return "accepted";
-  return "";
-}
-
 function orderPlaceOf(row: Row) {
   const direct = stringValue(
     row.orderPlace || row.tableNumber || row.table || row.place || row.location,
@@ -3953,6 +4044,9 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "addReceipt",
     "collectUnpaidPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
     "generateVoucher",
     "redeemVoucher",
@@ -3973,6 +4067,9 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "addReceipt",
     "collectUnpaidPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
     "generateVoucher",
     "redeemVoucher",
@@ -3991,6 +4088,9 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "addReceipt",
     "collectUnpaidPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
     "generateVoucher",
     "redeemVoucher",
@@ -4007,10 +4107,21 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "addReceipt",
     "customerSearch",
     "customerHistory",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
     "debugAuth",
   ]),
-  barista: new Set(["appData", "getAppData", "markReceiptDone", "debugAuth"]),
+  barista: new Set([
+    "appData",
+    "getAppData",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
+    "markReceiptDone",
+    "debugAuth",
+  ]),
 };
 
 function canRunAction(role: StaffRole, action: string) {
