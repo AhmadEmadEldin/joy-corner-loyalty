@@ -2,8 +2,9 @@ import { featurePermissions } from "./domain";
 import {
   actionFeaturePermissions,
   isFeatureAllowed,
-  resolveEffectivePermissions,
   permissionsForRole,
+  resolveEffectivePermissions,
+  visibleTabsForPermissions,
 } from "./permissions";
 
 describe("permissions", () => {
@@ -70,5 +71,20 @@ describe("permissions", () => {
     expect(permissionsForRole("barista").has("settings.manage")).toBe(false);
     expect(permissionsForRole("manager").has("vouchers.generate")).toBe(true);
     expect(permissionsForRole("manager").has("permissions.manage")).toBe(false);
+  });
+
+  it("derives visible tabs from effective permissions", () => {
+    expect(visibleTabsForPermissions("cashier", ["dashboard.view"])).toContain(
+      "dashboard",
+    );
+    expect(visibleTabsForPermissions("barista", ["orders.view"])).toContain(
+      "orders",
+    );
+    expect(visibleTabsForPermissions("waiter", ["orders.view"])).not.toContain(
+      "dashboard",
+    );
+    expect(visibleTabsForPermissions("owner", ["staff.view"])).toContain(
+      "owner",
+    );
   });
 });

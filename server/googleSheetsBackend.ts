@@ -554,6 +554,7 @@ async function setCell(
   columnIndex: number,
   value: unknown,
 ) {
+  await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || []);
   const sheets = await getSheetsClient();
   const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.update({
@@ -599,6 +600,7 @@ async function deleteSheetRow(sheetName: string, row: number) {
 }
 
 async function appendRow(sheetName: string, rowValues: unknown[]) {
+  await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || []);
   const sheets = await getSheetsClient();
   const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.append({
@@ -640,6 +642,7 @@ async function writeDataRow(sheetName: string, rowValues: unknown[]) {
 }
 
 async function writeObjectRow(sheetName: string, record: Payload) {
+  await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || []);
   const values = await getSheetValues(sheetName);
   const headers = (values[0] || []).map(normalizeKey_);
   const schema = schemaForSheet(sheetName);

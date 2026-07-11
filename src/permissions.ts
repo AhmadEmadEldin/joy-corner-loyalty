@@ -112,6 +112,7 @@ export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> =
     "orders.view",
     "orders.create",
     "receipts.view",
+    "receipts.print",
   ]),
   barista: new Set([
     "orders.view",
@@ -205,6 +206,52 @@ export function resolveEffectivePermissions(options: {
       new Set([...grantInput.unknown, ...revokeInput.unknown]),
     ).sort(),
   };
+}
+
+export function visibleTabsForPermissions(
+  role: string,
+  effectivePermissions: string[] = [],
+) {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  const tabPermissions: Record<string, string[]> = {
+    dashboard: ["dashboard.view"],
+    customers: ["customers.view"],
+    history: ["history.view"],
+    menu: ["menu.view"],
+    orders: ["orders.view"],
+    owner: ["staff.view"],
+    rewards: ["rewards.view"],
+    unpaid: ["unpaid.view"],
+    vouchers: ["vouchers.view"],
+  };
+  const roleDefaults = Array.from(permissionsForRole(normalizedRole));
+  const permissionsSet = new Set(
+    (effectivePermissions || [])
+      .map((permission) => String(permission ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const hasRequiredPermission = (permission: string) =>
+    normalizedRole === "owner" ||
+    permissionsSet.has(permission) ||
+    roleDefaults.includes(permission as never);
+
+  return [
+    ["dashboard", "Dashboard"],
+    ["customers", "Customers"],
+    ["orders", "Orders"],
+    ["rewards", "Rewards"],
+    ["vouchers", "Vouchers"],
+    ["unpaid", "Unpaid"],
+    ["history", "History"],
+    ["menu", "Menu"],
+    ["owner", "Owner"],
+  ].filter(([tabId]) => {
+    const requiredPermissions = tabPermissions[tabId as keyof typeof tabPermissions] || [];
+    if (tabId === "owner") {
+      return normalizedRole === "owner";
+    }
+    return requiredPermissions.every((permission) => hasRequiredPermission(permission));
+  }) as Array<[string, string]>;
 }
 
 export function hasPermission(options: {

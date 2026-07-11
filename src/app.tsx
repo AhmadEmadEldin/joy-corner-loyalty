@@ -24,6 +24,7 @@ import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
 import {
   calculateReceiptLine,
   calculateReceiptTotals,
+  normalizePaymentStatus,
 } from "./receiptCalculator";
 import {
   getPaymentStatusClass,
@@ -38,7 +39,9 @@ import {
   actionFeaturePermissions,
   hasPermission,
   resolveEffectivePermissions,
+  visibleTabsForPermissions,
 } from "./permissions";
+import { buildReceiptPrintHtml } from "./receiptPrint";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -91,6 +94,7 @@ type OwnerData = {
 type ApiResponse = {
   success?: boolean;
   data?: AppData;
+  receipt?: Row;
   staff?: StaffProfile;
   message?: string;
 };
@@ -220,6 +224,56 @@ function TabIcon({ id }: { id: TabId }) {
   );
 }
 
+export function buildReceiptSubmissionPayload(
+  form: HTMLFormElement,
+  items: ReceiptItem[],
+  customers: Row[],
+) {
+  const customerId = stringValue(form.elements.namedItem("customerId"));
+  const customer = customers.find((row) => customerIdOf(row) === customerId);
+  const payload = formObject(form) as Record<string, unknown>;
+  const discount = stringValue(form.elements.namedItem("receiptDiscountPercentage"));
+  const receiptTotals = calculateReceiptTotals(
+    items.map((item) => ({ qty: item.qty, unitPrice: item.unitPrice })),
+    discount,
+  );
+  const requestedPaidAmount = numberValue(form.elements.namedItem("paidAmount"));
+  const requestedPaymentStatus = stringValue(
+    form.elements.namedItem("paymentStatus"),
+  );
+  const normalizedPaymentStatus = normalizePaymentStatus(requestedPaymentStatus);
+  const normalizedPaidAmount =
+    normalizedPaymentStatus === "Unpaid"
+      ? 0
+      : normalizedPaymentStatus === "Paid"
+        ? receiptTotals.receiptTotal
+        : Math.min(Math.max(requestedPaidAmount, 0), receiptTotals.receiptTotal);
+  const remainingAmount = Math.max(
+    0,
+    receiptTotals.receiptTotal - normalizedPaidAmount,
+  );
+
+  payload.customerName =
+    customerName(customer) || stringValue(payload.customerName);
+  payload.phone =
+    phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
+  payload.items = items;
+  payload.receiptDiscountPercentage = discount;
+  payload.paidAmount = normalizedPaidAmount;
+  payload.remainingAmount = remainingAmount;
+  payload.paymentStatus = normalizedPaymentStatus;
+  payload.idempotencyKey =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  payload.orderPlace = composeServicePlace(payload);
+  delete payload.customerSearch;
+  delete payload.serviceType;
+  delete payload.carName;
+  delete payload.carColor;
+  return payload;
+}
+
 export function App() {
   if (window.location.pathname.startsWith("/order")) {
     return <CustomerOrderPage />;
@@ -246,7 +300,14 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(firebaseReady);
 
   const currentRole = staffProfile?.role || "barista";
-  const visibleTabs = useMemo(() => tabsForRole(currentRole), [currentRole]);
+  const visibleTabs = useMemo(
+    () =>
+      visibleTabsForPermissions(
+        currentRole,
+        staffProfile?.effectivePermissions || [],
+      ),
+    [currentRole, staffProfile?.effectivePermissions],
+  );
   const connectedData = useMemo(() => ensureConnectedData(data), [data]);
   const customers = connectedData.customers || [];
   const menu = connectedData.menu?.length ? connectedData.menu : normalizedMenu;
@@ -290,8 +351,9 @@ export function App() {
   }, [staffProfile?.uid]);
 
   useEffect(() => {
-    if (!visibleTabs.some(([id]) => id === activeTab)) {
-      setActiveTab(visibleTabs[0]?.[0] || "dashboard");
+    const visibleTabIds = visibleTabs.map(([id]) => id as TabId);
+    if (!visibleTabIds.some((id) => id === activeTab)) {
+      setActiveTab((visibleTabs[0]?.[0] as TabId) || "dashboard");
     }
   }, [activeTab, visibleTabs]);
 
@@ -529,6 +591,71 @@ export function App() {
     return nextItem;
   }
 
+  function mergeReceiptResponseIntoAppData(response: ApiResponse & AppData) {
+    const receipt = response.receipt;
+    const nextData = ensureConnectedData(response.data || response);
+    const fallbackReceipt = nextData.dashboardOrders?.[0] || nextData.orders?.[0];
+    const normalizedReceipt = receipt
+      ? ({
+          ...receipt,
+          receiptId: stringValue(receipt.receiptId || receipt.receiptNumber),
+          receiptNumber: stringValue(receipt.receiptNumber || receipt.receiptId),
+          receiptKey: stringValue(
+            receipt.receiptKey || receipt.receiptId || receipt.receiptNumber,
+          ),
+          orderId: stringValue(receipt.orderId || receipt.receiptId || receipt.receiptNumber),
+          customerId: stringValue(receipt.customerId),
+          customerName: stringValue(receipt.customerName),
+          staff: stringValue(receipt.staff),
+          orderPlace: stringValue(receipt.orderPlace),
+          total: stringValue(receipt.total),
+          paidAmount: stringValue(receipt.paidAmount),
+          outstandingAmount: stringValue(receipt.outstandingAmount),
+          paymentStatus: stringValue(receipt.paymentStatus),
+          orderStatus: stringValue(receipt.orderStatus || "Submitted"),
+          orderDescription: stringValue(receipt.orderDescription),
+          notes: stringValue(receipt.notes),
+          orderItems: Array.isArray(receipt.orderItems)
+            ? receipt.orderItems.map((item) => stringValue(item))
+            : [],
+        } as Row)
+      : fallbackReceipt;
+
+    if (!normalizedReceipt) {
+      mergeAppData(nextData);
+      return;
+    }
+
+    setData((current) => {
+      const base = ensureConnectedData(current);
+      const incomingOrders = nextData.orders?.length
+        ? nextData.orders
+        : [normalizedReceipt];
+      const incomingDashboardOrders = nextData.dashboardOrders?.length
+        ? nextData.dashboardOrders
+        : [normalizedReceipt];
+      const mergedOrders = mergeRowsByKey(
+        [normalizedReceipt, ...(base.orders || [])],
+        incomingOrders,
+        receiptKeyOf,
+      );
+      const mergedDashboardOrders = mergeRowsByKey(
+        [normalizedReceipt, ...(base.dashboardOrders || [])],
+        incomingDashboardOrders,
+        receiptKeyOf,
+      );
+
+      return ensureConnectedData({
+        ...base,
+        ...nextData,
+        dashboard: nextData.dashboard || base.dashboard,
+        dashboardOrders: mergedDashboardOrders,
+        orders: mergedOrders,
+        unpaid: nextData.unpaid || base.unpaid,
+      });
+    });
+  }
+
   async function submitReceipt(form: HTMLFormElement) {
     if (receiptSubmittingRef.current) {
       setStatus("Receipt is already being submitted.");
@@ -544,51 +671,41 @@ export function App() {
 
     if (!items.length) return false;
 
+    const payload = buildReceiptSubmissionPayload(form, items, customers);
     const receiptTotals = calculateReceiptTotals(
       items.map((item) => ({ qty: item.qty, unitPrice: item.unitPrice })),
       stringValue(form.elements.namedItem("receiptDiscountPercentage")),
     );
-    const paidNow = numberValue(form.elements.namedItem("paidAmount"));
+    const paidNow = numberValue(payload.paidAmount);
+    const remainingBalance = Math.max(0, receiptTotals.receiptTotal - paidNow);
     if (paidNow < 0) {
       setStatus("Paid amount cannot be negative.");
       return false;
     }
     if (paidNow > receiptTotals.receiptTotal) {
-      setStatus("Paid amount cannot exceed the receipt total.");
+      setStatus(
+        `Paid amount cannot exceed the receipt total. Remaining ${money(remainingBalance)} EGP.`,
+      );
       return false;
     }
 
-    const customerId = stringValue(form.elements.namedItem("customerId"));
-    const customer = customers.find((row) => customerIdOf(row) === customerId);
-    const payload = formObject(form);
-    payload.customerName =
-      customerName(customer) || stringValue(payload.customerName);
-    payload.phone =
-      phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
-    payload.items = items;
-    payload.receiptDiscountPercentage = stringValue(
-      form.elements.namedItem("receiptDiscountPercentage"),
-    );
-    payload.idempotencyKey =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    payload.orderPlace = composeServicePlace(payload);
-    delete payload.customerSearch;
-    delete payload.serviceType;
-    delete payload.carName;
-    delete payload.carColor;
-
     try {
       receiptSubmittingRef.current = true;
-      const saved = await callAndReload("addReceipt", payload, "Receipt submitted.");
-      if (saved) {
-        setReceiptItems([]);
-        form.reset();
-      }
-      return saved;
+      setSavingAction("addReceipt");
+      setStatus("Saving...");
+      const response = await callServer("addReceipt", payload);
+      mergeReceiptResponseIntoAppData(response);
+      setStatus(`Receipt submitted. ${dataSummary(ensureConnectedData(response.data || response))}`);
+      setReceiptItems([]);
+      form.reset();
+      return true;
+    } catch (error) {
+      console.error("Receipt submission failed", error);
+      setStatus(`${errorMessage(error)} Order was not saved.`);
+      return false;
     } finally {
       receiptSubmittingRef.current = false;
+      setSavingAction(null);
     }
   }
 
@@ -878,10 +995,10 @@ export function App() {
             <button
               className={`tab-button ${activeTab === id ? "active" : ""}`}
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => setActiveTab(id as TabId)}
               type="button"
             >
-              <TabIcon id={id} />
+              <TabIcon id={id as TabId} />
               {label}
             </button>
           ))}
@@ -3321,6 +3438,7 @@ export function OrderTicket({
   const pendingActionRef = useRef<string | null>(null);
   const payload = receiptActionPayload(order);
   const place = orderPlaceOf(order);
+  const receiptNumber = stringValue(order.receiptNumber || order.receiptId);
   const title = [place, stringValue(order.customerName) || "Walk-in customer"]
     .filter(Boolean)
     .join(" - ");
@@ -3461,6 +3579,14 @@ export function OrderTicket({
               type="button"
             >
               {pendingAction === "collect-payment" ? "Saving..." : "Collect"}
+            </button>
+            <button
+              className="secondary"
+              disabled={Boolean(pendingAction)}
+              onClick={() => printReceipt(order)}
+              type="button"
+            >
+              Print
             </button>
             <button
               className="secondary"
@@ -4420,6 +4546,51 @@ function orderPlaceOf(row: Row) {
   return match ? stringValue(match[1]) : "";
 }
 
+function printReceipt(order: Row) {
+  const items = Array.isArray(order.orderItems)
+    ? order.orderItems.map((item) => {
+        const text = stringValue(item);
+        const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
+        return {
+          itemName: match ? match[1] : text,
+          qty: match ? numberValue(match[2]) : 1,
+          unitPrice: numberValue(order.unitPrice),
+          total: numberValue(order.total),
+          size: stringValue(order.size),
+        };
+      })
+    : [
+        {
+          itemName: stringValue(order.item || order.orderDescription || "Item"),
+          qty: numberValue(order.qty) || 1,
+          unitPrice: numberValue(order.unitPrice),
+          total: numberValue(order.total),
+          size: stringValue(order.size),
+        },
+      ];
+  const html = buildReceiptPrintHtml({
+    customerName: stringValue(order.customerName),
+    customerPhone: phoneOf(order),
+    receiptId: stringValue(order.receiptId),
+    receiptNumber: stringValue(order.receiptNumber || order.receiptId),
+    items,
+    discountPercentage: numberValue(order.receiptDiscountPercentage),
+    subtotal: numberValue(order.total),
+    total: numberValue(order.total),
+    paidAmount: numberValue(order.paidAmount),
+    outstandingAmount: numberValue(order.outstandingAmount),
+    paymentStatus: stringValue(order.paymentStatus),
+    orderDateTime: stringValue(order.orderDateTime),
+    staff: stringValue(order.staff),
+    orderPlace: orderPlaceOf(order),
+    notes: stringValue(order.notes || order.customerNotes),
+  });
+  const win = window.open("", "_blank", "width=760,height=900");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+}
+
 function printVoucher(row: Row) {
   const customer = customerName(row) || "Joy Corner Guest";
   const drink = favoriteDrink(row) || "your favorite drink";
@@ -4623,13 +4794,6 @@ function formObject(form: HTMLFormElement) {
     string,
     unknown
   >;
-}
-
-function tabsForRole(role: StaffRole) {
-  if (role === "barista") return tabs.filter(([id]) => id === "dashboard");
-  if (role === "waiter") return tabs.filter(([id]) => id === "orders");
-  if (role === "owner") return tabs;
-  return tabs.filter(([id]) => id !== "owner");
 }
 
 const rolePermissions: Record<StaffRole, Set<string>> = {
