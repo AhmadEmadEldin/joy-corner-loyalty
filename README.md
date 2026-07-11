@@ -95,31 +95,35 @@ Required fields:
   "displayName": "Joy Corner Owner",
   "type": "staff",
   "role": "owner",
-  "active": true
+  "active": true,
+  "grant": [],
+  "revoke": []
 }
 ```
 
 Allowed roles are `owner`, `manager`, `cashier`, `waiter`, and `barista`.
-Use Firestore field types exactly: `email`, `displayName`, `type`, and `role` are strings; `active` is a boolean set to `true`.
+Use Firestore field types exactly: `email`, `displayName`, `type`, and `role` are strings; `active` is a boolean; `grant` and `revoke` are arrays of lowercase permission strings.
 
-Optional feature-level permission fields:
+Feature-level access uses role defaults plus grant overrides minus revoke overrides:
 
 ```json
 {
-  "permissions": ["payments.create", "unpaid.update"],
-  "revokedPermissions": ["customers.delete"]
+  "grant": ["receipts.print"],
+  "revoke": ["customers.delete"]
 }
 ```
 
-Owners receive all backend permissions automatically. Other staff keep their role defaults unless an owner grants a permission in `permissions` or blocks one in `revokedPermissions`.
+Owners receive all backend permissions automatically. Other staff keep their role defaults unless an owner grants a permission in `grant` or blocks one in `revoke`. Existing `permissions` and `revokedPermissions` documents are still read for compatibility, but new writes use `grant` and `revoke`.
 
-If your `Staff` sheet has `Email`, `Password`, `Role`, `Name`, and `Active`, run:
+Owner Staff Management can securely create Firebase Auth staff users from the app through Firebase Admin. The owner stays signed in while the backend creates the staff Auth account and writes `users/{uid}`.
+
+If your Firebase Auth users already exist and your `Staff` sheet has `Email`, `Role`, `Name`, `Active`, `Grant`, and `Revoke`, run:
 
 ```powershell
 npm run sync:staff
 ```
 
-This creates or updates Firebase Auth users and writes Firestore `users/{uid}` role documents.
+This updates matching Firebase Auth display names/disabled status and writes Firestore `users/{uid}` role documents. It does not read, write, or migrate plaintext passwords. If a staff email does not exist in Firebase Auth yet, create that user from Owner Staff Management or Firebase Console first.
 
 Staff documents use this shape:
 
@@ -130,6 +134,8 @@ Staff documents use this shape:
   "type": "staff",
   "role": "owner",
   "active": true,
+  "grant": [],
+  "revoke": [],
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }

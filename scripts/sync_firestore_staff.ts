@@ -11,7 +11,8 @@ type StaffSeed = {
   active: boolean;
   displayName: string;
   email: string;
-  password: string;
+  grant: string[];
+  revoke: string[];
   role: "owner" | "manager" | "cashier" | "waiter" | "barista";
 };
 
@@ -92,6 +93,18 @@ function activeValue(value: unknown) {
   );
 }
 
+function permissionArray(value: unknown) {
+  const seen = new Set<string>();
+  return clean(value)
+    .split(/[,\n|]+/)
+    .map((permission) => permission.trim().toLowerCase())
+    .filter((permission) => {
+      if (!permission || seen.has(permission)) return false;
+      seen.add(permission);
+      return true;
+    });
+}
+
 async function readStaffSheet() {
   const spreadsheetId =
     process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
@@ -123,35 +136,21 @@ async function readStaffSheet() {
         active: activeValue(record.active),
         displayName: record.name || record.displayname || record.email,
         email: clean(record.email).toLowerCase(),
-        password: clean(record.password),
+        grant: permissionArray(record.grant || record.permissions),
+        revoke: permissionArray(record.revoke || record.revokedpermissions),
         role,
       } as StaffSeed;
     })
-    .filter((staff): staff is StaffSeed =>
-      Boolean(staff?.email && staff.password),
-    );
+    .filter((staff): staff is StaffSeed => Boolean(staff?.email));
 }
 
 async function upsertStaff(staff: StaffSeed) {
   const auth = getAuth();
-  let user;
-
-  try {
-    user = await auth.getUserByEmail(staff.email);
-    user = await auth.updateUser(user.uid, {
-      disabled: !staff.active,
-      displayName: staff.displayName,
-      password: staff.password,
-    });
-  } catch {
-    user = await auth.createUser({
-      disabled: !staff.active,
-      displayName: staff.displayName,
-      email: staff.email,
-      emailVerified: true,
-      password: staff.password,
-    });
-  }
+  const user = await auth.getUserByEmail(staff.email);
+  await auth.updateUser(user.uid, {
+    disabled: !staff.active,
+    displayName: staff.displayName,
+  });
 
   const staffDoc = getFirestore().collection("users").doc(user.uid);
   const staffSnapshot = await staffDoc.get();
@@ -163,6 +162,8 @@ async function upsertStaff(staff: StaffSeed) {
         : { createdAt: FieldValue.serverTimestamp() }),
       displayName: staff.displayName,
       email: staff.email,
+      grant: staff.grant,
+      revoke: staff.revoke,
       role: staff.role,
       type: "staff",
       uid: user.uid,

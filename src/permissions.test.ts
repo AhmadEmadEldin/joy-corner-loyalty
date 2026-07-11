@@ -2,6 +2,7 @@ import { featurePermissions } from "./domain";
 import {
   actionFeaturePermissions,
   isFeatureAllowed,
+  resolveEffectivePermissions,
   permissionsForRole,
 } from "./permissions";
 
@@ -12,7 +13,11 @@ describe("permissions", () => {
 
   it("maps protected actions to feature permissions", () => {
     expect(actionFeaturePermissions.resetDay).toBe("day.reset");
-    expect(actionFeaturePermissions.upsertStaff).toBe("staff.manage");
+    expect(actionFeaturePermissions.upsertStaff).toBe("staff.create");
+    expect(actionFeaturePermissions.setStaffPermissions).toBe(
+      "permissions.manage",
+    );
+    expect(actionFeaturePermissions.setStaffActive).toBe("staff.deactivate");
   });
 
   it("supports explicit grants and revocations", () => {
@@ -30,5 +35,40 @@ describe("permissions", () => {
         role: "cashier",
       }),
     ).toBe(false);
+  });
+
+  it("resolves role defaults plus grant minus revoke", () => {
+    const resolution = resolveEffectivePermissions({
+      grant: ["receipts.print", "customers.delete"],
+      revoke: ["customers.delete", "menu.view"],
+      role: "waiter",
+    });
+
+    expect(resolution.effectivePermissions).toContain("receipts.print");
+    expect(resolution.effectivePermissions).not.toContain("customers.delete");
+    expect(resolution.effectivePermissions).not.toContain("menu.view");
+    expect(resolution.overlaps).toEqual(["customers.delete"]);
+  });
+
+  it("warns about duplicate and unknown permission overrides", () => {
+    const resolution = resolveEffectivePermissions({
+      grant: "payments.refund, PAYMENTS.REFUND, made.up.permission",
+      role: "cashier",
+    });
+
+    expect(resolution.grant).toEqual(["payments.refund"]);
+    expect(resolution.duplicates).toEqual(["payments.refund"]);
+    expect(resolution.unknown).toEqual(["made.up.permission"]);
+  });
+
+  it("keeps non-owner defaults limited by role", () => {
+    expect(permissionsForRole("cashier").has("customers.history")).toBe(true);
+    expect(permissionsForRole("cashier").has("customers.delete")).toBe(false);
+    expect(permissionsForRole("waiter").has("orders.create")).toBe(true);
+    expect(permissionsForRole("waiter").has("payments.create")).toBe(false);
+    expect(permissionsForRole("barista").has("orders.ready")).toBe(true);
+    expect(permissionsForRole("barista").has("settings.manage")).toBe(false);
+    expect(permissionsForRole("manager").has("vouchers.generate")).toBe(true);
+    expect(permissionsForRole("manager").has("permissions.manage")).toBe(false);
   });
 });

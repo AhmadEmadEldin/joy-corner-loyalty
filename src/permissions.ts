@@ -1,130 +1,253 @@
 import { FeaturePermission, StaffRole, featurePermissions } from "./domain";
 
+export const permissionCatalog = [...featurePermissions];
+
 export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   addCustomer: "customers.create",
   addOrder: "orders.create",
   addPayment: "payments.create",
   addReceipt: "orders.create",
   appData: "dashboard.view",
-  collectUnpaidPayment: "unpaid.update",
-  customerHistory: "customers.view",
-  customerSearch: "customers.view",
-  dayHistory: "archive.view",
-  debugAuth: "settings.manage",
-  debugSheets: "settings.manage",
-  exportData: "reports.export",
-  generateVoucher: "rewards.manage",
-  getAppData: "dashboard.view",
-  historyDays: "archive.view",
-  markReceiptAccepted: "orders.update",
-  cancelReceipt: "orders.cancel",
-  markReceiptDone: "orders.update",
-  markReceiptPreparing: "orders.update",
-  markReceiptReady: "orders.update",
-  organizeSpreadsheet: "settings.manage",
-  ownerOverview: "staff.view",
-  redeemVoucher: "redemptions.create",
-  removeCustomer: "customers.delete",
-  resetDay: "day.reset",
-  backupSheetsWorkbook: "settings.manage",
-  migrateSheetsWorkbook: "settings.manage",
-  reconcileSheetsWorkbook: "settings.manage",
-  inspectSheetsWorkbook: "settings.manage",
-  retrySyncFailures: "settings.manage",
-  setStaffActive: "staff.manage",
-  setStaffPermissions: "staff.manage",
-  setStaffRole: "staff.manage",
-  syncMenuToSheets: "menu.update",
-  updateCustomer: "customers.update",
-  updateMenuItem: "menu.update",
-  upsertMenuCategory: "menu.update",
-  upsertMenuItem: "menu.update",
-  upsertMenuSize: "menu.update",
   archiveMenuCategory: "menu.delete",
   archiveMenuItem: "menu.delete",
   archiveMenuSize: "menu.delete",
+  backupSheetsWorkbook: "settings.manage",
+  cancelReceipt: "orders.update",
+  collectUnpaidPayment: "unpaid.collect",
+  collectReceiptPayment: "payments.create",
+  customerHistory: "customers.history",
+  customerSearch: "customers.search",
+  dayHistory: "history.day.view",
+  debugAuth: "settings.manage",
+  debugSheets: "settings.manage",
+  exportData: "reports.export",
+  generateVoucher: "vouchers.generate",
+  getAppData: "dashboard.view",
+  historyDays: "history.view",
+  inspectSheetsWorkbook: "settings.manage",
+  liveData: "dashboard.view",
+  markReceiptAccepted: "orders.accept",
+  markReceiptDone: "orders.pickedup",
+  markReceiptPreparing: "orders.update",
+  markReceiptReady: "orders.ready",
+  migrateSheetsWorkbook: "settings.manage",
+  organizeSpreadsheet: "settings.manage",
+  ownerOverview: "staff.view",
+  reconcileSheetsWorkbook: "settings.manage",
+  redeemVoucher: "vouchers.redeem",
+  removeCustomer: "customers.delete",
+  resetDay: "day.reset",
+  retrySyncFailures: "settings.manage",
+  setStaffActive: "staff.deactivate",
+  setStaffPermissions: "permissions.manage",
+  setStaffRole: "staff.update",
+  syncMenuToSheets: "menu.update",
+  updateCustomer: "customers.update",
+  updateMenuItem: "menu.update",
   updateReceiptPayment: "payments.create",
-  updateVoucherCanvaLink: "rewards.manage",
-  upsertStaff: "staff.manage",
+  updateVoucherCanvaLink: "vouchers.generate",
+  upsertMenuCategory: "menu.update",
+  upsertMenuItem: "menu.update",
+  upsertMenuSize: "menu.update",
+  upsertStaff: "staff.create",
 };
 
-export const roleFeaturePermissions: Record<
-  StaffRole,
-  Set<FeaturePermission>
-> = {
+export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> = {
   owner: new Set(featurePermissions),
   manager: new Set([
-    "archive.view",
-    "customers.create",
-    "customers.delete",
-    "customers.update",
-    "customers.view",
     "dashboard.view",
     "menu.view",
+    "customers.view",
+    "customers.create",
+    "customers.update",
+    "customers.search",
+    "customers.history",
+    "orders.view",
     "orders.create",
     "orders.update",
-    "orders.cancel",
-    "orders.view",
-    "payments.create",
     "payments.view",
-    "redemptions.create",
-    "redemptions.view",
-    "reports.view",
-    "rewards.manage",
-    "rewards.view",
-    "unpaid.update",
+    "payments.create",
     "unpaid.view",
+    "unpaid.collect",
+    "rewards.view",
+    "vouchers.view",
+    "vouchers.generate",
+    "vouchers.redeem",
+    "history.view",
+    "history.day.view",
+    "receipts.view",
+    "receipts.print",
+    "receipts.reprint",
   ]),
   cashier: new Set([
-    "archive.view",
+    "dashboard.view",
+    "menu.view",
+    "customers.view",
     "customers.create",
     "customers.update",
-    "customers.view",
-    "dashboard.view",
-    "menu.view",
+    "customers.search",
+    "customers.history",
+    "orders.view",
     "orders.create",
     "orders.update",
-    "orders.view",
-    "payments.create",
     "payments.view",
-    "redemptions.create",
-    "redemptions.view",
-    "rewards.manage",
-    "rewards.view",
-    "unpaid.update",
+    "payments.create",
     "unpaid.view",
+    "unpaid.collect",
+    "rewards.view",
+    "vouchers.view",
+    "vouchers.generate",
+    "vouchers.redeem",
+    "history.view",
+    "history.day.view",
+    "receipts.view",
+    "receipts.print",
+    "receipts.reprint",
   ]),
   waiter: new Set([
-    "customers.create",
-    "customers.view",
-    "dashboard.view",
     "menu.view",
-    "orders.create",
-    "orders.update",
+    "customers.view",
+    "customers.search",
+    "customers.history",
     "orders.view",
+    "orders.create",
+    "receipts.view",
   ]),
-  barista: new Set(["dashboard.view", "orders.update", "orders.view"]),
+  barista: new Set([
+    "orders.view",
+    "orders.accept",
+    "orders.ready",
+    "orders.pickedup",
+    "receipts.view",
+  ]),
 };
 
+export type PermissionResolution = {
+  duplicates: string[];
+  effectivePermissions: FeaturePermission[];
+  grant: FeaturePermission[];
+  overlaps: string[];
+  revoke: FeaturePermission[];
+  roleDefaults: FeaturePermission[];
+  unknown: string[];
+};
+
+export function normalizePermissionList(value: unknown) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? "").split(/[,\n|]+/);
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  const normalized: string[] = [];
+
+  raw.forEach((item) => {
+    const permission = String(item ?? "").trim().toLowerCase();
+    if (!permission) return;
+    if (seen.has(permission)) {
+      duplicates.add(permission);
+      return;
+    }
+    seen.add(permission);
+    normalized.push(permission);
+  });
+
+  return {
+    duplicates: Array.from(duplicates).sort(),
+    normalized,
+    unknown: normalized
+      .filter((permission) => !permissionCatalog.includes(permission as never))
+      .sort(),
+  };
+}
+
 export function permissionsForRole(role: string) {
-  if (role === "owner") return new Set(featurePermissions);
-  return (
-    roleFeaturePermissions[role as StaffRole] || new Set<FeaturePermission>()
+  const normalizedRole = role.toLowerCase() as StaffRole;
+  if (normalizedRole === "owner") return new Set(featurePermissions);
+  return roleFeaturePermissions[normalizedRole] || new Set<FeaturePermission>();
+}
+
+export function resolveEffectivePermissions(options: {
+  grant?: unknown;
+  permissions?: unknown;
+  revoke?: unknown;
+  revokedPermissions?: unknown;
+  role: string;
+}): PermissionResolution {
+  const roleDefaults = Array.from(permissionsForRole(options.role));
+  const grantInput = normalizePermissionList(options.grant ?? options.permissions ?? []);
+  const revokeInput = normalizePermissionList(
+    options.revoke ?? options.revokedPermissions ?? [],
   );
+  const grant = grantInput.normalized.filter((permission) =>
+    permissionCatalog.includes(permission as never),
+  ) as FeaturePermission[];
+  const revoke = revokeInput.normalized.filter((permission) =>
+    permissionCatalog.includes(permission as never),
+  ) as FeaturePermission[];
+  const revokeSet = new Set(revoke);
+  const overlaps = grant.filter((permission) => revokeSet.has(permission)).sort();
+  const effectivePermissions = Array.from(
+    new Set([...roleDefaults, ...grant]),
+  )
+    .filter((permission) => !revokeSet.has(permission))
+    .sort() as FeaturePermission[];
+
+  return {
+    duplicates: Array.from(
+      new Set([...grantInput.duplicates, ...revokeInput.duplicates]),
+    ).sort(),
+    effectivePermissions,
+    grant,
+    overlaps,
+    revoke,
+    roleDefaults: roleDefaults.sort() as FeaturePermission[],
+    unknown: Array.from(
+      new Set([...grantInput.unknown, ...revokeInput.unknown]),
+    ).sort(),
+  };
+}
+
+export function hasPermission(options: {
+  effectivePermissions?: string[];
+  feature?: string;
+  grant?: unknown;
+  permissions?: unknown;
+  revoke?: unknown;
+  revokedPermissions?: unknown;
+  role: string;
+}) {
+  const feature = String(options.feature || "").trim().toLowerCase();
+  if (!feature) return false;
+  if (options.role.toLowerCase() === "owner") return true;
+  const effective =
+    options.effectivePermissions ||
+    resolveEffectivePermissions({
+      grant: options.grant,
+      permissions: options.permissions,
+      revoke: options.revoke,
+      revokedPermissions: options.revokedPermissions,
+      role: options.role,
+    }).effectivePermissions;
+
+  return effective.includes(feature);
 }
 
 export function isFeatureAllowed(options: {
+  effectivePermissions?: string[];
   explicitPermissions?: string[];
   feature?: string;
+  grant?: unknown;
+  permissions?: unknown;
   revokedPermissions?: string[];
+  revoke?: unknown;
   role: string;
 }) {
-  if (options.role === "owner") return true;
-  const feature = options.feature as FeaturePermission | undefined;
-  if (!feature) return false;
-  const explicit = new Set(options.explicitPermissions || []);
-  const revoked = new Set(options.revokedPermissions || []);
-  if (revoked.has(feature)) return false;
-  if (explicit.has(feature)) return true;
-  return permissionsForRole(options.role).has(feature);
+  return hasPermission({
+    effectivePermissions: options.effectivePermissions,
+    feature: options.feature,
+    grant: options.grant ?? options.explicitPermissions,
+    permissions: options.permissions,
+    revoke: options.revoke ?? options.revokedPermissions,
+    role: options.role,
+  });
 }

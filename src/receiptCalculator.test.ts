@@ -1,33 +1,66 @@
 import {
   calculateReceiptLine,
+  calculateReceiptTotals,
   normalizePaidAmount,
   normalizePaymentStatus,
+  normalizeReceiptDiscountPercentage,
 } from "./receiptCalculator";
 
 describe("receiptCalculator", () => {
-  it("calculates line totals with cent-safe rounding", () => {
+  it("calculates item line totals without item-level discount", () => {
     expect(
       calculateReceiptLine({
-        discount: 0.2,
         qty: 3,
         unitPrice: 10.1,
       }),
     ).toMatchObject({
-      discount: 0.2,
+      discount: 0,
       qty: 3,
-      total: 30.1,
+      total: 30.3,
       unitPrice: 10.1,
     });
   });
 
-  it("never allows a discount to make a receipt line negative", () => {
+  it("applies a 10 percent discount once to a multi-item receipt", () => {
     expect(
-      calculateReceiptLine({
-        discount: 999,
-        qty: 2,
-        unitPrice: 30,
-      }).total,
+      calculateReceiptTotals(
+        [
+          { qty: 2, unitPrice: 40 },
+          { qty: 1, unitPrice: 20 },
+        ],
+        10,
+      ),
+    ).toEqual({
+      receiptDiscountAmount: 10,
+      receiptDiscountPercentage: 10,
+      receiptSubtotal: 100,
+      receiptTotal: 90,
+    });
+  });
+
+  it("supports decimal discount percentages", () => {
+    expect(
+      calculateReceiptTotals([{ qty: 1, unitPrice: 100 }], 7.5),
+    ).toMatchObject({
+      receiptDiscountAmount: 7.5,
+      receiptTotal: 92.5,
+    });
+  });
+
+  it("supports a 100 percent receipt discount", () => {
+    expect(
+      calculateReceiptTotals([{ qty: 1, unitPrice: 25.5 }], 100).receiptTotal,
     ).toBe(0);
+  });
+
+  it("treats empty discount as zero", () => {
+    expect(normalizeReceiptDiscountPercentage("")).toBe(0);
+  });
+
+  it("rejects invalid discount percentages", () => {
+    expect(() => normalizeReceiptDiscountPercentage(-1)).toThrow();
+    expect(() => normalizeReceiptDiscountPercentage(101)).toThrow();
+    expect(() => normalizeReceiptDiscountPercentage("abc")).toThrow();
   });
 
   it("normalizes payment statuses and clamps paid amounts", () => {

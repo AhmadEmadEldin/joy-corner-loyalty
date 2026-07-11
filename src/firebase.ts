@@ -32,8 +32,12 @@ export type StaffProfile = {
   active?: boolean;
   createdAt?: unknown;
   displayName: string;
+  effectivePermissions?: string[];
   email: string;
+  grant?: string[];
   permissions?: string[];
+  revoke?: string[];
+  revokedPermissions?: string[];
   role: StaffRole;
   type?: "staff";
   uid: string;
@@ -281,11 +285,24 @@ function staffProfileFromData(
   return {
     active: true,
     displayName: stringValue(data.displayName || data.name || email),
+    effectivePermissions: stringArrayValue(data.effectivePermissions),
     email,
+    grant: stringArrayValue(data.grant || data.permissions),
+    permissions: stringArrayValue(data.grant || data.permissions),
+    revoke: stringArrayValue(data.revoke || data.revokedPermissions),
+    revokedPermissions: stringArrayValue(data.revoke || data.revokedPermissions),
     role,
     type: "staff",
     uid,
   };
+}
+
+function stringArrayValue(value: unknown) {
+  if (Array.isArray(value)) return value.map(stringValue).filter(Boolean);
+  return stringValue(value)
+    .split(/[,\n|]+/)
+    .map(stringValue)
+    .filter(Boolean);
 }
 
 function normalizeRole(value: unknown): StaffRole | null {

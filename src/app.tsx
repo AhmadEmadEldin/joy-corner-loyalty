@@ -21,7 +21,10 @@ import {
   watchStaffAuth,
 } from "./firebase";
 import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
-import { calculateReceiptLine } from "./receiptCalculator";
+import {
+  calculateReceiptLine,
+  calculateReceiptTotals,
+} from "./receiptCalculator";
 import {
   getPaymentStatusClass,
   getPreparationStatusClass,
@@ -31,6 +34,11 @@ import {
   normalizePreparationStatus,
   PreparationStatus,
 } from "./receiptVisualState";
+import {
+  actionFeaturePermissions,
+  hasPermission,
+  resolveEffectivePermissions,
+} from "./permissions";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -93,7 +101,6 @@ type ReceiptItem = {
   itemName: string;
   qty: number;
   size: string;
-  discount: number;
   total: number;
   unitPrice: number;
 };
@@ -101,6 +108,8 @@ type ReceiptItem = {
 type ReceiptPayload = {
   receiptId: string;
   receiptKey: string;
+  orderId?: string;
+  receiptNumber?: string;
   customerId: string;
   customerName: string;
   orderDateTime: string;
@@ -221,11 +230,14 @@ export function App() {
   const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
   const [status, setStatus] = useState("Loading sheet data...");
   const [loading, setLoading] = useState(false);
+  const [savingAction, setSavingAction] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [autoScroll, setAutoScroll] = useState(false);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
   const [ownerData, setOwnerData] = useState<OwnerData>({});
   const receiptSubmittingRef = useRef(false);
+  const syncRequestRef = useRef(0);
+  const syncInFlightRef = useRef(false);
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
       ? "Sign in with your staff account."
@@ -249,6 +261,8 @@ export function App() {
         compareRecentOrders(left, right)
       );
     });
+  const canRunCurrentAction = (action: string) =>
+    canRunActionForProfile(staffProfile, currentRole, action);
 
   useEffect(() => {
     if (!firebaseReady) return undefined;
@@ -303,6 +317,36 @@ export function App() {
     }
   }, [activeTab, currentRole]);
 
+  useEffect(() => {
+    if (!staffProfile) return undefined;
+
+    let stopped = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const run = async (immediate = false) => {
+      if (stopped) return;
+      if (document.hidden && !immediate) {
+        timeoutId = setTimeout(run, 7000);
+        return;
+      }
+      await refreshLiveData({ silent: true });
+      if (!stopped) timeoutId = setTimeout(run, 5000);
+    };
+
+    const onVisible = () => {
+      if (!document.hidden) void refreshLiveData({ silent: true });
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    timeoutId = setTimeout(run, 1500);
+
+    return () => {
+      stopped = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [staffProfile?.uid, currentRole]);
+
   async function loadData(options: { silent?: boolean } = {}) {
     if (!options.silent) setStatus("Loading sheet data...");
 
@@ -346,24 +390,53 @@ export function App() {
     payload: Record<string, unknown>,
     message: string,
   ) {
-    if (!canRunAction(currentRole, action)) {
+    if (!canRunActionForProfile(staffProfile, currentRole, action)) {
       setStatus("This account does not have permission for that action.");
-      return;
+      return false;
     }
 
     try {
-      setLoading(true);
+      setSavingAction(action);
       setStatus("Saving...");
       const response = await callServer(action, payload);
       const nextData = ensureConnectedData(response.data || response);
-      setData(nextData);
+      mergeAppData(nextData);
       setStatus(`${message} ${dataSummary(nextData)}`);
+      return true;
     } catch (error) {
       console.error(`Action ${action} failed`, error);
-      setStatus(errorMessage(error));
+      setStatus(
+        action === "addReceipt"
+          ? `${errorMessage(error)} Order was not saved.`
+          : errorMessage(error),
+      );
+      return false;
     } finally {
-      setLoading(false);
+      setSavingAction(null);
     }
+  }
+
+  async function refreshLiveData(
+    options: { force?: boolean; silent?: boolean } = {},
+  ) {
+    if (syncInFlightRef.current && !options.force) return;
+    const requestId = ++syncRequestRef.current;
+
+    try {
+      syncInFlightRef.current = true;
+      const response = await callServer("liveData");
+      if (requestId !== syncRequestRef.current) return;
+      mergeAppData(ensureConnectedData(response.data || response));
+      if (!options.silent) setStatus("Live orders refreshed.");
+    } catch (error) {
+      if (!options.silent) setStatus(errorMessage(error));
+    } finally {
+      if (requestId === syncRequestRef.current) syncInFlightRef.current = false;
+    }
+  }
+
+  function mergeAppData(nextData: AppData) {
+    setData((current) => mergeConnectedData(current, nextData));
   }
 
   function setFilter(id: string, value: string) {
@@ -390,7 +463,7 @@ export function App() {
     return rows.filter((row) => rowSearchText(row).includes(query));
   }
 
-  function addReceiptItemFromForm(form: HTMLFormElement) {
+  function receiptItemFromForm(form: HTMLFormElement): ReceiptItem | null {
     const itemId = stringValue(form.elements.namedItem("itemId"));
     const selectedItem = menu.find(
       (item) => stringValue(item.itemId) === itemId,
@@ -401,7 +474,19 @@ export function App() {
       "Standard";
 
     if (!selectedItem) {
-      setStatus("Choose a menu item first.");
+      setStatus("Choose a menu item.");
+      return null;
+    }
+
+    const qty = numberValue(form.elements.namedItem("qty"));
+    if (!qty || qty < 1) {
+      setStatus("Quantity must be at least 1.");
+      return null;
+    }
+
+    const staff = stringValue(form.elements.namedItem("staff"));
+    if (!staff) {
+      setStatus("Choose a staff member.");
       return null;
     }
 
@@ -410,17 +495,22 @@ export function App() {
       selectedSize,
       menuName(selectedItem),
     );
+    const unitPrice =
+      resolvedPrice?.price ||
+      numberValue(form.elements.namedItem("unitPrice")) ||
+      numberValue(selectedItem.suggestedPrice) ||
+      firstPrice(menuPrice(selectedItem));
+    if (!unitPrice || unitPrice < 0) {
+      setStatus("Selected menu item does not have a valid price.");
+      return null;
+    }
+
     const line = calculateReceiptLine({
-      discount: numberValue(form.elements.namedItem("discount")),
-      qty: numberValue(form.elements.namedItem("qty")) || 1,
-      unitPrice:
-        resolvedPrice?.price ||
-        numberValue(selectedItem.suggestedPrice) ||
-        firstPrice(menuPrice(selectedItem)),
+      qty,
+      unitPrice,
     });
-    const nextItem = {
+    return {
       category: resolvedPrice?.category || stringValue(selectedItem.category),
-      discount: line.discount,
       itemId: resolvedPrice?.itemId || itemId,
       itemName: resolvedPrice?.itemName || menuName(selectedItem),
       qty: line.qty,
@@ -428,25 +518,45 @@ export function App() {
       total: line.total,
       unitPrice: line.unitPrice,
     };
+  }
+
+  function addReceiptItemFromForm(form: HTMLFormElement) {
+    const nextItem = receiptItemFromForm(form);
+    if (!nextItem) return null;
 
     setReceiptItems((items) => [nextItem, ...items]);
-    setStatus(`${menuName(selectedItem)} added to receipt.`);
+    setStatus(`${nextItem.itemName} added to receipt.`);
     return nextItem;
   }
 
   async function submitReceipt(form: HTMLFormElement) {
-    if (receiptSubmittingRef.current || loading) {
+    if (receiptSubmittingRef.current) {
       setStatus("Receipt is already being submitted.");
-      return;
+      return false;
     }
 
-    let items = receiptItems;
-    if (!items.length) {
-      const pendingItem = addReceiptItemFromForm(form);
-      items = pendingItem ? [pendingItem] : [];
-    }
+    const items = receiptItems.length
+      ? receiptItems
+      : (() => {
+          const pendingItem = receiptItemFromForm(form);
+          return pendingItem ? [pendingItem] : [];
+        })();
 
-    if (!items.length) return;
+    if (!items.length) return false;
+
+    const receiptTotals = calculateReceiptTotals(
+      items.map((item) => ({ qty: item.qty, unitPrice: item.unitPrice })),
+      stringValue(form.elements.namedItem("receiptDiscountPercentage")),
+    );
+    const paidNow = numberValue(form.elements.namedItem("paidAmount"));
+    if (paidNow < 0) {
+      setStatus("Paid amount cannot be negative.");
+      return false;
+    }
+    if (paidNow > receiptTotals.receiptTotal) {
+      setStatus("Paid amount cannot exceed the receipt total.");
+      return false;
+    }
 
     const customerId = stringValue(form.elements.namedItem("customerId"));
     const customer = customers.find((row) => customerIdOf(row) === customerId);
@@ -456,6 +566,9 @@ export function App() {
     payload.phone =
       phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
     payload.items = items;
+    payload.receiptDiscountPercentage = stringValue(
+      form.elements.namedItem("receiptDiscountPercentage"),
+    );
     payload.idempotencyKey =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
@@ -468,9 +581,12 @@ export function App() {
 
     try {
       receiptSubmittingRef.current = true;
-      await callAndReload("addReceipt", payload, "Receipt submitted.");
-      setReceiptItems([]);
-      form.reset();
+      const saved = await callAndReload("addReceipt", payload, "Receipt submitted.");
+      if (saved) {
+        setReceiptItems([]);
+        form.reset();
+      }
+      return saved;
     } finally {
       receiptSubmittingRef.current = false;
     }
@@ -552,6 +668,25 @@ export function App() {
     );
   }
 
+  async function collectReceiptPayment(encodedPayload: string) {
+    const amount = window.prompt("Amount collected now", "");
+    if (amount === null) return;
+    const numericAmount = numberValue(amount);
+    if (numericAmount <= 0) {
+      setStatus("Paid amount must be greater than 0.");
+      return;
+    }
+    await callAndReload(
+      "collectReceiptPayment",
+      {
+        ...receiptPayloadFrom(encodedPayload),
+        amount: numericAmount,
+        paymentMethod: "Cash",
+      },
+      "Receipt payment collected.",
+    );
+  }
+
   async function markReceiptDone(encodedPayload: string) {
     await callAndReload(
       "markReceiptDone",
@@ -573,7 +708,7 @@ export function App() {
   }
 
   async function runOwnerAction(action: string, message: string) {
-    if (!canRunAction(currentRole, action)) {
+    if (!canRunActionForProfile(staffProfile, currentRole, action)) {
       setStatus("This account does not have permission for that action.");
       return;
     }
@@ -623,6 +758,7 @@ export function App() {
       }
       setStatus(message);
       await loadOwnerOverview();
+      await refreshLiveData({ force: true, silent: true });
     } catch (error) {
       console.error(`Owner mutation ${action} failed`, error);
       setStatus(errorMessage(error));
@@ -763,9 +899,16 @@ export function App() {
               "topItems",
             )}
             role={currentRole}
+            canAccept={canRunCurrentAction("markReceiptAccepted")}
+            canPrepare={canRunCurrentAction("markReceiptPreparing")}
+            canReady={canRunCurrentAction("markReceiptReady")}
+            canPickup={canRunCurrentAction("markReceiptDone")}
+            canSetPayment={canRunCurrentAction("updateReceiptPayment")}
+            canCancel={canRunCurrentAction("cancelReceipt")}
             onFilter={setFilter}
             filters={filters}
             onSetPayment={setReceiptPayment}
+            onCollectPayment={collectReceiptPayment}
             onDone={markReceiptDone}
             onStatus={markReceiptStatus}
           />
@@ -801,11 +944,19 @@ export function App() {
             onSetPayment={(payload, paymentStatus) =>
               void setReceiptPayment(payload, paymentStatus)
             }
+            onCollectPayment={(payload) => void collectReceiptPayment(payload)}
             onDone={(payload) => void markReceiptDone(payload)}
             onStatus={(payload, action, message) =>
               void markReceiptStatus(payload, action, message)
             }
             role={currentRole}
+            canAccept={canRunCurrentAction("markReceiptAccepted")}
+            canPrepare={canRunCurrentAction("markReceiptPreparing")}
+            canReady={canRunCurrentAction("markReceiptReady")}
+            canPickup={canRunCurrentAction("markReceiptDone")}
+            canSetPayment={canRunCurrentAction("updateReceiptPayment")}
+            canCancel={canRunCurrentAction("cancelReceipt")}
+            savingAction={savingAction}
             onSubmitReceipt={submitReceipt}
           />
         )}
@@ -1427,38 +1578,7 @@ function OwnerTools({
 
           <section>
             <h3>Staff Management</h3>
-            <form
-              className="form-grid"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const payload = formObject(event.currentTarget);
-                onUpsertStaff(payload);
-                event.currentTarget.reset();
-              }}
-            >
-              <Field label="Email" name="email" required type="email" />
-              <Field label="Display Name" name="displayName" required />
-              <label>
-                Role
-                <select name="role" defaultValue="waiter">
-                  {["owner", "manager", "cashier", "waiter", "barista"].map(
-                    (role) => (
-                      <option key={role} value={role}>
-                        {roleLabel(role as StaffRole)}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-              <Field
-                label="New Account Password"
-                name="password"
-                type="password"
-              />
-              <button className="primary" disabled={loading} type="submit">
-                Save Staff
-              </button>
-            </form>
+            <StaffUpsertForm loading={loading} onSave={onUpsertStaff} />
             <div className="table-like compact">
               {(ownerData.staff || []).map((staff) => {
                 const uid = stringValue(staff.uid);
@@ -1506,9 +1626,10 @@ function OwnerTools({
                     <PermissionEditor
                       catalog={ownerData.permissionCatalog || []}
                       revokedPermissions={stringArrayValue(
-                        staff.revokedPermissions,
+                        staff.revoke || staff.revokedPermissions,
                       )}
-                      permissions={stringArrayValue(staff.permissions)}
+                      permissions={stringArrayValue(staff.grant || staff.permissions)}
+                      role={stringValue(staff.role || "waiter") as StaffRole}
                       uid={uid}
                       onSave={onSetStaffPermissions}
                     />
@@ -1622,21 +1743,219 @@ function OwnerTools({
   );
 }
 
+function StaffUpsertForm({
+  loading,
+  onSave,
+}: {
+  loading: boolean;
+  onSave: (payload: Record<string, unknown>) => void;
+}) {
+  const [active, setActive] = useState("true");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [grant, setGrant] = useState("");
+  const [password, setPassword] = useState("");
+  const [revoke, setRevoke] = useState("");
+  const [role, setRole] = useState<StaffRole>("waiter");
+  const resolution = resolveEffectivePermissions({ grant, revoke, role });
+  const warnings = staffPermissionWarnings({
+    displayName,
+    email,
+    grant,
+    password,
+    resolution,
+    revoke,
+  });
+
+  function resetOverrides() {
+    setGrant("");
+    setRevoke("");
+  }
+
+  function resetForm() {
+    setActive("true");
+    setDisplayName("");
+    setEmail("");
+    setGrant("");
+    setPassword("");
+    setRevoke("");
+    setRole("waiter");
+  }
+
+  return (
+    <form
+      className="form-grid"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({
+          active: active === "true",
+          displayName,
+          email,
+          grant,
+          password,
+          revoke,
+          role,
+        });
+        resetForm();
+      }}
+    >
+      <Field label="Email" name="email" onChange={setEmail} required type="email" value={email} />
+      <Field label="Display Name" name="displayName" onChange={setDisplayName} required value={displayName} />
+      <label>
+        Role
+        <select
+          name="role"
+          onChange={(event) => setRole(event.target.value as StaffRole)}
+          value={role}
+        >
+          {["owner", "manager", "cashier", "waiter", "barista"].map((staffRole) => (
+            <option key={staffRole} value={staffRole}>
+              {roleLabel(staffRole as StaffRole)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Field
+        label="Temporary Password"
+        name="password"
+        onChange={setPassword}
+        type="password"
+        value={password}
+      />
+      <label>
+        Active
+        <select name="active" onChange={(event) => setActive(event.target.value)} value={active}>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+      </label>
+      <label className="wide">
+        Grant Overrides
+        <textarea
+          name="grant"
+          onChange={(event) => setGrant(event.target.value)}
+          placeholder="receipts.print, staff.view"
+          value={grant}
+        />
+      </label>
+      <label className="wide">
+        Revoke Overrides
+        <textarea
+          name="revoke"
+          onChange={(event) => setRevoke(event.target.value)}
+          placeholder="customers.delete, day.reset"
+          value={revoke}
+        />
+      </label>
+      <PermissionPreview
+        effective={resolution.effectivePermissions}
+        grant={resolution.grant}
+        revoke={resolution.revoke}
+        role={role}
+        roleDefaults={resolution.roleDefaults}
+        warnings={warnings}
+      />
+      <div className="actions wide">
+        <button className="secondary" onClick={resetOverrides} type="button">
+          Reset Overrides
+        </button>
+        <button className="primary" disabled={loading || warnings.blocking.length > 0} type="submit">
+          Save Staff
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function PermissionPreview({
+  effective,
+  grant,
+  revoke,
+  role,
+  roleDefaults,
+  warnings,
+}: {
+  effective: string[];
+  grant: string[];
+  revoke: string[];
+  role: StaffRole;
+  roleDefaults: string[];
+  warnings: { blocking: string[]; notices: string[] };
+}) {
+  return (
+    <div className="wide permission-preview">
+      <strong>Role: {roleLabel(role)}</strong>
+      <PermissionList title="Role Default Permissions" values={roleDefaults} />
+      <PermissionList title="Grant Overrides" values={grant} />
+      <PermissionList title="Revoke Overrides" values={revoke} />
+      <PermissionList title="Final Effective Permissions" values={effective} />
+      {[...warnings.blocking, ...warnings.notices].map((warning) => (
+        <p className="muted" key={warning}>
+          {warning}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function PermissionList({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div className="permission-preview-section">
+      <span className="muted">{title}</span>
+      <p>{values.length ? values.join(", ") : "None"}</p>
+    </div>
+  );
+}
+
+function staffPermissionWarnings({
+  displayName,
+  email,
+  grant,
+  password,
+  resolution,
+}: {
+  displayName: string;
+  email: string;
+  grant: string;
+  password: string;
+  resolution: ReturnType<typeof resolveEffectivePermissions>;
+  revoke: string;
+}) {
+  const blocking: string[] = [];
+  const notices: string[] = [];
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) blocking.push("Enter a valid email.");
+  if (!displayName.trim()) blocking.push("Display name is required.");
+  if (password && password.length < 6) blocking.push("Temporary password must be at least 6 characters.");
+  if (!password) notices.push("Temporary password is required when creating a brand new Auth user.");
+  if (resolution.unknown.length) notices.push(`Unknown permission: ${resolution.unknown.join(", ")}`);
+  if (resolution.duplicates.length) notices.push(`Duplicate permission: ${resolution.duplicates.join(", ")}`);
+  if (resolution.overlaps.length) notices.push(`Revoke wins over Grant for: ${resolution.overlaps.join(", ")}`);
+  if (grant && !resolution.grant.length) notices.push("Grant overrides contain no valid permission names.");
+  return { blocking, notices };
+}
+
 function PermissionEditor({
   catalog,
   onSave,
   permissions,
   revokedPermissions,
+  role,
   uid,
 }: {
   catalog: string[];
   onSave: (payload: Record<string, unknown>) => void;
   permissions: string[];
   revokedPermissions: string[];
+  role: StaffRole;
   uid: string;
 }) {
   const [grantList, setGrantList] = useState(permissions.join(", "));
   const [revokeList, setRevokeList] = useState(revokedPermissions.join(", "));
+  const resolution = resolveEffectivePermissions({
+    grant: grantList,
+    revoke: revokeList,
+    role,
+  });
 
   useEffect(() => {
     setGrantList(permissions.join(", "));
@@ -1666,8 +1985,8 @@ function PermissionEditor({
         className="secondary"
         onClick={() =>
           onSave({
-            permissions: grantList,
-            revokedPermissions: revokeList,
+            grant: grantList,
+            revoke: revokeList,
             uid,
           })
         }
@@ -1675,27 +1994,42 @@ function PermissionEditor({
       >
         Save Permissions
       </button>
+      <PermissionList title="Effective Permissions" values={resolution.effectivePermissions} />
     </details>
   );
 }
 
 function DashboardView({
+  canAccept,
+  canCancel,
+  canPickup,
+  canPrepare,
+  canReady,
+  canSetPayment,
   dashboard,
   orders,
   topItems,
   filters,
   role,
   onFilter,
+  onCollectPayment,
   onSetPayment,
   onStatus,
   onDone,
 }: {
+  canAccept: boolean;
+  canCancel: boolean;
+  canPickup: boolean;
+  canPrepare: boolean;
+  canReady: boolean;
+  canSetPayment: boolean;
   dashboard: Dashboard;
   orders: Row[];
   topItems: Row[];
   filters: Record<string, string>;
   role: StaffRole;
   onFilter: (id: string, value: string) => void;
+  onCollectPayment: (payload: string) => void;
   onSetPayment: (payload: string, paymentStatus: string) => void;
   onStatus: (payload: string, action: string, message: string) => void;
   onDone: (payload: string) => void;
@@ -1749,9 +2083,16 @@ function DashboardView({
                   key={`${stringValue(order.receiptId)}-${index}`}
                   order={order}
                   onDone={onDone}
+                  onCollectPayment={onCollectPayment}
                   onSetPayment={onSetPayment}
                   onStatus={onStatus}
-                  showPaymentActions={false}
+                  canAccept={canAccept}
+                  canCancel={canCancel}
+                  canPickup={canPickup}
+                  canPrepare={canPrepare}
+                  canReady={canReady}
+                  canSetPayment={canSetPayment}
+                  showPaymentActions={canSetPayment}
                   showPickupAction
                   view="barista"
                 />
@@ -1872,6 +2213,12 @@ function CustomersView({
 }
 
 function OrdersView({
+  canAccept,
+  canCancel,
+  canPickup,
+  canPrepare,
+  canReady,
+  canSetPayment,
   customers,
   dashboardOrders,
   filters,
@@ -1882,12 +2229,20 @@ function OrdersView({
   onClearReceipt,
   onDone,
   onFilter,
+  onCollectPayment,
   onRemoveItem,
   onSetPayment,
   onStatus,
   onSubmitReceipt,
   role,
+  savingAction,
 }: {
+  canAccept: boolean;
+  canCancel: boolean;
+  canPickup: boolean;
+  canPrepare: boolean;
+  canReady: boolean;
+  canSetPayment: boolean;
   customers: Row[];
   dashboardOrders: Row[];
   filters: Record<string, string>;
@@ -1898,11 +2253,13 @@ function OrdersView({
   onClearReceipt: () => void;
   onDone: (payload: string) => void;
   onFilter: (id: string, value: string) => void;
+  onCollectPayment: (payload: string) => void;
   onRemoveItem: (index: number) => void;
   onSetPayment: (payload: string, paymentStatus: string) => void;
   onStatus: (payload: string, action: string, message: string) => void;
-  onSubmitReceipt: (form: HTMLFormElement) => Promise<void>;
+  onSubmitReceipt: (form: HTMLFormElement) => Promise<boolean>;
   role: StaffRole;
+  savingAction: string | null;
 }) {
   const [category, setCategory] = useState("All");
   const [selectedItemId, setSelectedItemId] = useState("");
@@ -1916,17 +2273,24 @@ function OrdersView({
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerNameInput, setCustomerNameInput] = useState("");
   const [customerPhoneInput, setCustomerPhoneInput] = useState("");
-  const categories = [
-    "All",
-    ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
-  ];
-  const placeOptions = buildPlaceOptions(lists, dashboardOrders);
+  const categories = useMemo(
+    () => [
+      "All",
+      ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
+    ],
+    [menu],
+  );
+  const placeOptions = useMemo(
+    () => buildPlaceOptions(lists, dashboardOrders),
+    [dashboardOrders, lists],
+  );
   const serviceOptions = lists.serviceType || [
     "Hall",
     "Outside",
     "Car",
     "Takeaway",
   ];
+  const staffOptions = lists.staff || [];
   const carColorOptions = lists.carColor || [
     "Black",
     "White",
@@ -1942,23 +2306,31 @@ function OrdersView({
   const customerMatches = customerQuery.trim()
     ? visibleCustomers.slice(0, 5)
     : [];
-  const visibleMenu =
-    category === "All"
-      ? menu
-      : menu.filter((item) => stringValue(item.category) === category);
+  const visibleMenu = useMemo(
+    () =>
+      category === "All"
+        ? menu
+        : menu.filter((item) => stringValue(item.category) === category),
+    [category, menu],
+  );
   const selectedItem =
     menu.find((item) => stringValue(item.itemId) === selectedItemId) ||
     visibleMenu[0];
   const selectedSizes = selectedItem ? menuSizesFor(selectedItem) : [];
-  const receiptTotal = receiptItems.reduce(
-    (total, item) => total + item.total,
-    0,
+  const receiptTotals = safeReceiptTotals(
+    receiptItems.length
+      ? receiptItems
+      : [{ qty: numberValue(qty) || 1, unitPrice: numberValue(unitPrice) }],
+    discount,
   );
+  const receiptSubtotal = receiptItems.length
+    ? receiptTotals.receiptSubtotal
+    : numberValue(qty) * numberValue(unitPrice);
   const singleTotal = Math.max(
     0,
-    numberValue(qty) * numberValue(unitPrice) - numberValue(discount),
+    receiptTotals.receiptTotal,
   );
-  const total = receiptItems.length ? receiptTotal : singleTotal;
+  const total = receiptItems.length ? receiptTotals.receiptTotal : singleTotal;
   const remaining = Math.max(0, total - numberValue(paidAmount));
 
   useEffect(() => {
@@ -2062,11 +2434,13 @@ function OrdersView({
             onSubmit={(event) => {
               event.preventDefault();
               const form = event.currentTarget;
-              void onSubmitReceipt(form).then(() => {
-                setSelectedCustomerId("");
-                setCustomerQuery("");
-                setCustomerNameInput("");
-                setCustomerPhoneInput("");
+              void onSubmitReceipt(form).then((saved) => {
+                if (saved) {
+                  setSelectedCustomerId("");
+                  setCustomerQuery("");
+                  setCustomerNameInput("");
+                  setCustomerPhoneInput("");
+                }
               });
             }}
           >
@@ -2193,9 +2567,10 @@ function OrdersView({
               Price locked from menu: <strong>{money(unitPrice)} EGP</strong>
             </p>
             <Field
-              label="Discount"
-              name="discount"
+              label="Discount (%)"
+              name="receiptDiscountPercentage"
               onChange={setDiscount}
+              placeholder="0"
               type="number"
               value={discount}
             />
@@ -2288,7 +2663,10 @@ function OrdersView({
             <label>
               Staff
               <select name="staff">
-                {(lists.staff || ["Cashier 1"]).map((option) => (
+                {!staffOptions.length && (
+                  <option value="">No active staff found</option>
+                )}
+                {staffOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -2301,8 +2679,11 @@ function OrdersView({
                 : "No menu item selected."}
             </p>
             <p className="wide total-hint">
-              Receipt total: {money(total)} EGP | Paid now: {money(paidAmount)}{" "}
-              EGP | Remaining: {money(remaining)} EGP
+              Subtotal: {money(receiptSubtotal)} EGP | Discount:{" "}
+              {money(receiptTotals.receiptDiscountPercentage)}% | Discount
+              Amount: -{money(receiptTotals.receiptDiscountAmount)} EGP | Total:{" "}
+              {money(total)} EGP | Paid now: {money(paidAmount)} EGP |
+              Remaining: {money(remaining)} EGP
             </p>
             <label className="wide">
               Notes
@@ -2314,10 +2695,14 @@ function OrdersView({
                 onClick={(event) => onAddItem(event.currentTarget.form!)}
                 type="button"
               >
-                Add Item
+                {savingAction === "addReceipt" ? "Adding..." : "Add Item"}
               </button>
-              <button className="primary" type="submit">
-                Submit Receipt
+              <button
+                className="primary"
+                disabled={savingAction === "addReceipt"}
+                type="submit"
+              >
+                {savingAction === "addReceipt" ? "Submitting..." : "Submit Receipt"}
               </button>
               <button
                 className="secondary"
@@ -2355,8 +2740,16 @@ function OrdersView({
                     </div>
                   ))}
                   <div className="receipt-total">
-                    <span>Receipt total</span>
-                    <span>{money(receiptTotal)} EGP</span>
+                    <span>Subtotal</span>
+                    <span>{money(receiptTotals.receiptSubtotal)} EGP</span>
+                  </div>
+                  <div className="receipt-total">
+                    <span>Discount: {money(receiptTotals.receiptDiscountPercentage)}%</span>
+                    <span>-{money(receiptTotals.receiptDiscountAmount)} EGP</span>
+                  </div>
+                  <div className="receipt-total">
+                    <span>Total</span>
+                    <span>{money(receiptTotals.receiptTotal)} EGP</span>
                   </div>
                 </>
               ) : (
@@ -2387,11 +2780,18 @@ function OrdersView({
                 key={`${stringValue(order.receiptId)}-${index}`}
                 order={order}
                 onDone={onDone}
+                onCollectPayment={onCollectPayment}
                 onSetPayment={onSetPayment}
                 onStatus={onStatus}
+                canAccept={canAccept}
+                canCancel={canCancel}
+                canPickup={canPickup}
+                canPrepare={canPrepare}
+                canReady={canReady}
+                canSetPayment={canSetPayment}
                 showPickupAction={false}
                 view="orders"
-                showPaymentActions={role !== "waiter"}
+                showPaymentActions={role !== "waiter" && canSetPayment}
               />
             ))}
           </div>
@@ -2869,16 +3269,30 @@ function MenuView({
 }
 
 export function OrderTicket({
+  canAccept = true,
+  canCancel = true,
+  canPickup = true,
+  canPrepare = true,
+  canReady = true,
+  canSetPayment = true,
   order,
   onDone,
+  onCollectPayment = () => undefined,
   onSetPayment,
   onStatus,
   showPaymentActions = true,
   showPickupAction = true,
   view = "orders",
 }: {
+  canAccept?: boolean;
+  canCancel?: boolean;
+  canPickup?: boolean;
+  canPrepare?: boolean;
+  canReady?: boolean;
+  canSetPayment?: boolean;
   order: Row;
   onDone: (payload: string) => Promise<void> | void;
+  onCollectPayment?: (payload: string) => Promise<void> | void;
   onSetPayment: (
     payload: string,
     paymentStatus: string,
@@ -2898,7 +3312,11 @@ export function OrderTicket({
   const preparationClass = getPreparationStatusClass(preparationStatus);
   const paymentClass = getPaymentStatusClass(paymentStatus);
   const pickedUp = isPickedUpStatus(preparationStatus);
+  const cancelled = preparationStatus === "Cancelled";
   const finished = isFinishedPreparationStatus(preparationStatus);
+  const receiptDiscountPercentage = numberValue(order.receiptDiscountPercentage);
+  const receiptNotes = stringValue(order.receiptNotes || order.customerNotes);
+  const phone = phoneOf(order);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const pendingActionRef = useRef<string | null>(null);
   const payload = receiptActionPayload(order);
@@ -2913,6 +3331,13 @@ export function OrderTicket({
         .map((item) => item.trim())
         .filter(Boolean);
   const prepAction = nextPreparationAction(preparationStatus);
+  const canRunPrepAction = prepAction
+    ? {
+        markReceiptAccepted: canAccept,
+        markReceiptPreparing: canPrepare,
+        markReceiptReady: canReady,
+      }[prepAction.action] !== false
+    : false;
 
   async function runTicketAction(
     actionKey: string,
@@ -2954,9 +3379,11 @@ export function OrderTicket({
           <div className="ticket-title">
             <strong>{title}</strong>
             <span className="muted">
+              {stringValue(order.receiptId || order.receiptNumber) ? `Receipt ${stringValue(order.receiptId || order.receiptNumber)} | ` : ""}
               {stringValue(order.orderDateTime)}{" "}
               {order.staff ? `| ${stringValue(order.staff)}` : ""}
             </span>
+            {phone && <span className="muted">Phone: {phone}</span>}
             {place && <span className="ticket-place">{place}</span>}
           </div>
           <div className="actions">
@@ -2986,9 +3413,18 @@ export function OrderTicket({
           <span>Total</span>
           <span>{money(order.total)} EGP</span>
         </div>
+        {receiptNotes && (
+          <div className="ticket-notes">
+            <strong>Notes:</strong> {receiptNotes}
+          </div>
+        )}
         {showPaymentActions && (
           <div className="stock-meta">
             <span>Paid: {money(order.paidAmount)} EGP</span>
+            <span>Remaining: {money(due)} EGP</span>
+            {receiptDiscountPercentage > 0 && (
+              <span>Discount: {money(receiptDiscountPercentage)}%</span>
+            )}
             <span className={`pill ${paymentClass}`}>
               {paymentStatus === "Partially Paid" && due > 0
                 ? `Remaining ${money(due)} EGP`
@@ -3004,7 +3440,7 @@ export function OrderTicket({
           <>
             <button
               className="secondary"
-              disabled={Boolean(pendingAction)}
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
               onClick={() =>
                 void runTicketAction("payment-paid", () =>
                   onSetPayment(payload, "Paid"),
@@ -3012,11 +3448,23 @@ export function OrderTicket({
               }
               type="button"
             >
-              Paid
+              {pendingAction === "payment-paid" ? "Saving..." : "Paid"}
             </button>
             <button
               className="secondary"
-              disabled={Boolean(pendingAction)}
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("collect-payment", () =>
+                  onCollectPayment(payload),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "collect-payment" ? "Saving..." : "Collect"}
+            </button>
+            <button
+              className="secondary"
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
               onClick={() =>
                 void runTicketAction("payment-unpaid", () =>
                   onSetPayment(payload, "Unpaid"),
@@ -3024,7 +3472,7 @@ export function OrderTicket({
               }
               type="button"
             >
-              Unpaid
+              {pendingAction === "payment-unpaid" ? "Saving..." : "Unpaid"}
             </button>
           </>
         )}
@@ -3032,9 +3480,15 @@ export function OrderTicket({
           <>
             <button
               className="accept"
-              disabled={!prepAction || Boolean(pendingAction)}
+              disabled={
+                cancelled ||
+                !prepAction ||
+                !canRunPrepAction ||
+                Boolean(pendingAction)
+              }
               onClick={() =>
                 prepAction &&
+                canRunPrepAction &&
                 void runTicketAction(prepAction.action, () =>
                   onStatus(payload, prepAction.action, prepAction.message),
                 )
@@ -3048,6 +3502,8 @@ export function OrderTicket({
             <button
               className="pickup"
               disabled={
+                !canPickup ||
+                cancelled ||
                 pickedUp ||
                 preparationStatus !== "Ready" ||
                 Boolean(pendingAction)
@@ -3057,9 +3513,27 @@ export function OrderTicket({
               }
               type="button"
             >
-              Pickup
+              {pendingAction === "markReceiptDone" ? "Saving..." : "Pickup"}
             </button>
           </>
+        )}
+        {canCancel && (
+          <button
+            className="danger"
+            disabled={cancelled || pickedUp || Boolean(pendingAction)}
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Mark this receipt as cancelled? It will stay visible for the owner audit.",
+              );
+              if (!confirmed) return;
+              void runTicketAction("cancelReceipt", () =>
+                onStatus(payload, "cancelReceipt", "Receipt cancelled."),
+              );
+            }}
+            type="button"
+          >
+            {pendingAction === "cancelReceipt" ? "Saving..." : "Wrong / Cancel"}
+          </button>
         )}
       </div>
     </article>
@@ -3433,6 +3907,68 @@ function ensureConnectedData(source: AppData | null): AppData {
   return nextData;
 }
 
+function mergeConnectedData(current: AppData | null, incoming: AppData): AppData {
+  const base = ensureConnectedData(current);
+  const next = ensureConnectedData(incoming);
+
+  return ensureConnectedData({
+    ...base,
+    ...next,
+    dashboard: next.dashboard || base.dashboard,
+    dashboardOrders: next.dashboardOrders
+      ? mergeRowsByKey(base.dashboardOrders || [], next.dashboardOrders, receiptKeyOf)
+      : base.dashboardOrders,
+    dashboardTopItems: next.dashboardTopItems || base.dashboardTopItems,
+    historyDays: next.historyDays || base.historyDays,
+    lists: {
+      ...(base.lists || {}),
+      ...(next.lists || {}),
+    },
+    orders: next.orders
+      ? mergeRowsByKey(base.orders || [], next.orders, receiptKeyOf)
+      : base.orders,
+    payments: next.payments || base.payments,
+    staffProfile: next.staffProfile || base.staffProfile,
+    unpaid: next.unpaid || base.unpaid,
+  });
+}
+
+function mergeRowsByKey(
+  current: Row[],
+  incoming: Row[],
+  keyForRow: (row: Row) => string,
+) {
+  const byKey = new Map<string, Row>();
+  current.forEach((row, index) => {
+    byKey.set(keyForRow(row) || `current-${index}`, row);
+  });
+  incoming.forEach((row, index) => {
+    byKey.set(keyForRow(row) || `incoming-${index}`, {
+      ...(byKey.get(keyForRow(row)) || {}),
+      ...row,
+    });
+  });
+  return Array.from(byKey.values());
+}
+
+function receiptKeyOf(row: Row) {
+  return stringValue(
+    row.receiptId ||
+      row.receiptNumber ||
+      row.receiptKey ||
+      row.orderId ||
+      row.orderDateTime,
+  );
+}
+
+function safeReceiptTotals(items: Array<{ qty?: number; unitPrice?: number }>, discount: string) {
+  try {
+    return calculateReceiptTotals(items, discount);
+  } catch {
+    return calculateReceiptTotals(items, 0);
+  }
+}
+
 function dataSummary(data: AppData) {
   return `Menu: ${data.menu?.length || 0}, Customers: ${data.customers?.length || 0}, Orders: ${data.orders?.length || 0}`;
 }
@@ -3471,12 +4007,12 @@ function buildDashboardCounts(data: AppData): Dashboard {
 function buildDashboardOrders(orders: Row[]) {
   const grouped: Record<
     string,
-    Row & { orderDescriptions: string[]; pickedUpCount: number }
+    Row & { orderDescriptions: string[]; pickedUpCount: number; receiptNotes: string[] }
   > = {};
 
   orders.forEach((order) => {
     const key =
-      stringValue(order.receiptId) ||
+      receiptKeyOf(order) ||
       [
         order.orderDateTime,
         order.customerId,
@@ -3495,6 +4031,7 @@ function buildDashboardOrders(orders: Row[]) {
         outstandingAmount: 0,
         orderDescriptions: [],
         pickedUpCount: 0,
+        receiptNotes: [],
       };
     }
 
@@ -3502,10 +4039,11 @@ function buildDashboardOrders(orders: Row[]) {
     group.itemCount = numberValue(group.itemCount) + 1;
     group.total = numberValue(group.total) + numberValue(order.total);
     group.paidAmount =
-      numberValue(group.paidAmount) + numberValue(order.paidAmount);
-    group.outstandingAmount =
-      numberValue(group.outstandingAmount) +
-      numberValue(order.outstandingAmount);
+      numberValue(group.paidAmount) + receiptRowPaidAmount(order);
+    group.receiptDiscountPercentage = Math.max(
+      numberValue(group.receiptDiscountPercentage),
+      numberValue(order.receiptDiscountPercentage || order.discount),
+    );
     group.orderPlace = group.orderPlace || orderPlaceOf(order);
     if (isPickedUpStatus(order.orderStatus)) {
       group.pickedUpCount += 1;
@@ -3513,21 +4051,78 @@ function buildDashboardOrders(orders: Row[]) {
     group.orderDescriptions.push(
       `${stringValue(order.item || order.itemName) || "Item"} x${stringValue(order.qty) || "1"}`,
     );
+    const notes = cleanReceiptNotes(order.notes);
+    if (notes) group.receiptNotes.push(notes);
   });
 
-  return Object.values(grouped).map((row) => ({
-    ...row,
-    itemCount: String(row.itemCount),
-    orderDescription: row.orderDescriptions.join(" + "),
-    orderItems: row.orderDescriptions,
-    orderStatus:
-      row.pickedUpCount >= numberValue(row.itemCount)
-        ? "Picked Up"
-        : row.orderStatus,
-    paidAmount: String(row.paidAmount),
-    outstandingAmount: String(row.outstandingAmount),
-    total: String(row.total),
-  }));
+  return Object.values(grouped).map((row) => {
+    const paidAmount = Math.min(numberValue(row.total), numberValue(row.paidAmount));
+    const outstandingAmount = Math.max(0, numberValue(row.total) - paidAmount);
+    return {
+      ...row,
+      itemCount: String(row.itemCount),
+      orderDescription: row.orderDescriptions.join(" + "),
+      orderItems: row.orderDescriptions,
+      orderStatus:
+        row.pickedUpCount >= numberValue(row.itemCount)
+          ? "Picked Up"
+          : row.orderStatus,
+      paidAmount: String(paidAmount),
+      outstandingAmount: String(outstandingAmount),
+      paymentStatus: derivePaymentStatus(paidAmount, numberValue(row.total)),
+      receiptDiscountPercentage: String(row.receiptDiscountPercentage || 0),
+      receiptNotes: uniqueStrings(row.receiptNotes).join(" | "),
+      customerNotes: uniqueStrings(row.receiptNotes).join(" | "),
+      total: String(row.total),
+    };
+  });
+}
+
+function receiptRowPaidAmount(order: Row) {
+  const explicitPaid = numberValue(order.paidAmount);
+  if (explicitPaid > 0) return explicitPaid;
+  const status = stringValue(order.paymentStatus).toLowerCase();
+  if (status === "paid") return numberValue(order.total);
+  if (status === "partial") return partialPaidAmount(order);
+  return 0;
+}
+
+function partialPaidAmount(order: Row) {
+  return Array.from(stringValue(order.notes).matchAll(/Paid now:\s*([\d,]+(?:\.\d+)?)/gi)).reduce(
+    (total, match) => total + numberValue(match[1]),
+    0,
+  );
+}
+
+function derivePaymentStatus(paidAmount: number, receiptTotal: number) {
+  if (paidAmount <= 0) return "Unpaid";
+  if (paidAmount < receiptTotal) return "Partial";
+  return "Paid";
+}
+
+function cleanReceiptNotes(notes: unknown) {
+  const internalPrefixes = [
+    "place:",
+    "staff label:",
+    "size:",
+    "discount:",
+    "subtotal:",
+    "discount amount:",
+    "idempotency:",
+    "receipt:",
+    "paid now:",
+    "payment changed",
+    "status changed",
+    "settled unpaid",
+  ];
+  return stringValue(notes)
+    .split("|")
+    .map(stringValue)
+    .filter((part) => {
+      const lower = part.toLowerCase();
+      return part && !internalPrefixes.some((prefix) => lower.startsWith(prefix));
+    })
+    .join(" | ");
 }
 
 function buildDashboardTopItems(orders: Row[]) {
@@ -3798,6 +4393,8 @@ function receiptActionPayload(order: Row) {
   const payload: ReceiptPayload = {
     receiptId: stringValue(order.receiptId),
     receiptKey: stringValue(order.receiptKey),
+    orderId: stringValue(order.orderId),
+    receiptNumber: stringValue(order.receiptNumber || order.receiptId),
     customerId: stringValue(order.customerId),
     customerName: stringValue(order.customerName),
     orderDateTime: stringValue(order.orderDateTime),
@@ -4039,10 +4636,13 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   owner: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
     "markReceiptAccepted",
     "markReceiptPreparing",
@@ -4062,10 +4662,13 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   manager: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
     "markReceiptAccepted",
     "markReceiptPreparing",
@@ -4083,10 +4686,13 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   cashier: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
     "markReceiptAccepted",
     "markReceiptPreparing",
@@ -4104,6 +4710,7 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   waiter: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addReceipt",
     "customerSearch",
     "customerHistory",
@@ -4116,6 +4723,7 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   barista: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "markReceiptAccepted",
     "markReceiptPreparing",
     "markReceiptReady",
@@ -4123,6 +4731,23 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "debugAuth",
   ]),
 };
+
+function canRunActionForProfile(
+  profile: StaffProfile | null,
+  fallbackRole: StaffRole,
+  action: string,
+) {
+  const feature = actionFeaturePermissions[action];
+  if (!feature) return canRunAction(fallbackRole, action);
+  if (!profile) return canRunAction(fallbackRole, action);
+  return hasPermission({
+    effectivePermissions: profile.effectivePermissions,
+    feature,
+    grant: profile.grant || profile.permissions,
+    revoke: profile.revoke || profile.revokedPermissions,
+    role: profile.role || fallbackRole,
+  });
+}
 
 function canRunAction(role: StaffRole, action: string) {
   return rolePermissions[role]?.has(action) === true;
