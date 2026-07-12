@@ -74,17 +74,14 @@ describe("permissions", () => {
   });
 
   it("derives visible tabs from effective permissions", () => {
-    expect(visibleTabsForPermissions("cashier", ["dashboard.view"])).toContain(
-      "dashboard",
-    );
-    expect(visibleTabsForPermissions("barista", ["orders.view"])).toContain(
-      "orders",
-    );
-    expect(visibleTabsForPermissions("waiter", ["orders.view"])).not.toContain(
-      "dashboard",
-    );
-    expect(visibleTabsForPermissions("owner", ["staff.view"])).toContain(
-      "owner",
-    );
+    const visibleTabIds = (
+      role: Parameters<typeof visibleTabsForPermissions>[0],
+      permissions: string[],
+    ) => visibleTabsForPermissions(role, permissions).map(([id]) => id);
+
+    expect(visibleTabIds("cashier", ["dashboard.view"])).toContain("dashboard");
+    expect(visibleTabIds("barista", ["orders.view"])).toContain("orders");
+    expect(visibleTabIds("waiter", ["orders.view"])).not.toContain("dashboard");
+    expect(visibleTabIds("owner", ["staff.view"])).toContain("owner");
   });
 });

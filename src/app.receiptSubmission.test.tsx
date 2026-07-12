@@ -41,11 +41,9 @@ describe("buildReceiptSubmissionPayload", () => {
       },
     ];
 
-    const payload = buildReceiptSubmissionPayload(
-      form,
-      items,
-      [{ customerId: "cust-1", fullName: "Mona", phoneWhatsApp: "01000000000" }],
-    );
+    const payload = buildReceiptSubmissionPayload(form, items, [
+      { customerId: "cust-1", fullName: "Mona", phoneWhatsApp: "01000000000" },
+    ]);
 
     expect(payload.customerName).toBe("Mona");
     expect(payload.phone).toBe("01000000000");
@@ -92,6 +90,55 @@ describe("buildReceiptSubmissionPayload", () => {
 
     expect(payload.paidAmount).toBe(10);
     expect(payload.remainingAmount).toBe(65);
+    expect(payload.changeAmount).toBe(0);
+    expect(payload.paymentStatus).toBe("Partial");
+
+    document.body.removeChild(form);
+  });
+
+  it("derives change when the cashier records an overpayment", () => {
+    const form = document.createElement("form");
+    form.innerHTML = `
+      <input name="customerId" value="" />
+      <input name="customerName" value="Walk-in" />
+      <input name="customerPhone" value="" />
+      <input name="receiptDiscountPercentage" value="0" />
+      <input name="paidAmount" value="100" />
+      <select name="paymentStatus"><option value="Paid">Paid</option></select>
+      <textarea name="notes">No sugar</textarea>
+      <input name="staff" value="Nora" />
+      <input name="itemId" value="latte" />
+      <input name="size" value="Standard" />
+      <input name="qty" value="1" />
+      <input name="unitPrice" value="75" />
+    `;
+    document.body.appendChild(form);
+
+    const payload = buildReceiptSubmissionPayload(
+      form,
+      [
+        {
+          category: "Coffee",
+          itemId: "latte",
+          itemName: "Latte",
+          notes: "Less ice",
+          qty: 1,
+          size: "Standard",
+          total: 75,
+          unitPrice: 75,
+        },
+      ],
+      [],
+    );
+
+    expect(payload.paidAmount).toBe(100);
+    expect(payload.remainingAmount).toBe(0);
+    expect(payload.changeAmount).toBe(25);
+    expect(payload.paymentStatus).toBe("Paid");
+    expect(payload.notes).toBe("No sugar");
+    expect(payload.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ notes: "Less ice" })]),
+    );
 
     document.body.removeChild(form);
   });

@@ -15,6 +15,7 @@ export type ReceiptPrintData = {
   total?: number;
   paidAmount?: number;
   outstandingAmount?: number;
+  changeAmount?: number;
   paymentStatus?: string;
   orderDateTime?: string;
   staff?: string;
@@ -114,6 +115,11 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         <div><span>Total</span><strong>${money(data.total || 0)} EGP</strong></div>
         <div><span>Paid</span><strong>${money(data.paidAmount || 0)} EGP</strong></div>
         <div><span>Remaining</span><strong>${money(data.outstandingAmount || 0)} EGP</strong></div>
+        ${
+          data.changeAmount
+            ? `<div><span>Change</span><strong>${money(data.changeAmount)} EGP</strong></div>`
+            : ""
+        }
         <div><span>Status</span><strong>${escapeHtml(data.paymentStatus || "")}</strong></div>
       </div>
       ${data.notes ? `<div class="totals"><div><span>Notes</span><strong>${escapeHtml(data.notes)}</strong></div></div>` : ""}

@@ -17,6 +17,7 @@ import {
   resolveEffectivePermissions,
 } from "../src/permissions";
 import {
+  calculateReceipt,
   calculateReceiptLine,
   calculateReceiptTotals,
   fromMinorUnits,
@@ -1078,11 +1079,17 @@ async function upsertStaff(payload: Payload, actor: Actor) {
   const role = clean_(payload.role || "waiter").toLowerCase();
   const active = activeValue_(payload.active ?? true);
   const password = clean_(payload.password);
-  const grant = normalizePermissionValues_(payload.grant || payload.permissions);
+  const grant = normalizePermissionValues_(
+    payload.grant || payload.permissions,
+  );
   const revoke = normalizePermissionValues_(
     payload.revoke || payload.revokedPermissions,
   );
-  const permissionResolution = resolveEffectivePermissions({ grant, revoke, role });
+  const permissionResolution = resolveEffectivePermissions({
+    grant,
+    revoke,
+    role,
+  });
 
   if (!email) throw new ApiError("Staff email is required.");
   if (!displayName) throw new ApiError("Display name is required.");
@@ -1162,7 +1169,9 @@ async function upsertStaff(payload: Payload, actor: Actor) {
       newGrant: grant,
       newRevoke: revoke,
       newRole: role,
-      oldGrant: normalizePermissionValues_(previous.grant || previous.permissions),
+      oldGrant: normalizePermissionValues_(
+        previous.grant || previous.permissions,
+      ),
       oldRevoke: normalizePermissionValues_(
         previous.revoke || previous.revokedPermissions,
       ),
@@ -1240,12 +1249,16 @@ async function setStaffRole(payload: Payload, actor: Actor) {
       changedByUid: actor.uid,
       changedStaffEmail: clean_(previous.email),
       changedStaffUid: uid,
-      newGrant: normalizePermissionValues_(previous.grant || previous.permissions),
+      newGrant: normalizePermissionValues_(
+        previous.grant || previous.permissions,
+      ),
       newRevoke: normalizePermissionValues_(
         previous.revoke || previous.revokedPermissions,
       ),
       newRole: role,
-      oldGrant: normalizePermissionValues_(previous.grant || previous.permissions),
+      oldGrant: normalizePermissionValues_(
+        previous.grant || previous.permissions,
+      ),
       oldRevoke: normalizePermissionValues_(
         previous.revoke || previous.revokedPermissions,
       ),
@@ -1265,7 +1278,9 @@ async function setStaffPermissions(payload: Payload, actor: Actor) {
   if (!uid) throw new ApiError("Staff UID is required.");
   requireActorPermission_(actor, "permissions.manage");
 
-  const grant = normalizePermissionValues_(payload.grant || payload.permissions);
+  const grant = normalizePermissionValues_(
+    payload.grant || payload.permissions,
+  );
   const revoke = normalizePermissionValues_(
     payload.revoke || payload.revokedPermissions,
   );
@@ -1288,7 +1303,13 @@ async function setStaffPermissions(payload: Payload, actor: Actor) {
     },
     { merge: true },
   );
-  await upsertStaffDirectoryRow_({ ...previous, grant, revoke, uid, updatedAt: now });
+  await upsertStaffDirectoryRow_({
+    ...previous,
+    grant,
+    revoke,
+    uid,
+    updatedAt: now,
+  });
   await recordAuditLog_(actor, {
     action: "staff.permissions.update",
     entityId: uid,
@@ -1303,7 +1324,9 @@ async function setStaffPermissions(payload: Payload, actor: Actor) {
       newGrant: grant,
       newRevoke: revoke,
       newRole: role,
-      oldGrant: normalizePermissionValues_(previous.grant || previous.permissions),
+      oldGrant: normalizePermissionValues_(
+        previous.grant || previous.permissions,
+      ),
       oldRevoke: normalizePermissionValues_(
         previous.revoke || previous.revokedPermissions,
       ),
@@ -1603,7 +1626,9 @@ async function addReceipt(payload: Payload, actor: Actor) {
   const receiptDiscountPercentage = normalizeReceiptDiscountPercentage(
     payload.receiptDiscountPercentage ?? payload.discount ?? 0,
   );
-  const resolvedItems = items.map((rawReceiptItem) => rawReceiptItem as Payload);
+  const resolvedItems = items.map(
+    (rawReceiptItem) => rawReceiptItem as Payload,
+  );
   const preparedItems = await Promise.all(
     resolvedItems.map(async (receiptItem) => {
       const item = await findMenuItem(
@@ -1612,6 +1637,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
       );
       const resolvedPrice = resolveMenuSelection_(receiptItem, item);
       const line = calculateReceiptLine({
+        discount: receiptItem.discount as number | string | undefined,
+        extrasTotal: receiptItem.extrasTotal as number | string | undefined,
         qty: number_(receiptItem.qty || 1),
         unitPrice: resolvedPrice.price,
       });
@@ -1620,6 +1647,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
   );
   const receiptTotals = calculateReceiptTotals(
     preparedItems.map(({ line }) => ({
+      discount: line.discount,
+      extrasTotal: line.extrasTotal,
       qty: line.qty,
       unitPrice: line.unitPrice,
     })),
@@ -1633,6 +1662,16 @@ async function addReceipt(payload: Payload, actor: Actor) {
     receiptTotal,
   );
   const paymentStatus = derivePaymentStatus_(paidAmount, receiptTotal);
+  const receiptCalculation = calculateReceipt({
+    amountPaid: paidAmount,
+    items: preparedItems.map(({ line }) => ({
+      discount: line.discount,
+      extrasTotal: line.extrasTotal,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+    })),
+    orderDiscount: receiptTotals.receiptDiscountAmount,
+  });
   const lineDiscounts = allocateReceiptDiscounts_(
     preparedItems.map(({ line }) => line.total),
     receiptTotals.receiptDiscountAmount,
@@ -1660,6 +1699,9 @@ async function addReceipt(payload: Payload, actor: Actor) {
       `Subtotal: ${receiptTotals.receiptSubtotal}`,
       `Discount Amount: ${receiptTotals.receiptDiscountAmount}`,
       idempotencyKey ? `Idempotency: ${idempotencyKey}` : "",
+      clean_(receiptItem.notes)
+        ? `Item Notes: ${clean_(receiptItem.notes)}`
+        : "",
       notes,
       `Receipt: ${receiptId}`,
     ]
@@ -1687,6 +1729,13 @@ async function addReceipt(payload: Payload, actor: Actor) {
       unitPrice,
       discount: receiptDiscountPercentage,
       total,
+      paidAmount: rowPaidAmount,
+      outstandingAmount: Math.max(0, total - rowPaidAmount),
+      remainingAmount: Math.max(0, total - rowPaidAmount),
+      changeAmount:
+        index === preparedItems.length - 1
+          ? receiptCalculation.changeAmount
+          : 0,
       pointsEarned:
         clean_(item.loyaltyEligible) === "Yes" ? Math.floor(total / 10) : 0,
       pointsRedeemed: Number(receiptItem.pointsRedeemed || 0),
@@ -1712,6 +1761,11 @@ async function addReceipt(payload: Payload, actor: Actor) {
       total,
       paidAmount: rowPaidAmount,
       outstandingAmount: Math.max(0, total - rowPaidAmount),
+      remainingAmount: Math.max(0, total - rowPaidAmount),
+      changeAmount:
+        index === preparedItems.length - 1
+          ? receiptCalculation.changeAmount
+          : 0,
       paymentStatus,
       orderStatus,
       notes: rowNotes,
@@ -1729,6 +1783,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       quantity: qty,
       unitPrice,
       extrasTotal: 0,
+      discount: line.discount,
       lineTotal: total,
       notes: rowNotes,
       preparationStatus: orderStatus,
@@ -1765,14 +1820,50 @@ async function addReceipt(payload: Payload, actor: Actor) {
     orderStatus: "Submitted",
     notes,
   };
+  const confirmedReceipt = {
+    ...receipt,
+    changeAmount: String(receiptCalculation.changeAmount),
+    customer: {
+      customerId,
+      customerName,
+      phone: clean_(payload.customerPhone || payload.phone),
+    },
+    discounts: {
+      itemDiscountTotal: receiptCalculation.itemDiscountTotal,
+      orderDiscount: receiptCalculation.orderDiscount,
+      receiptDiscountAmount: receiptTotals.receiptDiscountAmount,
+      receiptDiscountPercentage,
+      rewardDiscount: receiptCalculation.rewardDiscount,
+    },
+    items: receiptRows,
+    notes,
+    orderId,
+    orderItems: receiptRows.map(
+      (row) =>
+        `${clean_(row.item || row.itemName || "Item")} x${clean_(row.qty || 1)}`,
+    ),
+    outstandingAmount: String(receiptCalculation.remainingAmount),
+    paidAmount: String(receiptCalculation.amountPaid),
+    paymentMethod,
+    paymentStatus: receiptCalculation.paymentStatus,
+    remainingAmount: String(receiptCalculation.remainingAmount),
+    staff,
+    staffDetails: { name: staff },
+    subtotal: String(receiptCalculation.itemSubtotal),
+    total: String(receiptCalculation.grandTotal),
+  };
 
   return success_({
     receiptId,
-    receipt,
+    receipt: confirmedReceipt,
     receiptDiscountAmount: receiptTotals.receiptDiscountAmount,
     receiptDiscountPercentage,
     receiptSubtotal: receiptTotals.receiptSubtotal,
     receiptTotal,
+    changeAmount: receiptCalculation.changeAmount,
+    paidAmount: receiptCalculation.amountPaid,
+    paymentStatus: receiptCalculation.paymentStatus,
+    remainingAmount: receiptCalculation.remainingAmount,
     itemCount: items.length,
     data: await buildLiveDataForRole(actor.role),
   });
@@ -2077,7 +2168,10 @@ async function collectUnpaidPayment(payload: Payload, actor: Actor) {
     relatedOrderNotes: `Collected unpaid balance. Closed: ${closedOrders.join(", ") || "partial only"}`,
   });
 
-  return success_({ closedOrders, data: await buildLiveDataForRole(actor.role) });
+  return success_({
+    closedOrders,
+    data: await buildLiveDataForRole(actor.role),
+  });
 }
 
 async function updateReceiptPayment(payload: Payload, actor: Actor) {
@@ -2127,7 +2221,8 @@ async function updateReceiptPayment(payload: Payload, actor: Actor) {
 
 async function collectReceiptPayment(payload: Payload, actor: Actor) {
   const amount = number_(payload.amount);
-  if (amount <= 0) throw new ApiError("Paid amount must be greater than 0.", 400);
+  if (amount <= 0)
+    throw new ApiError("Paid amount must be greater than 0.", 400);
 
   const values = await getSheetValues(SHEETS.orders);
   if (values.length < 2) throw new Error("No orders found.");
@@ -2196,7 +2291,9 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     });
     matched.push({
       itemName:
-        itemIndex >= 0 ? clean_(row[itemIndex]) || `row ${index + 1}` : `row ${index + 1}`,
+        itemIndex >= 0
+          ? clean_(row[itemIndex]) || `row ${index + 1}`
+          : `row ${index + 1}`,
       notes: rowNotes,
       paid,
       row: index + 1,
@@ -2255,7 +2352,9 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     customerName,
     method: clean_(payload.paymentMethod || payload.method || "Cash"),
     amount,
-    collectedBy: clean_(payload.collectedBy || actor.displayName || actor.email),
+    collectedBy: clean_(
+      payload.collectedBy || actor.displayName || actor.email,
+    ),
     relatedOrderNotes: `Receipt payment collected: ${matched.map((row) => row.itemName).join(", ")}`,
   });
 
@@ -4558,7 +4657,13 @@ async function updateReceiptRows(
       (!customerName || rowCustomerName === customerName) &&
       (!orderDateTime || rowDate === orderDateTime);
 
-    if (!matchesReceiptId && !matchesOrderId && !matchesReceiptKey && !matchesFallback) continue;
+    if (
+      !matchesReceiptId &&
+      !matchesOrderId &&
+      !matchesReceiptKey &&
+      !matchesFallback
+    )
+      continue;
 
     const total = totalIndex >= 0 ? number_(row[totalIndex]) : 0;
     if (clean_(payload.paymentStatus) === "Paid" && rowStatus !== "Paid") {
@@ -4747,9 +4852,6 @@ function deriveReceiptPaidAmount_(
   if (requestedPaidAmount < 0) {
     throw new ApiError("Paid amount cannot be negative.", 400);
   }
-  if (requestedPaidAmount > receiptTotal) {
-    throw new ApiError("Paid amount cannot exceed the receipt total.", 400);
-  }
   if (requestedPaidAmount > 0) return requestedPaidAmount;
   return submittedStatus === "Paid" ? receiptTotal : 0;
 }
@@ -4780,7 +4882,9 @@ function cleanReceiptNotes_(notes: unknown) {
     .map(clean_)
     .filter((part) => {
       const lower = part.toLowerCase();
-      return part && !internalPrefixes.some((prefix) => lower.startsWith(prefix));
+      return (
+        part && !internalPrefixes.some((prefix) => lower.startsWith(prefix))
+      );
     })
     .join(" | ");
 }
@@ -4893,7 +4997,9 @@ async function receiptSerialExists(serial: string) {
 }
 
 function receiptId_(order: Row) {
-  const direct = clean_(order.receiptId || order.receiptNumber || order.receipt);
+  const direct = clean_(
+    order.receiptId || order.receiptNumber || order.receipt,
+  );
   if (direct) return direct;
   const match = String(order.notes || "").match(/Receipt:\s*([A-Z0-9-]+)/i);
   return match ? match[1] || "" : "";
@@ -4963,7 +5069,10 @@ function dateKey_(date: Date) {
   }).format(date);
 }
 
-function allocateReceiptDiscounts_(lineTotals: number[], discountAmount: number) {
+function allocateReceiptDiscounts_(
+  lineTotals: number[],
+  discountAmount: number,
+) {
   const subtotalMinor = lineTotals.reduce(
     (sum, lineTotal) => sum + toMinorUnits(lineTotal),
     0,
@@ -5124,8 +5233,8 @@ function roleLabel_(role: string) {
 
 function roleSortIndex_(label: string) {
   const normalized = label.toLowerCase();
-  const index = ["owner", "manager", "cashier", "waiter", "barista"].findIndex((role) =>
-    normalized.includes(role),
+  const index = ["owner", "manager", "cashier", "waiter", "barista"].findIndex(
+    (role) => normalized.includes(role),
   );
   return index >= 0 ? index : 99;
 }
@@ -5145,9 +5254,13 @@ async function verifyActiveStaffName_(staffName: string) {
       return option === normalized || baseName === normalized;
     })
   ) {
-    throw new ApiError("Selected staff member is not active or was not found.", 400, {
-      staffName: name,
-    });
+    throw new ApiError(
+      "Selected staff member is not active or was not found.",
+      400,
+      {
+        staffName: name,
+      },
+    );
   }
 }
 
@@ -5309,7 +5422,9 @@ async function upsertStaffDirectoryRow_(profile: Row) {
     active: activeValue_(profile.active) ? "Yes" : "No",
     displayName: clean_(profile.displayName || profile.name || profile.email),
     email: clean_(profile.email).toLowerCase(),
-    grant: normalizePermissionValues_(profile.grant || profile.permissions).join(", "),
+    grant: normalizePermissionValues_(
+      profile.grant || profile.permissions,
+    ).join(", "),
     name: clean_(profile.name || profile.displayName || profile.email),
     revoke: normalizePermissionValues_(
       profile.revoke || profile.revokedPermissions,
@@ -5375,7 +5490,8 @@ function staffForClient_(actor: Actor) {
   return {
     active: actor.active !== false,
     displayName: actor.displayName || actor.email,
-    effectivePermissions: actor.effectivePermissions || resolution.effectivePermissions,
+    effectivePermissions:
+      actor.effectivePermissions || resolution.effectivePermissions,
     email: actor.email,
     grant: actor.grant || actor.permissions || [],
     name: actor.displayName || actor.email,

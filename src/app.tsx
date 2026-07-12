@@ -22,6 +22,7 @@ import {
 } from "./firebase";
 import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
 import {
+  calculateReceipt,
   calculateReceiptLine,
   calculateReceiptTotals,
   normalizePaymentStatus,
@@ -101,8 +102,11 @@ type ApiResponse = {
 
 type ReceiptItem = {
   category: string;
+  discount?: number;
+  extrasTotal?: number;
   itemId: string;
   itemName: string;
+  notes?: string;
   qty: number;
   size: string;
   total: number;
@@ -232,26 +236,33 @@ export function buildReceiptSubmissionPayload(
   const customerId = stringValue(form.elements.namedItem("customerId"));
   const customer = customers.find((row) => customerIdOf(row) === customerId);
   const payload = formObject(form) as Record<string, unknown>;
-  const discount = stringValue(form.elements.namedItem("receiptDiscountPercentage"));
-  const receiptTotals = calculateReceiptTotals(
-    items.map((item) => ({ qty: item.qty, unitPrice: item.unitPrice })),
-    discount,
+  const discount = stringValue(
+    form.elements.namedItem("receiptDiscountPercentage"),
   );
-  const requestedPaidAmount = numberValue(form.elements.namedItem("paidAmount"));
+  const receiptTotals = calculateReceiptTotals(items, discount);
+  const paidAmountText = stringValue(
+    form.elements.namedItem("paidAmount"),
+  ).trim();
+  const requestedPaidAmount = paidAmountText
+    ? numberValue(form.elements.namedItem("paidAmount"))
+    : 0;
   const requestedPaymentStatus = stringValue(
     form.elements.namedItem("paymentStatus"),
   );
-  const normalizedPaymentStatus = normalizePaymentStatus(requestedPaymentStatus);
-  const normalizedPaidAmount =
+  const normalizedPaymentStatus = normalizePaymentStatus(
+    requestedPaymentStatus,
+  );
+  const amountPaid =
     normalizedPaymentStatus === "Unpaid"
       ? 0
-      : normalizedPaymentStatus === "Paid"
+      : normalizedPaymentStatus === "Paid" && !paidAmountText
         ? receiptTotals.receiptTotal
-        : Math.min(Math.max(requestedPaidAmount, 0), receiptTotals.receiptTotal);
-  const remainingAmount = Math.max(
-    0,
-    receiptTotals.receiptTotal - normalizedPaidAmount,
-  );
+        : requestedPaidAmount;
+  const receiptCalculation = calculateReceipt({
+    amountPaid,
+    items,
+    orderDiscount: receiptTotals.receiptDiscountAmount,
+  });
 
   payload.customerName =
     customerName(customer) || stringValue(payload.customerName);
@@ -259,9 +270,13 @@ export function buildReceiptSubmissionPayload(
     phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
   payload.items = items;
   payload.receiptDiscountPercentage = discount;
-  payload.paidAmount = normalizedPaidAmount;
-  payload.remainingAmount = remainingAmount;
-  payload.paymentStatus = normalizedPaymentStatus;
+  payload.paidAmount = receiptCalculation.amountPaid;
+  payload.remainingAmount = receiptCalculation.remainingAmount;
+  payload.changeAmount = receiptCalculation.changeAmount;
+  payload.paymentStatus = receiptCalculation.paymentStatus;
+  payload.receiptSubtotal = receiptTotals.receiptSubtotal;
+  payload.receiptDiscountAmount = receiptTotals.receiptDiscountAmount;
+  payload.receiptTotal = receiptCalculation.grandTotal;
   payload.idempotencyKey =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -573,8 +588,11 @@ export function App() {
     });
     return {
       category: resolvedPrice?.category || stringValue(selectedItem.category),
+      discount: line.discount,
+      extrasTotal: line.extrasTotal,
       itemId: resolvedPrice?.itemId || itemId,
       itemName: resolvedPrice?.itemName || menuName(selectedItem),
+      notes: stringValue(form.elements.namedItem("itemNotes")),
       qty: line.qty,
       size: resolvedPrice?.size || selectedSize,
       total: line.total,
@@ -594,27 +612,42 @@ export function App() {
   function mergeReceiptResponseIntoAppData(response: ApiResponse & AppData) {
     const receipt = response.receipt;
     const nextData = ensureConnectedData(response.data || response);
-    const fallbackReceipt = nextData.dashboardOrders?.[0] || nextData.orders?.[0];
+    const fallbackReceipt =
+      nextData.dashboardOrders?.[0] || nextData.orders?.[0];
     const normalizedReceipt = receipt
       ? ({
           ...receipt,
           receiptId: stringValue(receipt.receiptId || receipt.receiptNumber),
-          receiptNumber: stringValue(receipt.receiptNumber || receipt.receiptId),
+          receiptNumber: stringValue(
+            receipt.receiptNumber || receipt.receiptId,
+          ),
           receiptKey: stringValue(
             receipt.receiptKey || receipt.receiptId || receipt.receiptNumber,
           ),
-          orderId: stringValue(receipt.orderId || receipt.receiptId || receipt.receiptNumber),
+          orderId: stringValue(
+            receipt.orderId || receipt.receiptId || receipt.receiptNumber,
+          ),
           customerId: stringValue(receipt.customerId),
           customerName: stringValue(receipt.customerName),
           staff: stringValue(receipt.staff),
           orderPlace: stringValue(receipt.orderPlace),
           total: stringValue(receipt.total),
           paidAmount: stringValue(receipt.paidAmount),
-          outstandingAmount: stringValue(receipt.outstandingAmount),
+          outstandingAmount: stringValue(
+            receipt.outstandingAmount || receipt.remainingAmount,
+          ),
+          remainingAmount: stringValue(
+            receipt.remainingAmount || receipt.outstandingAmount,
+          ),
+          changeAmount: stringValue(receipt.changeAmount),
           paymentStatus: stringValue(receipt.paymentStatus),
           orderStatus: stringValue(receipt.orderStatus || "Submitted"),
-          orderDescription: stringValue(receipt.orderDescription),
-          notes: stringValue(receipt.notes),
+          orderDescription:
+            stringValue(receipt.orderDescription) ||
+            (Array.isArray(receipt.orderItems)
+              ? receipt.orderItems.map((item) => stringValue(item)).join(" + ")
+              : ""),
+          notes: stringValue(receipt.notes || receipt.customerNotes),
           orderItems: Array.isArray(receipt.orderItems)
             ? receipt.orderItems.map((item) => stringValue(item))
             : [],
@@ -671,21 +704,11 @@ export function App() {
 
     if (!items.length) return false;
 
-    const payload = buildReceiptSubmissionPayload(form, items, customers);
-    const receiptTotals = calculateReceiptTotals(
-      items.map((item) => ({ qty: item.qty, unitPrice: item.unitPrice })),
-      stringValue(form.elements.namedItem("receiptDiscountPercentage")),
-    );
-    const paidNow = numberValue(payload.paidAmount);
-    const remainingBalance = Math.max(0, receiptTotals.receiptTotal - paidNow);
-    if (paidNow < 0) {
-      setStatus("Paid amount cannot be negative.");
-      return false;
-    }
-    if (paidNow > receiptTotals.receiptTotal) {
-      setStatus(
-        `Paid amount cannot exceed the receipt total. Remaining ${money(remainingBalance)} EGP.`,
-      );
+    let payload: Record<string, unknown>;
+    try {
+      payload = buildReceiptSubmissionPayload(form, items, customers);
+    } catch (error) {
+      setStatus(errorMessage(error));
       return false;
     }
 
@@ -695,7 +718,9 @@ export function App() {
       setStatus("Saving...");
       const response = await callServer("addReceipt", payload);
       mergeReceiptResponseIntoAppData(response);
-      setStatus(`Receipt submitted. ${dataSummary(ensureConnectedData(response.data || response))}`);
+      setStatus(
+        `Receipt submitted. ${dataSummary(ensureConnectedData(response.data || response))}`,
+      );
       setReceiptItems([]);
       form.reset();
       return true;
@@ -1745,7 +1770,9 @@ function OwnerTools({
                       revokedPermissions={stringArrayValue(
                         staff.revoke || staff.revokedPermissions,
                       )}
-                      permissions={stringArrayValue(staff.grant || staff.permissions)}
+                      permissions={stringArrayValue(
+                        staff.grant || staff.permissions,
+                      )}
                       role={stringValue(staff.role || "waiter") as StaffRole}
                       uid={uid}
                       onSave={onSetStaffPermissions}
@@ -1916,8 +1943,21 @@ function StaffUpsertForm({
         resetForm();
       }}
     >
-      <Field label="Email" name="email" onChange={setEmail} required type="email" value={email} />
-      <Field label="Display Name" name="displayName" onChange={setDisplayName} required value={displayName} />
+      <Field
+        label="Email"
+        name="email"
+        onChange={setEmail}
+        required
+        type="email"
+        value={email}
+      />
+      <Field
+        label="Display Name"
+        name="displayName"
+        onChange={setDisplayName}
+        required
+        value={displayName}
+      />
       <label>
         Role
         <select
@@ -1925,11 +1965,13 @@ function StaffUpsertForm({
           onChange={(event) => setRole(event.target.value as StaffRole)}
           value={role}
         >
-          {["owner", "manager", "cashier", "waiter", "barista"].map((staffRole) => (
-            <option key={staffRole} value={staffRole}>
-              {roleLabel(staffRole as StaffRole)}
-            </option>
-          ))}
+          {["owner", "manager", "cashier", "waiter", "barista"].map(
+            (staffRole) => (
+              <option key={staffRole} value={staffRole}>
+                {roleLabel(staffRole as StaffRole)}
+              </option>
+            ),
+          )}
         </select>
       </label>
       <Field
@@ -1941,7 +1983,11 @@ function StaffUpsertForm({
       />
       <label>
         Active
-        <select name="active" onChange={(event) => setActive(event.target.value)} value={active}>
+        <select
+          name="active"
+          onChange={(event) => setActive(event.target.value)}
+          value={active}
+        >
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
@@ -1976,7 +2022,11 @@ function StaffUpsertForm({
         <button className="secondary" onClick={resetOverrides} type="button">
           Reset Overrides
         </button>
-        <button className="primary" disabled={loading || warnings.blocking.length > 0} type="submit">
+        <button
+          className="primary"
+          disabled={loading || warnings.blocking.length > 0}
+          type="submit"
+        >
           Save Staff
         </button>
       </div>
@@ -2015,7 +2065,13 @@ function PermissionPreview({
   );
 }
 
-function PermissionList({ title, values }: { title: string; values: string[] }) {
+function PermissionList({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
   return (
     <div className="permission-preview-section">
       <span className="muted">{title}</span>
@@ -2040,14 +2096,25 @@ function staffPermissionWarnings({
 }) {
   const blocking: string[] = [];
   const notices: string[] = [];
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) blocking.push("Enter a valid email.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    blocking.push("Enter a valid email.");
   if (!displayName.trim()) blocking.push("Display name is required.");
-  if (password && password.length < 6) blocking.push("Temporary password must be at least 6 characters.");
-  if (!password) notices.push("Temporary password is required when creating a brand new Auth user.");
-  if (resolution.unknown.length) notices.push(`Unknown permission: ${resolution.unknown.join(", ")}`);
-  if (resolution.duplicates.length) notices.push(`Duplicate permission: ${resolution.duplicates.join(", ")}`);
-  if (resolution.overlaps.length) notices.push(`Revoke wins over Grant for: ${resolution.overlaps.join(", ")}`);
-  if (grant && !resolution.grant.length) notices.push("Grant overrides contain no valid permission names.");
+  if (password && password.length < 6)
+    blocking.push("Temporary password must be at least 6 characters.");
+  if (!password)
+    notices.push(
+      "Temporary password is required when creating a brand new Auth user.",
+    );
+  if (resolution.unknown.length)
+    notices.push(`Unknown permission: ${resolution.unknown.join(", ")}`);
+  if (resolution.duplicates.length)
+    notices.push(`Duplicate permission: ${resolution.duplicates.join(", ")}`);
+  if (resolution.overlaps.length)
+    notices.push(
+      `Revoke wins over Grant for: ${resolution.overlaps.join(", ")}`,
+    );
+  if (grant && !resolution.grant.length)
+    notices.push("Grant overrides contain no valid permission names.");
   return { blocking, notices };
 }
 
@@ -2111,7 +2178,10 @@ function PermissionEditor({
       >
         Save Permissions
       </button>
-      <PermissionList title="Effective Permissions" values={resolution.effectivePermissions} />
+      <PermissionList
+        title="Effective Permissions"
+        values={resolution.effectivePermissions}
+      />
     </details>
   );
 }
@@ -2393,7 +2463,9 @@ function OrdersView({
   const categories = useMemo(
     () => [
       "All",
-      ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
+      ...new Set(
+        menu.map((item) => stringValue(item.category)).filter(Boolean),
+      ),
     ],
     [menu],
   );
@@ -2434,21 +2506,29 @@ function OrdersView({
     menu.find((item) => stringValue(item.itemId) === selectedItemId) ||
     visibleMenu[0];
   const selectedSizes = selectedItem ? menuSizesFor(selectedItem) : [];
-  const receiptTotals = safeReceiptTotals(
-    receiptItems.length
-      ? receiptItems
-      : [{ qty: numberValue(qty) || 1, unitPrice: numberValue(unitPrice) }],
-    discount,
+  const previewItems = receiptItems.length
+    ? receiptItems
+    : [{ qty: numberValue(qty) || 1, unitPrice: numberValue(unitPrice) }];
+  const receiptTotals = safeReceiptTotals(previewItems, discount);
+  const receiptCalculation = useMemo(
+    () =>
+      calculateReceipt({
+        amountPaid: paymentStatus === "Unpaid" ? 0 : numberValue(paidAmount),
+        items: previewItems,
+        orderDiscount: receiptTotals.receiptDiscountAmount,
+      }),
+    [
+      paidAmount,
+      paymentStatus,
+      previewItems,
+      receiptTotals.receiptDiscountAmount,
+    ],
   );
-  const receiptSubtotal = receiptItems.length
-    ? receiptTotals.receiptSubtotal
-    : numberValue(qty) * numberValue(unitPrice);
-  const singleTotal = Math.max(
-    0,
-    receiptTotals.receiptTotal,
-  );
-  const total = receiptItems.length ? receiptTotals.receiptTotal : singleTotal;
-  const remaining = Math.max(0, total - numberValue(paidAmount));
+  const receiptSubtotal = receiptTotals.receiptSubtotal;
+  const total = receiptCalculation.grandTotal;
+  const remaining = receiptCalculation.remainingAmount;
+  const change = receiptCalculation.changeAmount;
+  const previewPaymentStatus = receiptCalculation.paymentStatus;
 
   useEffect(() => {
     if (!selectedItem && visibleMenu[0]) {
@@ -2800,10 +2880,18 @@ function OrdersView({
               {money(receiptTotals.receiptDiscountPercentage)}% | Discount
               Amount: -{money(receiptTotals.receiptDiscountAmount)} EGP | Total:{" "}
               {money(total)} EGP | Paid now: {money(paidAmount)} EGP |
-              Remaining: {money(remaining)} EGP
+              Remaining: {money(remaining)} EGP | Change: {money(change)} EGP |
+              Status: {previewPaymentStatus}
             </p>
             <label className="wide">
-              Notes
+              Item Notes
+              <textarea
+                name="itemNotes"
+                placeholder="No sugar, less ice, prep note for this item"
+              />
+            </label>
+            <label className="wide">
+              Order Notes
               <textarea name="notes" />
             </label>
             <div className="actions wide">
@@ -2819,7 +2907,9 @@ function OrdersView({
                 disabled={savingAction === "addReceipt"}
                 type="submit"
               >
-                {savingAction === "addReceipt" ? "Submitting..." : "Submit Receipt"}
+                {savingAction === "addReceipt"
+                  ? "Submitting..."
+                  : "Submit Receipt"}
               </button>
               <button
                 className="secondary"
@@ -2861,8 +2951,13 @@ function OrdersView({
                     <span>{money(receiptTotals.receiptSubtotal)} EGP</span>
                   </div>
                   <div className="receipt-total">
-                    <span>Discount: {money(receiptTotals.receiptDiscountPercentage)}%</span>
-                    <span>-{money(receiptTotals.receiptDiscountAmount)} EGP</span>
+                    <span>
+                      Discount: {money(receiptTotals.receiptDiscountPercentage)}
+                      %
+                    </span>
+                    <span>
+                      -{money(receiptTotals.receiptDiscountAmount)} EGP
+                    </span>
                   </div>
                   <div className="receipt-total">
                     <span>Total</span>
@@ -3424,6 +3519,7 @@ export function OrderTicket({
   view?: "barista" | "orders";
 }) {
   const due = numberValue(order.outstandingAmount);
+  const changeAmount = numberValue(order.changeAmount);
   const preparationStatus = normalizePreparationStatus(order.orderStatus);
   const paymentStatus = normalizePaymentStatusForDisplay(order.paymentStatus);
   const preparationClass = getPreparationStatusClass(preparationStatus);
@@ -3431,7 +3527,9 @@ export function OrderTicket({
   const pickedUp = isPickedUpStatus(preparationStatus);
   const cancelled = preparationStatus === "Cancelled";
   const finished = isFinishedPreparationStatus(preparationStatus);
-  const receiptDiscountPercentage = numberValue(order.receiptDiscountPercentage);
+  const receiptDiscountPercentage = numberValue(
+    order.receiptDiscountPercentage,
+  );
   const receiptNotes = stringValue(order.receiptNotes || order.customerNotes);
   const phone = phoneOf(order);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -3497,7 +3595,9 @@ export function OrderTicket({
           <div className="ticket-title">
             <strong>{title}</strong>
             <span className="muted">
-              {stringValue(order.receiptId || order.receiptNumber) ? `Receipt ${stringValue(order.receiptId || order.receiptNumber)} | ` : ""}
+              {stringValue(order.receiptId || order.receiptNumber)
+                ? `Receipt ${stringValue(order.receiptId || order.receiptNumber)} | `
+                : ""}
               {stringValue(order.orderDateTime)}{" "}
               {order.staff ? `| ${stringValue(order.staff)}` : ""}
             </span>
@@ -3540,6 +3640,7 @@ export function OrderTicket({
           <div className="stock-meta">
             <span>Paid: {money(order.paidAmount)} EGP</span>
             <span>Remaining: {money(due)} EGP</span>
+            {changeAmount > 0 && <span>Change: {money(changeAmount)} EGP</span>}
             {receiptDiscountPercentage > 0 && (
               <span>Discount: {money(receiptDiscountPercentage)}%</span>
             )}
@@ -4033,7 +4134,10 @@ function ensureConnectedData(source: AppData | null): AppData {
   return nextData;
 }
 
-function mergeConnectedData(current: AppData | null, incoming: AppData): AppData {
+function mergeConnectedData(
+  current: AppData | null,
+  incoming: AppData,
+): AppData {
   const base = ensureConnectedData(current);
   const next = ensureConnectedData(incoming);
 
@@ -4042,7 +4146,11 @@ function mergeConnectedData(current: AppData | null, incoming: AppData): AppData
     ...next,
     dashboard: next.dashboard || base.dashboard,
     dashboardOrders: next.dashboardOrders
-      ? mergeRowsByKey(base.dashboardOrders || [], next.dashboardOrders, receiptKeyOf)
+      ? mergeRowsByKey(
+          base.dashboardOrders || [],
+          next.dashboardOrders,
+          receiptKeyOf,
+        )
       : base.dashboardOrders,
     dashboardTopItems: next.dashboardTopItems || base.dashboardTopItems,
     historyDays: next.historyDays || base.historyDays,
@@ -4087,7 +4195,15 @@ function receiptKeyOf(row: Row) {
   );
 }
 
-function safeReceiptTotals(items: Array<{ qty?: number; unitPrice?: number }>, discount: string) {
+function safeReceiptTotals(
+  items: Array<{
+    discount?: number | string;
+    extrasTotal?: number | string;
+    qty?: number;
+    unitPrice?: number | string;
+  }>,
+  discount: string,
+) {
   try {
     return calculateReceiptTotals(items, discount);
   } catch {
@@ -4133,7 +4249,11 @@ function buildDashboardCounts(data: AppData): Dashboard {
 function buildDashboardOrders(orders: Row[]) {
   const grouped: Record<
     string,
-    Row & { orderDescriptions: string[]; pickedUpCount: number; receiptNotes: string[] }
+    Row & {
+      orderDescriptions: string[];
+      pickedUpCount: number;
+      receiptNotes: string[];
+    }
   > = {};
 
   orders.forEach((order) => {
@@ -4182,7 +4302,10 @@ function buildDashboardOrders(orders: Row[]) {
   });
 
   return Object.values(grouped).map((row) => {
-    const paidAmount = Math.min(numberValue(row.total), numberValue(row.paidAmount));
+    const paidAmount = Math.min(
+      numberValue(row.total),
+      numberValue(row.paidAmount),
+    );
     const outstandingAmount = Math.max(0, numberValue(row.total) - paidAmount);
     return {
       ...row,
@@ -4214,10 +4337,9 @@ function receiptRowPaidAmount(order: Row) {
 }
 
 function partialPaidAmount(order: Row) {
-  return Array.from(stringValue(order.notes).matchAll(/Paid now:\s*([\d,]+(?:\.\d+)?)/gi)).reduce(
-    (total, match) => total + numberValue(match[1]),
-    0,
-  );
+  return Array.from(
+    stringValue(order.notes).matchAll(/Paid now:\s*([\d,]+(?:\.\d+)?)/gi),
+  ).reduce((total, match) => total + numberValue(match[1]), 0);
 }
 
 function derivePaymentStatus(paidAmount: number, receiptTotal: number) {
@@ -4246,7 +4368,9 @@ function cleanReceiptNotes(notes: unknown) {
     .map(stringValue)
     .filter((part) => {
       const lower = part.toLowerCase();
-      return part && !internalPrefixes.some((prefix) => lower.startsWith(prefix));
+      return (
+        part && !internalPrefixes.some((prefix) => lower.startsWith(prefix))
+      );
     })
     .join(" | ");
 }
@@ -4575,10 +4699,11 @@ function printReceipt(order: Row) {
     receiptNumber: stringValue(order.receiptNumber || order.receiptId),
     items,
     discountPercentage: numberValue(order.receiptDiscountPercentage),
-    subtotal: numberValue(order.total),
+    subtotal: numberValue(order.subtotal || order.total),
     total: numberValue(order.total),
     paidAmount: numberValue(order.paidAmount),
     outstandingAmount: numberValue(order.outstandingAmount),
+    changeAmount: numberValue(order.changeAmount),
     paymentStatus: stringValue(order.paymentStatus),
     orderDateTime: stringValue(order.orderDateTime),
     staff: stringValue(order.staff),
