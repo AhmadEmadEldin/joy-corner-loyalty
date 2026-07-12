@@ -139,13 +139,28 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "orderDateTime",
     "customerId",
     "customerName",
+    "customerPhone",
     "staff",
+    "serviceType",
+    "orderPlace",
+    "itemCount",
+    "itemSummary",
+    "itemsJson",
+    "categorySummary",
     "category",
     "item",
     "qty",
     "unitPrice",
+    "subtotal",
+    "itemDiscountTotal",
+    "orderDiscount",
     "discount",
     "total",
+    "paidAmount",
+    "remainingAmount",
+    "outstandingAmount",
+    "changeAmount",
+    "paymentMethod",
     "pointsEarned",
     "pointsRedeemed",
     "paymentStatus",
@@ -161,6 +176,7 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "size",
     "quantity",
     "unitPrice",
+    "discount",
     "extrasTotal",
     "lineTotal",
     "notes",
@@ -1676,9 +1692,18 @@ async function addReceipt(payload: Payload, actor: Actor) {
     preparedItems.map(({ line }) => line.total),
     receiptTotals.receiptDiscountAmount,
   );
+  const createdAt = new Date();
+  const businessDate = dateKey_(createdAt);
+  const orderStatus = "Submitted";
+  const customerPhone = clean_(payload.customerPhone || payload.phone);
+  const serviceType = clean_(payload.serviceType);
   let remainingPaidAmount = paidAmount;
   const writtenItems: string[] = [];
   const receiptRows: Row[] = [];
+  const itemDetails: Row[] = [];
+  let totalQty = 0;
+  let pointsEarnedTotal = 0;
+  let pointsRedeemedTotal = 0;
 
   for (const [index, preparedItem] of preparedItems.entries()) {
     const { item, line, receiptItem, resolvedPrice } = preparedItem;
@@ -1686,11 +1711,11 @@ async function addReceipt(payload: Payload, actor: Actor) {
     const unitPrice = line.unitPrice;
     const discount = lineDiscounts[index] || 0;
     const total = Math.max(0, line.total - discount);
-    const orderStatus = "Submitted";
     const rowPaidAmount =
       paymentStatus === "Paid"
         ? total
         : Math.min(total, Math.max(0, remainingPaidAmount));
+    const itemNotes = clean_(receiptItem.notes);
     const receiptNotes = [
       orderPlace ? `Place: ${orderPlace}` : "",
       staff ? `Staff Label: ${staff}` : "",
@@ -1699,9 +1724,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       `Subtotal: ${receiptTotals.receiptSubtotal}`,
       `Discount Amount: ${receiptTotals.receiptDiscountAmount}`,
       idempotencyKey ? `Idempotency: ${idempotencyKey}` : "",
-      clean_(receiptItem.notes)
-        ? `Item Notes: ${clean_(receiptItem.notes)}`
-        : "",
+      itemNotes ? `Item Notes: ${itemNotes}` : "",
       notes,
       `Receipt: ${receiptId}`,
     ]
@@ -1713,47 +1736,39 @@ async function addReceipt(payload: Payload, actor: Actor) {
       resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
       resolvedPrice.size,
     );
-
-    await writeObjectRow(SHEETS.orders, {
-      orderId,
-      receiptNumber: receiptId,
-      businessDate: dateKey_(new Date()),
-      orderDateTime: new Date(),
-      customerId,
-      customerName,
-      staff,
-      category:
-        resolvedPrice.category || item.category || clean_(receiptItem.category),
-      item: itemName,
+    const category =
+      resolvedPrice.category || item.category || clean_(receiptItem.category);
+    const pointsEarned =
+      clean_(item.loyaltyEligible) === "Yes" ? Math.floor(total / 10) : 0;
+    const pointsRedeemed = Number(receiptItem.pointsRedeemed || 0);
+    const itemDetail = {
+      category,
+      discount: line.discount,
+      extrasTotal: line.extrasTotal,
+      itemName,
+      lineTotal: total,
+      menuItemId: resolvedPrice.itemId || clean_(receiptItem.itemId),
+      notes: itemNotes,
+      orderItemId,
       qty,
+      size: resolvedPrice.size,
       unitPrice,
-      discount: receiptDiscountPercentage,
-      total,
-      paidAmount: rowPaidAmount,
-      outstandingAmount: Math.max(0, total - rowPaidAmount),
-      remainingAmount: Math.max(0, total - rowPaidAmount),
-      changeAmount:
-        index === preparedItems.length - 1
-          ? receiptCalculation.changeAmount
-          : 0,
-      pointsEarned:
-        clean_(item.loyaltyEligible) === "Yes" ? Math.floor(total / 10) : 0,
-      pointsRedeemed: Number(receiptItem.pointsRedeemed || 0),
-      paymentStatus,
-      orderStatus,
-      notes: rowNotes,
-    });
+    };
+
+    totalQty += qty;
+    pointsEarnedTotal += pointsEarned;
+    pointsRedeemedTotal += pointsRedeemed;
+    itemDetails.push(itemDetail);
     receiptRows.push({
       orderId,
       receiptId,
       receiptNumber: receiptId,
-      businessDate: dateKey_(new Date()),
-      orderDateTime: new Date().toISOString(),
+      businessDate,
+      orderDateTime: createdAt.toISOString(),
       customerId,
       customerName,
       staff,
-      category:
-        resolvedPrice.category || item.category || clean_(receiptItem.category),
+      category,
       item: itemName,
       qty,
       unitPrice,
@@ -1792,6 +1807,71 @@ async function addReceipt(payload: Payload, actor: Actor) {
     remainingPaidAmount -= rowPaidAmount;
     writtenItems.push(itemName || "Item");
   }
+
+  const itemSummary = itemDetails
+    .map((detail) => {
+      const size = clean_(detail.size);
+      const label = `${clean_(detail.itemName)}${size ? ` (${size})` : ""}`;
+      return `${label} x${clean_(detail.qty)} = ${clean_(detail.lineTotal)} EGP`;
+    })
+    .join("; ");
+  const categorySummary = uniqueStrings_(
+    itemDetails.map((detail) => detail.category),
+  ).join(", ");
+  const firstItem = itemDetails[0] || {};
+  const receiptLevelNotes = orderNotes_(
+    [
+      orderPlace ? `Place: ${orderPlace}` : "",
+      staff ? `Staff Label: ${staff}` : "",
+      `Items: ${itemSummary}`,
+      `Discount: ${receiptDiscountPercentage}%`,
+      `Subtotal: ${receiptTotals.receiptSubtotal}`,
+      `Discount Amount: ${receiptTotals.receiptDiscountAmount}`,
+      idempotencyKey ? `Idempotency: ${idempotencyKey}` : "",
+      notes,
+      `Receipt: ${receiptId}`,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+    paymentStatus,
+    paidAmount,
+  );
+
+  await writeObjectRow(SHEETS.orders, {
+    businessDate,
+    category: categorySummary || clean_(firstItem.category),
+    categorySummary,
+    changeAmount: receiptCalculation.changeAmount,
+    customerId,
+    customerName,
+    customerPhone,
+    discount: receiptDiscountPercentage,
+    item: itemSummary || clean_(firstItem.itemName),
+    itemCount: itemDetails.length,
+    itemDiscountTotal: receiptCalculation.itemDiscountTotal,
+    itemSummary,
+    itemsJson: JSON.stringify(itemDetails),
+    notes: receiptLevelNotes,
+    orderDateTime: createdAt,
+    orderDiscount: receiptCalculation.orderDiscount,
+    orderId,
+    orderPlace,
+    orderStatus,
+    outstandingAmount: receiptCalculation.remainingAmount,
+    paidAmount: receiptCalculation.amountPaid,
+    paymentMethod,
+    paymentStatus: receiptCalculation.paymentStatus,
+    pointsEarned: pointsEarnedTotal,
+    pointsRedeemed: pointsRedeemedTotal,
+    qty: totalQty,
+    receiptNumber: receiptId,
+    remainingAmount: receiptCalculation.remainingAmount,
+    serviceType,
+    staff,
+    subtotal: receiptCalculation.itemSubtotal,
+    total: receiptCalculation.grandTotal,
+    unitPrice: "",
+  });
 
   if (paidAmount > 0) {
     await writeObjectRow(SHEETS.payments, {
@@ -3859,8 +3939,17 @@ function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
 
 function paidEligibleDrinkQty_(order: Row) {
   if (!isOrderPaidForRewards_(order)) return 0;
-  if (!isRewardEligibleOrder_(order)) return 0;
-  return orderQty_(order);
+  return receiptItemDetails_(order).reduce((total, detail) => {
+    const itemOrder = {
+      ...order,
+      category: detail.category || order.category,
+      item: detail.itemName,
+      qty: detail.qty,
+    };
+    return isRewardEligibleOrder_(itemOrder)
+      ? total + orderQty_(itemOrder)
+      : total;
+  }, 0);
 }
 
 function isOrderPaidForRewards_(order: Row) {
@@ -3945,22 +4034,30 @@ function enrichCustomers_(customers: Row[], orders: Row[], unpaid: Row[]) {
 }
 
 function enrichOrder_(order: Row) {
-  const item = orderItemName_(order);
-  const qty = clean_(order.qty || order.quantity || "1");
+  const itemDetails = receiptItemDetails_(order);
+  const itemSummary =
+    clean_(order.itemSummary) ||
+    itemDetails.map(receiptItemDescription_).join(" + ");
+  const item = itemSummary || orderItemName_(order);
+  const qty = clean_(
+    order.qty ||
+      order.quantity ||
+      itemDetails.reduce((total, detail) => total + number_(detail.qty), 0) ||
+      "1",
+  );
   const total = number_(order.total);
-  const paidAmount =
-    clean_(order.paymentStatus).toLowerCase() === "paid"
-      ? total
-      : partialPaidAmount_(order);
+  const paidAmount = receiptRowPaidAmount_(order);
   const outstanding = outstandingAmount_(order);
   const receiptId = receiptId_(order);
   const orderPlace = orderPlace_(order);
   const receiptDiscountPercentage = receiptDiscountPercentage_(order);
-  const description = `${item || "Order"} x${qty} - ${total} EGP`;
+  const description = `${item || "Order"} - ${total} EGP`;
 
   return {
     ...order,
     item,
+    itemSummary,
+    orderItems: itemDetails.map(receiptItemDescription_),
     qty,
     receiptId,
     receiptDiscountPercentage: String(receiptDiscountPercentage),
@@ -3988,6 +4085,11 @@ function buildDashboardOrders_(orders: Row[]) {
   > = {};
 
   orders.forEach((order) => {
+    const itemDescriptions = receiptItemDescriptionsForOrder_(order);
+    const itemCount = Math.max(
+      1,
+      number_(order.itemCount || itemDescriptions.length || 1),
+    );
     const groupKey =
       order.receiptId ||
       [
@@ -4013,7 +4115,7 @@ function buildDashboardOrders_(orders: Row[]) {
       };
     }
 
-    grouped[groupKey].itemCount += 1;
+    grouped[groupKey].itemCount += itemCount;
     grouped[groupKey].total += number_(order.total);
     grouped[groupKey].paidAmount += receiptRowPaidAmount_(order);
     grouped[groupKey].receiptDiscountPercentage = Math.max(
@@ -4026,11 +4128,9 @@ function buildDashboardOrders_(orders: Row[]) {
       orderPlace_(order) ||
       "";
     if (isPickedUpStatus_(order.orderStatus)) {
-      grouped[groupKey].pickedUpCount += 1;
+      grouped[groupKey].pickedUpCount += itemCount;
     }
-    grouped[groupKey].orderDescriptions.push(
-      `${order.item || "Item"} x${order.qty || "1"}`,
-    );
+    grouped[groupKey].orderDescriptions.push(...itemDescriptions);
     const notes = cleanReceiptNotes_(order.notes);
     if (notes) grouped[groupKey].receiptNotes.push(notes);
   });
@@ -4069,26 +4169,35 @@ function buildDashboardTopItems_(orders: Row[]) {
   > = {};
 
   orders.forEach((order) => {
-    if (!isDrinkOrder_(order)) return;
-
-    const itemName = orderItemName_(order);
-    const groupKey = itemName.toLowerCase();
-    if (!itemName) return;
-
-    if (!byItem[groupKey]) {
-      byItem[groupKey] = {
-        itemName,
-        category: order.category || "",
-        qtySold: 0,
-        totalSales: 0,
-        lastSold: "",
+    for (const detail of receiptItemDetails_(order)) {
+      const itemOrder = {
+        ...order,
+        category: detail.category || order.category,
+        item: detail.itemName,
+        qty: detail.qty,
+        total: detail.lineTotal,
       };
-    }
+      if (!isDrinkOrder_(itemOrder)) continue;
 
-    byItem[groupKey].qtySold += orderQty_(order);
-    byItem[groupKey].totalSales += number_(order.total);
-    byItem[groupKey].lastSold =
-      order.orderDateTime || byItem[groupKey].lastSold;
+      const itemName = orderItemName_(itemOrder);
+      const groupKey = itemName.toLowerCase();
+      if (!itemName) continue;
+
+      if (!byItem[groupKey]) {
+        byItem[groupKey] = {
+          itemName,
+          category: clean_(detail.category || order.category),
+          qtySold: 0,
+          totalSales: 0,
+          lastSold: "",
+        };
+      }
+
+      byItem[groupKey].qtySold += orderQty_(itemOrder);
+      byItem[groupKey].totalSales += number_(detail.lineTotal || order.total);
+      byItem[groupKey].lastSold =
+        order.orderDateTime || byItem[groupKey].lastSold;
+    }
   });
 
   return Object.values(byItem)
@@ -4804,6 +4913,7 @@ function orderItemName_(order: Row) {
   return clean_(
     order.item ||
       order.itemName ||
+      order.itemSummary ||
       order.menuItem ||
       order.productName ||
       "Item",
@@ -4811,6 +4921,14 @@ function orderItemName_(order: Row) {
 }
 
 function orderQty_(order: Row) {
+  const itemDetails = receiptItemDetails_(order);
+  if (itemDetails.length > 1 && !order.qty && !order.quantity && !order.count) {
+    return itemDetails.reduce(
+      (total, detail) => total + number_(detail.qty),
+      0,
+    );
+  }
+
   return Math.max(
     1,
     number_(order.qty || order.quantity || order.count || order.itemCount || 1),
@@ -4864,6 +4982,7 @@ function derivePaymentStatus_(paidAmount: number, receiptTotal: number) {
 
 function cleanReceiptNotes_(notes: unknown) {
   const internalPrefixes = [
+    "items:",
     "place:",
     "staff label:",
     "size:",
@@ -4891,14 +5010,95 @@ function cleanReceiptNotes_(notes: unknown) {
 
 function outstandingAmount_(order: Row) {
   const total = number_(order.total);
+  const explicitRemaining = number_(
+    order.remainingAmount || order.outstandingAmount || order.unpaidAmount,
+  );
+  if (explicitRemaining > 0) return explicitRemaining;
+
   const paymentStatus = clean_(order.paymentStatus).toLowerCase();
 
   if (paymentStatus === "paid") return 0;
   if (paymentStatus === "partial") {
-    return Math.max(0, total - partialPaidAmount_(order));
+    return Math.max(0, total - receiptRowPaidAmount_(order));
   }
 
   return total;
+}
+
+function receiptItemDetails_(order: Row) {
+  const parsed = parseJsonArray_(order.itemsJson)
+    .map((item) => normalizeReceiptItemDetail_(item, order))
+    .filter((item) => clean_(item.itemName));
+
+  if (parsed.length) return parsed;
+
+  const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
+  if (orderItems.length) {
+    return orderItems
+      .map((item) => normalizeReceiptItemDetail_(item, order))
+      .filter((item) => clean_(item.itemName));
+  }
+
+  return [normalizeReceiptItemDetail_(order, order)];
+}
+
+function normalizeReceiptItemDetail_(raw: Row, fallback: Row) {
+  const qty = Math.max(
+    1,
+    number_(raw.qty || raw.quantity || fallback.qty || fallback.quantity || 1),
+  );
+  const unitPrice = number_(raw.unitPrice || fallback.unitPrice);
+  const lineTotal =
+    number_(raw.lineTotal || raw.total) || Math.max(0, qty * unitPrice);
+
+  return {
+    category: clean_(raw.category || fallback.category),
+    discount: number_(raw.discount),
+    extrasTotal: number_(raw.extrasTotal),
+    itemName: clean_(
+      raw.itemName ||
+        raw.menuItemName ||
+        raw.item ||
+        fallback.item ||
+        fallback.itemName ||
+        fallback.itemSummary ||
+        "Item",
+    ),
+    lineTotal,
+    menuItemId: clean_(raw.menuItemId || raw.itemId),
+    notes: clean_(raw.notes),
+    orderItemId: clean_(raw.orderItemId),
+    qty,
+    size: clean_(raw.size),
+    unitPrice,
+  };
+}
+
+function receiptItemDescriptionsForOrder_(order: Row) {
+  const details = receiptItemDetails_(order);
+  if (details.length) return details.map(receiptItemDescription_);
+
+  const summary = clean_(order.itemSummary);
+  if (summary) return summary.split(";").map(clean_).filter(Boolean);
+
+  return [`${orderItemName_(order)} x${orderQty_(order)}`];
+}
+
+function receiptItemDescription_(item: Row) {
+  const size = clean_(item.size);
+  const name = clean_(item.itemName || item.item || "Item");
+  return `${name}${size ? ` (${size})` : ""} x${clean_(item.qty || 1)}`;
+}
+
+function parseJsonArray_(value: unknown): Row[] {
+  const text = clean_(value);
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? (parsed as Row[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function isPickedUpStatus_(status: unknown) {
