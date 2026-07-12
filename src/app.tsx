@@ -2301,12 +2301,12 @@ function DashboardView({
                   onSetPayment={onSetPayment}
                   onStatus={onStatus}
                   canAccept={canAccept}
-                  canCancel={canCancel}
+                  canCancel={isBarista ? false : canCancel}
                   canPickup={canPickup}
                   canPrepare={canPrepare}
                   canReady={canReady}
-                  canSetPayment={canSetPayment}
-                  showPaymentActions={canSetPayment}
+                  canSetPayment={isBarista ? false : canSetPayment}
+                  showPaymentActions={!isBarista && canSetPayment}
                   showPickupAction
                   view="barista"
                 />
@@ -3574,6 +3574,7 @@ export function OrderTicket({
         .map((item) => item.trim())
         .filter(Boolean);
   const prepAction = nextPreparationAction(preparationStatus);
+  const baristaAction = baristaPreparationAction(preparationStatus);
   const canRunPrepAction = prepAction
     ? {
         markReceiptAccepted: canAccept,
@@ -3730,7 +3731,33 @@ export function OrderTicket({
             </button>
           </>
         )}
-        {showPickupAction && (
+        {showPickupAction && view === "barista" && baristaAction && (
+          <button
+            className={baristaAction.kind === "pickup" ? "pickup" : "accept"}
+            disabled={
+              cancelled ||
+              Boolean(pendingAction) ||
+              (baristaAction.kind === "accept" ? !canAccept : !canPickup)
+            }
+            onClick={() =>
+              void runTicketAction(baristaAction.action, () =>
+                baristaAction.kind === "pickup"
+                  ? onDone(payload)
+                  : onStatus(
+                      payload,
+                      "markReceiptAccepted",
+                      "Receipt accepted.",
+                    ),
+              )
+            }
+            type="button"
+          >
+            {pendingAction === baristaAction.action
+              ? "Saving..."
+              : baristaAction.label}
+          </button>
+        )}
+        {showPickupAction && view !== "barista" && (
           <>
             <button
               className="accept"
@@ -3771,7 +3798,7 @@ export function OrderTicket({
             </button>
           </>
         )}
-        {canCancel && (
+        {canCancel && view !== "barista" && (
           <button
             className="danger"
             disabled={cancelled || pickedUp || Boolean(pendingAction)}
@@ -3836,6 +3863,16 @@ function nextPreparationAction(status: PreparationStatus) {
       label: "Ready",
       message: "Receipt marked ready.",
     };
+  }
+  return null;
+}
+
+function baristaPreparationAction(status: PreparationStatus) {
+  if (status === "Submitted") {
+    return { action: "markReceiptAccepted", kind: "accept" as const, label: "Accept" };
+  }
+  if (["Accepted", "Preparing", "Ready"].includes(status)) {
+    return { action: "markReceiptDone", kind: "pickup" as const, label: "Picked Up" };
   }
   return null;
 }

@@ -1140,10 +1140,10 @@ tbody tr:hover {
 }
 
 .receipt-box {
-  background: linear-gradient(180deg, #fffaf0, #fff7e8);
+  background: linear-gradient(135deg, #fbf3e3, #efe0c3);
   border: 1px dashed var(--gold);
   border-radius: 12px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .receipt-row {
@@ -1152,7 +1152,7 @@ tbody tr:hover {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 70px 90px 90px;
-  padding: 8px 0;
+  padding: 6px 0;
 }
 
 .receipt-row:last-child {
@@ -1164,7 +1164,7 @@ tbody tr:hover {
   font-size: 16px;
   font-weight: 800;
   justify-content: space-between;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .dashboard-grid {
@@ -1197,9 +1197,22 @@ tbody tr:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.86);
   display: grid;
   gap: 12px;
-  min-height: 210px;
-  padding: 14px;
+  min-height: 0;
+  padding: 12px;
   position: relative;
+}
+
+.orders-receipt {
+  background:
+    radial-gradient(circle at 8% 0, rgba(255, 255, 255, 0.62), transparent 31%),
+    linear-gradient(145deg, #fbf4e6, #e9d4ad) !important;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.orders-receipt > * {
+  position: relative;
+  z-index: 1;
 }
 
 .barista-receipt-content,
@@ -1356,7 +1369,14 @@ tbody tr:hover {
 }
 
 .orders-receipt::after {
-  content: none !important;
+  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px auto no-repeat;
+  content: "";
+  inset: 0;
+  filter: grayscale(1) contrast(2.4) brightness(0.18);
+  opacity: 0.22;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
 }
 
 .ticket-head,
@@ -1429,23 +1449,33 @@ tbody tr:hover {
 }
 
 .ticket-actions {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .ticket-actions.pickup-only {
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  justify-content: flex-start;
 }
 
 .ticket-actions.payment-only {
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  justify-content: flex-start;
 }
 
 .ticket-actions button {
-  font-size: 13px;
-  min-height: 44px;
-  padding: 9px 8px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  min-height: 32px;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.ticket-actions .danger {
+  background: #fff4f2;
+  border-color: rgba(185, 28, 28, 0.35);
+  color: #9f1239;
 }
 
 .ticket-actions .accept {
@@ -1503,6 +1533,7 @@ tbody tr:hover {
   .ticket-actions {
     grid-column: 3;
     grid-row: 3;
+    justify-content: flex-end;
   }
 }
 
@@ -2145,7 +2176,7 @@ tbody tr:hover {
 
   .ticket-actions,
   .ticket-actions.payment-only {
-    grid-template-columns: 1fr;
+    justify-content: flex-start;
   }
 
   .receipt-row {

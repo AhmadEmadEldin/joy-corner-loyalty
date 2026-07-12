@@ -113,4 +113,27 @@ describe("OrderTicket", () => {
       resolveStatus?.();
     });
   });
+
+  it("keeps the barista board to Accept then Picked Up only", () => {
+    const { rerender } = renderTicket({ orderStatus: "Submitted" });
+
+    expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ready" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Wrong / Cancel" })).toBeNull();
+
+    rerender(
+      <OrderTicket
+        order={{ ...baseOrder, orderStatus: "Accepted" }}
+        onDone={jest.fn()}
+        onSetPayment={jest.fn()}
+        onStatus={jest.fn()}
+        showPaymentActions={false}
+        showPickupAction
+        view="barista"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Picked Up" })).toBeTruthy();
+  });
 });
