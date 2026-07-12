@@ -131,7 +131,8 @@ describe("buildReceiptSubmissionPayload", () => {
       [],
     );
 
-    expect(payload.paidAmount).toBe(100);
+    expect(payload.paidAmount).toBe(75);
+    expect(payload.amountReceived).toBe(100);
     expect(payload.remainingAmount).toBe(0);
     expect(payload.changeAmount).toBe(25);
     expect(payload.paymentStatus).toBe("Paid");

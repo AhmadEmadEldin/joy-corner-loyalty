@@ -9,9 +9,13 @@ import {
   signOut,
 } from "firebase/auth";
 import {
+  collection,
   doc,
   getDoc,
   getFirestore,
+  onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
@@ -81,6 +85,32 @@ if (app) {
 }
 
 export default app;
+
+export function watchActiveOrders(
+  onChange: (orders: Record<string, unknown>[]) => void,
+  onError: (message: string) => void,
+) {
+  if (!firestore) return () => undefined;
+  const activeOrders = query(
+    collection(firestore, "activeOrders"),
+    orderBy("createdAt", "desc"),
+  );
+  return onSnapshot(
+    activeOrders,
+    (snapshot) =>
+      onChange(
+        snapshot.docs
+          .map(
+            (item): Record<string, unknown> => ({
+              orderId: item.id,
+              ...item.data(),
+            }),
+          )
+          .filter((item) => item.active !== false),
+      ),
+    (error) => onError(error.message || "Live order updates failed."),
+  );
+}
 
 export function watchStaffAuth(
   onChange: (session: { profile: StaffProfile; user: User } | null) => void,

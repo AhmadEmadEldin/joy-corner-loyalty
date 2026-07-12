@@ -74,12 +74,15 @@ export function calculateReceipt(input: ReceiptCalculationInput) {
       serviceChargeMinor -
       rewardDiscountMinor,
   );
-  const amountPaidMinor = toMinorUnits(input.amountPaid);
-  const remainingAmountMinor = Math.max(0, grandTotalMinor - amountPaidMinor);
-  const changeAmountMinor = Math.max(0, amountPaidMinor - grandTotalMinor);
+  const amountReceivedMinor = toMinorUnits(input.amountPaid);
+  const amountAppliedMinor = Math.min(amountReceivedMinor, grandTotalMinor);
+  const remainingAmountMinor = Math.max(0, grandTotalMinor - amountAppliedMinor);
+  const changeAmountMinor = Math.max(0, amountReceivedMinor - grandTotalMinor);
 
   return {
-    amountPaid: fromMinorUnits(amountPaidMinor),
+    amountApplied: fromMinorUnits(amountAppliedMinor),
+    amountPaid: fromMinorUnits(amountAppliedMinor),
+    amountReceived: fromMinorUnits(amountReceivedMinor),
     changeAmount: fromMinorUnits(changeAmountMinor),
     grandTotal: fromMinorUnits(grandTotalMinor),
     itemDiscountTotal: fromMinorUnits(itemDiscountMinor),
@@ -87,7 +90,7 @@ export function calculateReceipt(input: ReceiptCalculationInput) {
     itemSubtotal: fromMinorUnits(itemSubtotalMinor),
     orderDiscount: fromMinorUnits(orderDiscountMinor),
     paymentStatus: paymentStatusFromMinorUnits(
-      amountPaidMinor,
+      amountAppliedMinor,
       grandTotalMinor,
     ),
     remainingAmount: fromMinorUnits(remainingAmountMinor),

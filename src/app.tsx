@@ -18,6 +18,7 @@ import {
   signUpCustomer,
   signOutStaff,
   watchFirebaseUser,
+  watchActiveOrders,
   watchStaffAuth,
 } from "./firebase";
 import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
@@ -271,6 +272,8 @@ export function buildReceiptSubmissionPayload(
   payload.items = items;
   payload.receiptDiscountPercentage = discount;
   payload.paidAmount = receiptCalculation.amountPaid;
+  payload.amountApplied = receiptCalculation.amountApplied;
+  payload.amountReceived = receiptCalculation.amountReceived;
   payload.remainingAmount = receiptCalculation.remainingAmount;
   payload.changeAmount = receiptCalculation.changeAmount;
   payload.paymentStatus = receiptCalculation.paymentStatus;
@@ -281,6 +284,7 @@ export function buildReceiptSubmissionPayload(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  payload.clientRequestId = payload.idempotencyKey;
   payload.orderPlace = composeServicePlace(payload);
   delete payload.customerSearch;
   delete payload.serviceType;
@@ -363,6 +367,27 @@ export function App() {
   useEffect(() => {
     if (!staffProfile) return;
     void loadData();
+  }, [staffProfile?.uid]);
+
+  useEffect(() => {
+    if (!staffProfile || !firebaseReady) return undefined;
+    return watchActiveOrders(
+      (orders) => {
+        const live = orders as Row[];
+        setData((current) =>
+          ensureConnectedData({
+            ...(current || {}),
+            dashboardOrders: mergeRowsByKey(
+              live,
+              current?.dashboardOrders || [],
+              receiptKeyOf,
+            ),
+            orders: mergeRowsByKey(live, current?.orders || [], receiptKeyOf),
+          }),
+        );
+      },
+      (message) => setStatus(`Live order warning: ${message}`),
+    );
   }, [staffProfile?.uid]);
 
   useEffect(() => {
@@ -726,7 +751,9 @@ export function App() {
       return true;
     } catch (error) {
       console.error("Receipt submission failed", error);
-      setStatus(`${errorMessage(error)} Order was not saved.`);
+      setStatus(
+        `${errorMessage(error)} Receipt was not saved. Your entered data has been kept.`,
+      );
       return false;
     } finally {
       receiptSubmittingRef.current = false;

@@ -46,6 +46,7 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   updateMenuItem: "menu.update",
   updateReceiptPayment: "payments.create",
   updateVoucherCanvaLink: "vouchers.generate",
+  validateSheetSchema: "settings.manage",
   upsertMenuCategory: "menu.update",
   upsertMenuItem: "menu.update",
   upsertMenuSize: "menu.update",

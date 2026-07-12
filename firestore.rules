@@ -49,6 +49,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /activeOrders/{orderId} {
+      allow read: if signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active != false;
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

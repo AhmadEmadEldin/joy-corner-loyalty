@@ -135,12 +135,18 @@ const SHEET_HEADERS: Record<string, string[]> = {
   [SHEETS.orders]: [
     "orderId",
     "receiptNumber",
+    "clientRequestId",
     "businessDate",
     "orderDateTime",
+    "createdAt",
+    "updatedAt",
     "customerId",
     "customerName",
     "customerPhone",
     "staff",
+    "staffUid",
+    "staffName",
+    "staffRole",
     "serviceType",
     "orderPlace",
     "itemCount",
@@ -156,6 +162,8 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "orderDiscount",
     "discount",
     "total",
+    "amountReceived",
+    "amountApplied",
     "paidAmount",
     "remainingAmount",
     "outstandingAmount",
@@ -166,6 +174,7 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "paymentStatus",
     "orderStatus",
     "notes",
+    "customerNotes",
   ],
   [SHEETS.orderItems]: [
     "orderItemId",
@@ -180,18 +189,29 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "extrasTotal",
     "lineTotal",
     "notes",
+    "itemNotes",
     "preparationStatus",
+    "createdAt",
+    "updatedAt",
   ],
   [SHEETS.payments]: [
     "paymentId",
     "orderId",
     "paymentDate",
+    "receiptNumber",
+    "businessDate",
     "customerId",
     "customerName",
     "method",
     "amount",
+    "amountReceived",
+    "amountApplied",
+    "changeAmount",
+    "paymentType",
     "collectedBy",
     "relatedOrderNotes",
+    "createdAt",
+    "notes",
   ],
   [SHEETS.unpaidTracker]: [
     "customerId",
@@ -662,9 +682,21 @@ async function writeObjectRow(sheetName: string, record: Payload) {
   await ensureSheetHeaders_(sheetName, SHEET_HEADERS[sheetName] || []);
   const values = await getSheetValues(sheetName);
   const headers = (values[0] || []).map(normalizeKey_);
+  const duplicateHeaders = headers.filter(
+    (header, index) => header && headers.indexOf(header) !== index,
+  );
+  if (duplicateHeaders.length) {
+    throw new ApiError(
+      `${sheetName} sheet has duplicate headers: ${uniqueStrings_(duplicateHeaders).join(", ")}.`,
+      500,
+    );
+  }
   const schema = schemaForSheet(sheetName);
   const formulaColumns = new Set(schema?.formulaColumns || []);
-  const editableColumns = new Set(schema?.editableColumns || []);
+  const editableColumns = new Set([
+    ...(schema?.editableColumns || []),
+    ...(SHEET_HEADERS[sheetName] || []),
+  ].map(normalizeKey_));
   await writeDataRow(
     sheetName,
     headers.map((header) => {
@@ -765,6 +797,8 @@ export async function handleAction(action: string, payload: Payload) {
         data: await buildLiveDataForRole(actor.role),
         staff: staffForClient_(actor),
       });
+    case "validateSheetSchema":
+      return await validateSheetSchema();
     case "addCustomer":
       return await addCustomer(payload);
     case "updateCustomer":
@@ -1602,7 +1636,7 @@ async function addOrder(payload: Payload) {
 }
 
 async function addReceipt(payload: Payload, actor: Actor) {
-  const idempotencyKey = clean_(payload.idempotencyKey);
+  const idempotencyKey = clean_(payload.clientRequestId || payload.idempotencyKey);
   if (idempotencyKey) {
     const existingReceiptId = await receiptIdForIdempotencyKey_(idempotencyKey);
     if (existingReceiptId) {
@@ -1671,7 +1705,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
     receiptDiscountPercentage,
   );
   const receiptTotal = receiptTotals.receiptTotal;
-  const requestedPaidAmount = number_(payload.paidAmount);
+  const requestedPaidAmount = number_(payload.amountReceived || payload.paidAmount);
   const paidAmount = deriveReceiptPaidAmount_(
     submittedPaymentStatus,
     requestedPaidAmount,
@@ -1801,7 +1835,10 @@ async function addReceipt(payload: Payload, actor: Actor) {
       discount: line.discount,
       lineTotal: total,
       notes: rowNotes,
+      itemNotes,
       preparationStatus: orderStatus,
+      createdAt,
+      updatedAt: createdAt,
     });
 
     remainingPaidAmount -= rowPaidAmount;
@@ -1839,6 +1876,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
 
   await writeObjectRow(SHEETS.orders, {
     businessDate,
+    clientRequestId: idempotencyKey,
+    createdAt,
     category: categorySummary || clean_(firstItem.category),
     categorySummary,
     changeAmount: receiptCalculation.changeAmount,
@@ -1852,6 +1891,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
     itemSummary,
     itemsJson: JSON.stringify(itemDetails),
     notes: receiptLevelNotes,
+    customerNotes: notes,
     orderDateTime: createdAt,
     orderDiscount: receiptCalculation.orderDiscount,
     orderId,
@@ -1859,6 +1899,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
     orderStatus,
     outstandingAmount: receiptCalculation.remainingAmount,
     paidAmount: receiptCalculation.amountPaid,
+    amountApplied: receiptCalculation.amountApplied,
+    amountReceived: receiptCalculation.amountReceived,
     paymentMethod,
     paymentStatus: receiptCalculation.paymentStatus,
     pointsEarned: pointsEarnedTotal,
@@ -1868,8 +1910,12 @@ async function addReceipt(payload: Payload, actor: Actor) {
     remainingAmount: receiptCalculation.remainingAmount,
     serviceType,
     staff,
+    staffName: staff,
+    staffRole: actor.role,
+    staffUid: actor.uid,
     subtotal: receiptCalculation.itemSubtotal,
     total: receiptCalculation.grandTotal,
+    updatedAt: createdAt,
     unitPrice: "",
   });
 
@@ -1878,10 +1924,17 @@ async function addReceipt(payload: Payload, actor: Actor) {
       paymentId: stableUniqueId_("pay"),
       orderId,
       paymentDate: new Date(),
+      businessDate,
+      createdAt: new Date(),
       customerId,
       customerName,
       method: paymentMethod,
       amount: paidAmount,
+      amountApplied: receiptCalculation.amountApplied,
+      amountReceived: receiptCalculation.amountReceived,
+      changeAmount: receiptCalculation.changeAmount,
+      paymentType: "Initial",
+      receiptNumber: receiptId,
       collectedBy: staff,
       relatedOrderNotes: `Receipt: ${receiptId} - ${writtenItems.join(", ")}`,
     });
@@ -1924,6 +1977,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
     ),
     outstandingAmount: String(receiptCalculation.remainingAmount),
     paidAmount: String(receiptCalculation.amountPaid),
+    amountApplied: String(receiptCalculation.amountApplied),
+    amountReceived: String(receiptCalculation.amountReceived),
     paymentMethod,
     paymentStatus: receiptCalculation.paymentStatus,
     remainingAmount: String(receiptCalculation.remainingAmount),
@@ -1932,6 +1987,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
     subtotal: String(receiptCalculation.itemSubtotal),
     total: String(receiptCalculation.grandTotal),
   };
+
+  await mirrorActiveOrder_(confirmedReceipt);
 
   return success_({
     receiptId,
@@ -2300,7 +2357,7 @@ async function updateReceiptPayment(payload: Payload, actor: Actor) {
 }
 
 async function collectReceiptPayment(payload: Payload, actor: Actor) {
-  const amount = number_(payload.amount);
+  const amount = number_(payload.amountReceived || payload.amount);
   if (amount <= 0)
     throw new ApiError("Paid amount must be greater than 0.", 400);
 
@@ -2391,19 +2448,24 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     matched.reduce((sum, row) => sum + row.paid, 0),
   );
   const remainingBefore = Math.max(0, total - paidBefore);
-  if (amount > remainingBefore) {
-    throw new ApiError("Paid amount cannot exceed the receipt total.", 400, {
+  const paymentMethod = clean_(payload.paymentMethod || payload.method || "Cash");
+  if (paymentMethod.toLowerCase() !== "cash" && amount > remainingBefore) {
+    throw new ApiError("Non-cash payment cannot exceed the remaining total.", 400, {
       remainingAmount: remainingBefore,
     });
   }
+  const amountApplied = Math.min(amount, remainingBefore);
+  const changeAmount = paymentMethod.toLowerCase() === "cash"
+    ? Math.max(0, amount - remainingBefore)
+    : 0;
 
-  let remainingToAllocate = amount;
+  let remainingToAllocate = amountApplied;
   for (const [index, row] of matched.entries()) {
     const rowRemaining = Math.max(0, row.total - row.paid);
     const allocation =
       index === matched.length - 1
         ? remainingToAllocate
-        : Math.min(rowRemaining, amount * (rowRemaining / remainingBefore));
+        : Math.min(rowRemaining, amountApplied * (rowRemaining / remainingBefore));
     const paidNow = Math.round(allocation * 100) / 100;
     remainingToAllocate = Math.max(0, remainingToAllocate - paidNow);
     if (paidNow > 0 && notesIndex >= 0) {
@@ -2417,7 +2479,7 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     }
   }
 
-  const paidAmount = Math.min(total, paidBefore + amount);
+  const paidAmount = Math.min(total, paidBefore + amountApplied);
   const remainingAmount = Math.max(0, total - paidAmount);
   const paymentStatus = derivePaymentStatus_(paidAmount, total);
   for (const row of matched) {
@@ -2430,18 +2492,38 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     paymentDate: new Date(),
     customerId,
     customerName,
-    method: clean_(payload.paymentMethod || payload.method || "Cash"),
-    amount,
+    method: paymentMethod,
+    amount: amountApplied,
+    amountApplied,
+    amountReceived: amount,
+    changeAmount,
+    paymentType: "Collection",
+    receiptNumber: receiptId,
+    businessDate: dateKey_(new Date()),
+    createdAt: new Date(),
     collectedBy: clean_(
       payload.collectedBy || actor.displayName || actor.email,
     ),
     relatedOrderNotes: `Receipt payment collected: ${matched.map((row) => row.itemName).join(", ")}`,
+    notes: clean_(payload.notes),
+  });
+
+  await mirrorActiveOrder_({
+    orderId,
+    receiptNumber: receiptId,
+    paidAmount,
+    remainingAmount,
+    paymentStatus,
+    lastPayment: { amountApplied, amountReceived: amount, changeAmount, paymentMethod },
   });
 
   return success_({
     receiptId,
     total,
     paidAmount,
+    amountApplied,
+    amountReceived: amount,
+    changeAmount,
     remainingAmount,
     paymentStatus,
     data: await buildLiveDataForRole(actor.role),
@@ -2480,6 +2562,13 @@ async function updateReceiptPreparationStatus(
         context.notes ? `${context.notes} | ${note}` : note,
       );
     }
+  });
+
+  await mirrorActiveOrder_({
+    active: nextStatus !== "Picked Up" && nextStatus !== "Cancelled",
+    orderId: clean_(payload.orderId),
+    orderStatus: nextStatus,
+    receiptNumber: clean_(payload.receiptId || payload.receiptNumber),
   });
 
   return success_({
@@ -3365,6 +3454,32 @@ async function recordSyncFailure_(
   }
 }
 
+async function mirrorActiveOrder_(order: Row) {
+  const orderId = clean_(order.orderId);
+  if (!orderId) return;
+  try {
+    const safeOrder = JSON.parse(JSON.stringify(order)) as Row;
+    await getFirestore().collection("activeOrders").doc(orderId).set(
+      {
+        ...safeOrder,
+        active:
+          order.active !== false &&
+          !["picked up", "cancelled", "canceled"].includes(
+            clean_(order.orderStatus).toLowerCase(),
+          ),
+        orderId,
+        sheetSyncStatus: "synced",
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(order.createdAt ? {} : { createdAt: FieldValue.serverTimestamp() }),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    await recordSyncFailure_("firestore.activeOrders", orderId, error);
+    safeServerError_("Firestore active order mirror failed", error);
+  }
+}
+
 async function retrySyncFailures(actor: Actor) {
   await recordAuditLog_(actor, {
     action: "sync.retry.requested",
@@ -3685,6 +3800,61 @@ async function debugSheets() {
     sheetTabsFound,
     rowsCountByTab,
   });
+}
+
+async function validateSheetSchema() {
+  const requiredTabs = [
+    SHEETS.orders,
+    SHEETS.orderItems,
+    SHEETS.payments,
+    SHEETS.customers,
+    SHEETS.menu,
+    SHEETS.dayHistory,
+    SHEETS.generatedVouchers,
+    SHEETS.rewardRedemptions,
+    SHEETS.staff,
+    SHEETS.lists,
+  ];
+  const sheets = await getSheetsClient();
+  const metadata = await sheets.spreadsheets.get({
+    fields: "sheets.properties.title",
+    spreadsheetId: SPREADSHEET_ID,
+  });
+  const existing = new Set(
+    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+  );
+  const legacyBySheet: Record<string, string[]> = {
+    [SHEETS.orders]: ["receiptSerial", "item", "qty", "unitPrice", "outstandingAmount"],
+    [SHEETS.orderItems]: ["notes"],
+    [SHEETS.payments]: ["paymentDate", "method", "amount", "collectedBy"],
+  };
+  const report = [];
+  for (const sheetName of requiredTabs) {
+    const exists = existing.has(sheetName);
+    const values = exists ? await getSheetValues(sheetName) : [];
+    const headers = (values[0] || []).map(clean_).filter(Boolean);
+    const normalized = headers.map(normalizeKey_);
+    const duplicateHeaders = normalized.filter(
+      (header, index) => header && normalized.indexOf(header) !== index,
+    );
+    const required = SHEET_HEADERS[sheetName] || [];
+    const missingRequiredHeaders = required.filter(
+      (header) => !normalized.includes(normalizeKey_(header)),
+    );
+    const legacyHeaders = (legacyBySheet[sheetName] || []).filter((header) =>
+      normalized.includes(normalizeKey_(header)),
+    );
+    report.push({
+      sheetName,
+      exists,
+      headers,
+      missingRequiredHeaders,
+      duplicateHeaders: uniqueStrings_(duplicateHeaders),
+      legacyHeaders,
+      valid: exists && !missingRequiredHeaders.length && !duplicateHeaders.length,
+    });
+  }
+  return success_({ spreadsheetId: maskId_(SPREADSHEET_ID), sheets: report });
 }
 
 async function dayHistory(dateKey: string) {

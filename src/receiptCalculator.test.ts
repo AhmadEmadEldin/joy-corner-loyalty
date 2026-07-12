@@ -86,7 +86,9 @@ describe("receiptCalculator", () => {
         tax: 1.5,
       }),
     ).toMatchObject({
-      amountPaid: 100,
+      amountApplied: 80.5,
+      amountPaid: 80.5,
+      amountReceived: 100,
       changeAmount: 19.5,
       grandTotal: 80.5,
       itemDiscountTotal: 3,
