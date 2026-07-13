@@ -48,8 +48,8 @@ describe("OrderTicket", () => {
   it("shows preparation and payment badges together", () => {
     renderTicket({ orderStatus: "Accepted", paymentStatus: "Paid" });
 
-    expect(screen.getByText("Accepted")).toBeTruthy();
-    expect(screen.getByText("Paid")).toBeTruthy();
+    expect(screen.getAllByText("Accepted").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Paid")).toBeNull();
     const ticket = screen.getByText("Mona").closest("article");
     expect(ticket?.classList.contains("status-accepted")).toBe(true);
     expect(ticket?.classList.contains("payment-paid")).toBe(true);
@@ -105,7 +105,7 @@ describe("OrderTicket", () => {
     expect(onStatus).toHaveBeenCalledTimes(1);
     expect(onStatus).toHaveBeenCalledWith(
       expect.any(String),
-      "markReceiptAccepted",
+      "acceptOrder",
       "Receipt accepted.",
     );
 
@@ -114,10 +114,14 @@ describe("OrderTicket", () => {
     });
   });
 
-  it("keeps the barista board to Accept then Picked Up only", () => {
+  it("keeps the barista board to Accept and Pick Up only", () => {
     const { rerender } = renderTicket({ orderStatus: "Submitted" });
 
     expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Pick Up" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ready" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Wrong / Cancel" })).toBeNull();
@@ -134,6 +138,13 @@ describe("OrderTicket", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Picked Up" })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Accepted" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Pick Up" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 });

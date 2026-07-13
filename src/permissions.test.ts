@@ -67,7 +67,9 @@ describe("permissions", () => {
     expect(permissionsForRole("cashier").has("customers.delete")).toBe(false);
     expect(permissionsForRole("waiter").has("orders.create")).toBe(true);
     expect(permissionsForRole("waiter").has("payments.create")).toBe(false);
-    expect(permissionsForRole("barista").has("orders.ready")).toBe(true);
+    expect(permissionsForRole("barista").has("orders.ready")).toBe(false);
+    expect(permissionsForRole("barista").has("orders.accept")).toBe(true);
+    expect(permissionsForRole("barista").has("orders.pickedup")).toBe(true);
     expect(permissionsForRole("barista").has("settings.manage")).toBe(false);
     expect(permissionsForRole("manager").has("vouchers.generate")).toBe(true);
     expect(permissionsForRole("manager").has("permissions.manage")).toBe(false);
@@ -80,7 +82,7 @@ describe("permissions", () => {
     ) => visibleTabsForPermissions(role, permissions).map(([id]) => id);
 
     expect(visibleTabIds("cashier", ["dashboard.view"])).toContain("dashboard");
-    expect(visibleTabIds("barista", ["orders.view"])).toContain("orders");
+    expect(visibleTabIds("barista", ["orders.view"])).toEqual(["dashboard"]);
     expect(visibleTabIds("waiter", ["orders.view"])).not.toContain("dashboard");
     expect(visibleTabIds("owner", ["staff.view"])).toContain("owner");
   });

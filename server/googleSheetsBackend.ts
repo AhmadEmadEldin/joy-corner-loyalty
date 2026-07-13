@@ -3,9 +3,17 @@ import express from "express";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { google, sheets_v4 } from "googleapis";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { featurePermissions } from "../src/domain";
 import { normalizedMenu, resolveMenuPrice } from "../src/menuRepository";
+import {
+  formatCairoDateTime,
+  getCairoBusinessDate,
+  getPreviousCairoBusinessDate,
+} from "../src/cairoDate";
 import {
   canTransitionOrderStatus,
   normalizeOrderStatus,
@@ -65,6 +73,7 @@ const SHEETS = {
   staff: "Staff",
   staffUsers: "Staff Users",
   dayHistory: "Day History",
+  dailyReceiptFiles: "Daily Receipt Files",
   auditLog: "Audit Log",
   syncFailures: "Sync Failures",
   migrationExceptions: "Migration Exceptions",
@@ -88,6 +97,7 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.loyaltyWinners]: ["Loyalty Winners", "Winners"],
   [SHEETS.unpaidTracker]: ["Unpaid Tracker", "Unpaid"],
   [SHEETS.dayHistory]: ["Day History", "History"],
+  [SHEETS.dailyReceiptFiles]: ["Daily Receipt Files", "Daily Files"],
   [SHEETS.auditLog]: ["Audit Log", "Audit Logs", "Audits"],
   [SHEETS.orderItems]: ["Order Items", "Items"],
   [SHEETS.orderItemExtras]: ["Order Item Extras", "Item Extras"],
@@ -97,7 +107,9 @@ const SHEET_ALIASES: Record<string, string[]> = {
 };
 
 const DAY_HISTORY_HEADERS = [
+  "businessDate",
   "dateKey",
+  "archiveBatchId",
   "receiptCount",
   "orderCount",
   "paymentCount",
@@ -105,11 +117,26 @@ const DAY_HISTORY_HEADERS = [
   "totalSales",
   "totalPaid",
   "totalUnpaid",
+  "totalRemaining",
+  "cashTotal",
+  "visaTotal",
+  "walletTotal",
+  "paidReceiptCount",
+  "partialReceiptCount",
+  "unpaidReceiptCount",
   "bestSellingItem",
   "bestSellingQty",
   "latestReceiptSerial",
   "resetAt",
   "resetBy",
+  "archivedAt",
+  "archivedByUid",
+  "archivedByName",
+  "archiveTrigger",
+  "dailyPdfId",
+  "dailyPdfUrl",
+  "resetCompleted",
+  "notes",
 ] as const;
 
 const SHEET_HEADERS: Record<string, string[]> = {
@@ -175,6 +202,13 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "orderStatus",
     "notes",
     "customerNotes",
+    "activeBoard",
+    "archived",
+    "archivedAt",
+    "archiveBatchId",
+    "dailyPdfId",
+    "createdByUid",
+    "createdByEmail",
   ],
   [SHEETS.orderItems]: [
     "orderItemId",
@@ -280,6 +314,30 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "updatedAt",
   ],
   [SHEETS.dayHistory]: [...DAY_HISTORY_HEADERS],
+  [SHEETS.dailyReceiptFiles]: [
+    "dailyFileId",
+    "businessDate",
+    "archiveBatchId",
+    "fileName",
+    "storageProvider",
+    "storagePath",
+    "downloadUrl",
+    "receiptCount",
+    "orderItemCount",
+    "totalSales",
+    "totalPaid",
+    "totalRemaining",
+    "cashTotal",
+    "visaTotal",
+    "walletTotal",
+    "generatedAt",
+    "generatedByUid",
+    "generatedByName",
+    "generationType",
+    "archiveStatus",
+    "version",
+    "notes",
+  ],
   [SHEETS.auditLog]: [
     "auditId",
     "userId",
@@ -799,6 +857,8 @@ export async function handleAction(action: string, payload: Payload) {
       });
     case "validateSheetSchema":
       return await validateSheetSchema();
+    case "diagnoseGoogleSheet":
+      return await diagnoseGoogleSheet();
     case "addCustomer":
       return await addCustomer(payload);
     case "updateCustomer":
@@ -819,6 +879,8 @@ export async function handleAction(action: string, payload: Payload) {
       return await collectReceiptPayment(payload, actor);
     case "markReceiptAccepted":
       return await updateReceiptPreparationStatus(payload, "Accepted", actor);
+    case "acceptOrder":
+      return await updateReceiptPreparationStatus(payload, "Accepted", actor);
     case "markReceiptPreparing":
       return await updateReceiptPreparationStatus(payload, "Preparing", actor);
     case "markReceiptReady":
@@ -826,6 +888,8 @@ export async function handleAction(action: string, payload: Payload) {
     case "cancelReceipt":
       return await updateReceiptPreparationStatus(payload, "Cancelled", actor);
     case "markReceiptDone":
+      return await markReceiptDone(payload, actor);
+    case "pickupOrder":
       return await markReceiptDone(payload, actor);
     case "generateVoucher":
       return await generateVoucher(payload);
@@ -852,7 +916,7 @@ export async function handleAction(action: string, payload: Payload) {
     case "backupSheetsWorkbook":
       return await backupSheetsWorkbook(actor);
     case "migrateSheetsWorkbook":
-      return await migrateSheetsWorkbook(actor);
+      return await migrateSheetsWorkbook(actor, payload);
     case "reconcileSheetsWorkbook":
       return await reconcileSheetsWorkbook(actor);
     case "syncMenuToSheets":
@@ -926,6 +990,18 @@ async function authorizeAction(
   const email = user.email;
   const uid = user.uid;
   const actor = await staffActorForUser(uid, email);
+
+  if (
+    actor.role === "barista" &&
+    !new Set(["appData", "liveData", "acceptOrder", "pickupOrder"]).has(
+      action,
+    )
+  ) {
+    throw new ApiError(
+      `Barista accounts may only access the dashboard, accept orders, and pick up orders.`,
+      403,
+    );
+  }
 
   if (!isActionAllowed_(actor, action)) {
     throw new ApiError(
@@ -1580,6 +1656,8 @@ async function addOrder(payload: Payload) {
   );
 
   await writeObjectRow(SHEETS.orders, {
+    activeBoard: true,
+    archived: false,
     orderId,
     receiptNumber,
     businessDate: dateKey_(new Date()),
@@ -1875,9 +1953,13 @@ async function addReceipt(payload: Payload, actor: Actor) {
   );
 
   await writeObjectRow(SHEETS.orders, {
+    activeBoard: true,
+    archived: false,
     businessDate,
     clientRequestId: idempotencyKey,
     createdAt,
+    createdByEmail: actor.email,
+    createdByUid: actor.uid,
     category: categorySummary || clean_(firstItem.category),
     categorySummary,
     changeAmount: receiptCalculation.changeAmount,
@@ -2669,61 +2751,226 @@ async function updateVoucherCanvaLink(payload: Payload) {
 }
 
 async function resetDay(actor: Actor) {
-  const todayKey = dateKey_(new Date());
-  const data = await buildAppData();
-  const todaysOrders = (data.orders || []).filter(
-    (order) => orderDateKey_(order) === todayKey && !isArchivedOrder_(order),
-  );
-  const todaysPayments = (data.payments || []).filter(
-    (payment) => paymentDateKey_(payment) === todayKey,
-  );
-  const todaysRedemptions = (data.redemptions || []).filter(
-    (redemption) => paymentDateKey_(redemption) === todayKey,
-  );
-  const summary = buildDaySummary_(
-    todayKey,
-    todaysOrders,
-    todaysPayments,
-    todaysRedemptions,
-  );
-  const resetAt = new Date().toISOString();
+  const archive = await archiveBusinessDay_({
+    businessDate: dateKey_(new Date()),
+    regeneratePdf: false,
+    triggerType: "Owner Reset",
+    triggeredBy: actor,
+  });
+  return success_({
+    ...archive,
+    data: await buildAppDataForRole(actor.role),
+    message: `Archived ${archive.receiptCount} receipt(s) and reset today's dashboard.`,
+  });
+}
 
-  if (await dayArchiveExists_(todayKey)) {
-    throw new ApiError(
-      `Business day ${todayKey} has already been archived. Duplicate End Day reset is blocked.`,
-      409,
-      { businessDate: todayKey },
-    );
+type ArchiveBusinessDayOptions = {
+  businessDate: string;
+  regeneratePdf?: boolean;
+  triggerType: "Owner Reset" | "Midnight Scheduled";
+  triggeredBy: Actor;
+};
+
+async function archiveBusinessDay_(options: ArchiveBusinessDayOptions) {
+  const data = await buildAppData();
+  const businessDate = options.businessDate;
+  const orders = (data.orders || []).filter(
+    (order) => orderDateKey_(order) === businessDate && !isArchivedOrder_(order),
+  );
+  const payments = (data.payments || []).filter(
+    (payment) => paymentDateKey_(payment) === businessDate,
+  );
+  const redemptions = (data.redemptions || []).filter(
+    (redemption) => paymentDateKey_(redemption) === businessDate,
+  );
+  const existingFiles = await safeSheetObjects_(SHEETS.dailyReceiptFiles);
+  const existingFile = existingFiles.find(
+    (file) => clean_(file.businessDate) === businessDate,
+  );
+
+  if (!orders.length && existingFile && !options.regeneratePdf) {
+    return {
+      alreadyArchived: true,
+      archiveBatchId: clean_(existingFile.archiveBatchId),
+      dailyPdfId: clean_(existingFile.dailyFileId),
+      downloadUrl: clean_(existingFile.downloadUrl),
+      receiptCount: number_(existingFile.receiptCount),
+    };
+  }
+  if (!orders.length) {
+    return { alreadyArchived: false, receiptCount: 0, skipped: true };
   }
 
-  await appendDayArchive_({
+  const summary = buildDaySummary_(businessDate, orders, payments, redemptions);
+  const archiveBatchId = clean_(existingFile?.archiveBatchId) || stableUniqueId_("archive");
+  const dailyFileId = clean_(existingFile?.dailyFileId) || stableUniqueId_("dailyPdf");
+  const generatedAt = new Date();
+  const pdf = buildDailyReceiptsPdf_(businessDate, orders, summary, options.triggeredBy);
+  const storage = await uploadDailyReceiptsPdf_(businessDate, pdf);
+
+  await upsertSheetObject_(SHEETS.dailyReceiptFiles, "businessDate", businessDate, {
+    archiveBatchId,
+    archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
+    businessDate,
+    dailyFileId,
+    downloadUrl: storage.downloadUrl,
+    fileName: storage.fileName,
+    generatedAt,
+    generatedByName: options.triggeredBy.displayName || options.triggeredBy.email,
+    generatedByUid: options.triggeredBy.uid,
+    generationType: options.triggerType,
+    notes: "Generated from structured Orders and Order Items records.",
+    orderItemCount: orders.reduce((sum, order) => sum + number_(order.qty), 0),
+    receiptCount: summary.receiptCount,
+    storagePath: storage.path,
+    storageProvider: "Firebase Storage",
+    totalPaid: summary.totalPaid,
+    totalRemaining: summary.totalUnpaid,
+    totalSales: summary.totalSales,
+    version: number_(existingFile?.version) + 1 || 1,
+  });
+  await upsertSheetObject_(SHEETS.dayHistory, "dateKey", businessDate, {
     ...summary,
-    resetAt,
-    resetBy: actor.email,
+    archiveBatchId,
+    archiveTrigger: options.triggerType,
+    archivedAt: generatedAt,
+    archivedByName: options.triggeredBy.displayName || options.triggeredBy.email,
+    archivedByUid: options.triggeredBy.uid,
+    businessDate,
+    dailyPdfId: dailyFileId,
+    dailyPdfUrl: storage.downloadUrl,
+    dateKey: businessDate,
+    resetCompleted: true,
   });
   const archivedRows = await archiveTodayOrders_(
-    todayKey,
-    resetAt,
-    actor.email,
+    businessDate,
+    generatedAt.toISOString(),
+    options.triggeredBy.email,
+    archiveBatchId,
+    dailyFileId,
   );
-  await recordAuditLog_(actor, {
-    action: "day.reset",
-    entityId: todayKey,
+  await recordAuditLog_(options.triggeredBy, {
+    action: "day.archive",
+    entityId: businessDate,
     entityType: "businessDay",
-    newValue: {
-      archivedRows,
-      summary,
-    },
-    reason: "Owner End Day reset",
+    newValue: { archiveBatchId, archivedRows, dailyFileId, summary },
+    reason: options.triggerType,
     success: true,
   });
-
-  return success_({
+  return {
+    archiveBatchId,
     archivedRows,
-    daySummary: summary,
-    data: await buildAppDataForRole(actor.role),
-    message: `Archived ${summary.receiptCount} receipt(s) and reset today's dashboard.`,
+    dailyPdfId: dailyFileId,
+    downloadUrl: storage.downloadUrl,
+    receiptCount: summary.receiptCount,
+    summary,
+  };
+}
+
+export async function archivePreviousBusinessDay() {
+  const previousBusinessDate = getPreviousCairoBusinessDate();
+  return await archiveBusinessDay_({
+    businessDate: previousBusinessDate,
+    triggerType: "Midnight Scheduled",
+    triggeredBy: {
+      displayName: "Joy Corner midnight scheduler",
+      email: "system@joycorner.local",
+      role: "owner",
+      uid: "system-midnight-scheduler",
+    },
   });
+}
+
+function buildDailyReceiptsPdf_(
+  businessDate: string,
+  orders: Row[],
+  summary: Row,
+  actor: Actor,
+) {
+  const pdf = new jsPDF({ format: "a4", unit: "pt" });
+  pdf.setFontSize(18);
+  pdf.text("JOY CORNER", 40, 44);
+  pdf.setFontSize(12);
+  pdf.text(`Daily Receipts Report - ${businessDate}`, 40, 64);
+  pdf.setFontSize(9);
+  pdf.text(
+    `Generated ${formatCairoDateTime(new Date())} by ${actor.displayName || actor.email}`,
+    40,
+    80,
+  );
+  autoTable(pdf, {
+    body: [[
+      summary.receiptCount,
+      moneyText_(summary.totalSales),
+      moneyText_(summary.totalPaid),
+      moneyText_(summary.totalUnpaid),
+    ]],
+    head: [["Receipts", "Total sales", "Total paid", "Remaining"]],
+    startY: 94,
+    styles: { fontSize: 8 },
+  });
+  let startY = ((pdf as any).lastAutoTable?.finalY || 130) + 18;
+  for (const order of orders) {
+    if (startY > 720) {
+      pdf.addPage();
+      startY = 42;
+    }
+    pdf.setFontSize(10);
+    pdf.text(
+      `${clean_(order.receiptNumber || order.receiptId)} | ${clean_(order.customerName) || "Walk-in"} | ${clean_(order.orderStatus)}`,
+      40,
+      startY,
+    );
+    const itemRows = Array.isArray(order.items)
+      ? order.items
+      : String(order.itemSummary || order.item || "")
+          .split(";")
+          .filter(Boolean)
+          .map((item) => ({ item }));
+    autoTable(pdf, {
+      body: itemRows.map((item: Row) => [
+        clean_(item.itemName || item.item),
+        clean_(item.qty || item.quantity || 1),
+        moneyText_(item.unitPrice),
+        moneyText_(item.discount),
+        moneyText_(item.lineTotal || item.total),
+      ]),
+      head: [["Item", "Qty", "Unit", "Discount", "Line total"]],
+      margin: { left: 40, right: 40 },
+      startY: startY + 7,
+      styles: { fontSize: 7 },
+    });
+    startY = ((pdf as any).lastAutoTable?.finalY || startY + 48) + 16;
+  }
+  return Buffer.from(pdf.output("arraybuffer"));
+}
+
+async function uploadDailyReceiptsPdf_(businessDate: string, pdf: Buffer) {
+  initFirebaseAdmin();
+  const fileName = `Joy-Corner-Receipts-${businessDate}.pdf`;
+  const [year, month] = businessDate.split("-");
+  const path = `daily-receipts/${year}/${month}/${fileName}`;
+  const file = getStorage().bucket().file(path);
+  await file.save(pdf, {
+    contentType: "application/pdf",
+    metadata: { cacheControl: "private, max-age=0, no-transform" },
+    resumable: false,
+  });
+  let downloadUrl = "";
+  try {
+    const [url] = await file.getSignedUrl({
+      action: "read",
+      expires: "2030-01-01",
+    });
+    downloadUrl = url;
+  } catch (error) {
+    safeServerError_("Daily receipt PDF signed URL unavailable", error);
+  }
+  return { downloadUrl, fileName, path };
+}
+
+function moneyText_(value: unknown) {
+  return `${number_(value).toFixed(2)} EGP`;
 }
 
 async function appendDayArchive_(summary: Row) {
@@ -2953,7 +3200,16 @@ async function backupSheetsWorkbook(actor: Actor) {
   });
 }
 
-async function migrateSheetsWorkbook(actor: Actor) {
+async function migrateSheetsWorkbook(actor: Actor, payload: Payload = {}) {
+  if (payload.apply !== true) {
+    return success_({
+      applyRequired: true,
+      dryRun: true,
+      preview: await previewSheetsMigration_(),
+      message:
+        "Dry run only. No workbook, tab, header, or historical row was changed. Repeat with apply: true after reviewing this preview.",
+    });
+  }
   const backup = await backupSheetsWorkbook(actor);
   const migrationVersion = `sheets-normalized-${migrationTimestamp_()}`;
   const createdOrRepairedTabs = await ensureNormalizedWorkbook_();
@@ -3000,6 +3256,56 @@ async function migrateSheetsWorkbook(actor: Actor) {
   });
 }
 
+async function previewSheetsMigration_() {
+  const sheetNames = [
+    SHEETS.customers,
+    SHEETS.orders,
+    SHEETS.orderItems,
+    SHEETS.payments,
+    SHEETS.businessSettings,
+    SHEETS.dayHistory,
+    SHEETS.dailyReceiptFiles,
+  ];
+  const tabs = await Promise.all(
+    sheetNames.map(async (sheetName) => {
+      try {
+        const values = await getSheetValues(sheetName);
+        const headers = (values[0] || []).map(clean_).filter(Boolean);
+        const normalized = headers.map(normalizeKey_);
+        const duplicateHeaders = uniqueStrings_(
+          normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+        );
+        const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
+          (header) => !normalized.includes(normalizeKey_(header)),
+        );
+        return {
+          duplicateHeaders,
+          exists: true,
+          missingHeaders,
+          rowCount: Math.max(0, values.length - 1),
+          sheetName,
+        };
+      } catch {
+        return {
+          duplicateHeaders: [],
+          exists: false,
+          missingHeaders: SHEET_HEADERS[sheetName] || [],
+          rowCount: 0,
+          sheetName,
+        };
+      }
+    }),
+  );
+  return {
+    tabs,
+    warnings: [
+      "Apply creates a Drive backup before adding missing tabs or headers.",
+      "Apply only appends missing headers; it does not reorder or delete historical columns.",
+      "Ambiguous historical links remain flagged instead of guessed.",
+    ],
+  };
+}
+
 async function ensureNormalizedWorkbook_() {
   const repairedTabs: string[] = [];
   for (const sheetName of NORMALIZED_OPERATIONAL_SHEETS) {
@@ -3019,13 +3325,21 @@ async function ensureNormalizedWorkbook_() {
 
 async function seedBusinessSettings_() {
   const defaults: Array<[string, string, string, string]> = [
+    ["schemaVersion", "2026-07-normalized", "string", "Normalized workbook schema version"],
     ["business_timezone", "Africa/Cairo", "string", "Business timezone"],
+    ["businessTimeZone", "Africa/Cairo", "string", "Canonical business timezone"],
     ["closing_time", "23:59", "time", "Default closing time"],
     ["currency", "EGP", "string", "Receipt currency"],
     ["loyalty_drinks_required", "7", "number", "Paid drinks per reward"],
     ["tax_percentage", "0", "number", "Default tax percentage"],
     ["receipt_prefix", "REC", "string", "Receipt number prefix"],
     ["automatic_end_day_enabled", "false", "boolean", "Automatic close flag"],
+    ["ordersTab", SHEETS.orders, "string", "Orders tab name"],
+    ["orderItemsTab", SHEETS.orderItems, "string", "Order Items tab name"],
+    ["paymentsTab", SHEETS.payments, "string", "Payments tab name"],
+    ["customersTab", SHEETS.customers, "string", "Customers tab name"],
+    ["dayHistoryTab", SHEETS.dayHistory, "string", "Day History tab name"],
+    ["dailyReceiptFilesTab", SHEETS.dailyReceiptFiles, "string", "Daily Receipt Files tab name"],
   ];
   for (const [settingKey, settingValue, valueType, description] of defaults) {
     await upsertSheetObject_(
@@ -3470,6 +3784,15 @@ async function mirrorActiveOrder_(order: Row) {
         orderId,
         sheetSyncStatus: "synced",
         updatedAt: FieldValue.serverTimestamp(),
+        ...(clean_(order.orderStatus) === "Accepted"
+          ? { acceptedAt: FieldValue.serverTimestamp() }
+          : {}),
+        ...(clean_(order.orderStatus) === "Picked Up"
+          ? { pickedUpAt: FieldValue.serverTimestamp() }
+          : {}),
+        ...(clean_(order.orderStatus) === "Archived"
+          ? { archivedAt: FieldValue.serverTimestamp() }
+          : {}),
         ...(order.createdAt ? {} : { createdAt: FieldValue.serverTimestamp() }),
       },
       { merge: true },
@@ -3501,6 +3824,8 @@ async function archiveTodayOrders_(
   dateKey: string,
   resetAt: string,
   resetBy: string,
+  archiveBatchId = "",
+  dailyPdfId = "",
 ) {
   const values = await getSheetValues(SHEETS.orders);
   if (values.length < 2) return 0;
@@ -3508,6 +3833,11 @@ async function archiveTodayOrders_(
   const headers = (values[0] || []).map(normalizeKey_);
   const orderStatusIndex = headers.indexOf("orderStatus");
   const notesIndex = headers.indexOf("notes");
+  const activeBoardIndex = headers.indexOf("activeBoard");
+  const archivedIndex = headers.indexOf("archived");
+  const archivedAtIndex = headers.indexOf("archivedAt");
+  const archiveBatchIdIndex = headers.indexOf("archiveBatchId");
+  const dailyPdfIdIndex = headers.indexOf("dailyPdfId");
 
   if (orderStatusIndex < 0) {
     throw new Error(
@@ -3528,6 +3858,19 @@ async function archiveTodayOrders_(
       continue;
 
     await setCell(SHEETS.orders, index + 1, orderStatusIndex, "Archived");
+    if (activeBoardIndex >= 0)
+      await setCell(SHEETS.orders, index + 1, activeBoardIndex, false);
+    if (archivedIndex >= 0)
+      await setCell(SHEETS.orders, index + 1, archivedIndex, true);
+    if (archivedAtIndex >= 0)
+      await setCell(SHEETS.orders, index + 1, archivedAtIndex, resetAt);
+    if (archiveBatchIdIndex >= 0)
+      await setCell(SHEETS.orders, index + 1, archiveBatchIdIndex, archiveBatchId);
+    if (dailyPdfIdIndex >= 0)
+      await setCell(SHEETS.orders, index + 1, dailyPdfIdIndex, dailyPdfId);
+    const orderIdIndex = headers.indexOf("orderId");
+    const orderId = orderIdIndex >= 0 ? clean_(row[orderIdIndex]) : "";
+    if (orderId) await mirrorActiveOrder_({ active: false, orderId, orderStatus: "Archived" });
     if (notesIndex >= 0) {
       const currentNotes = clean_(row[notesIndex]);
       const archiveNote = `End day reset archived at ${resetAt} by ${resetBy}`;
@@ -3857,6 +4200,53 @@ async function validateSheetSchema() {
   return success_({ spreadsheetId: maskId_(SPREADSHEET_ID), sheets: report });
 }
 
+async function diagnoseGoogleSheet() {
+  const sheets = await getSheetsClient();
+  const metadata = await sheets.spreadsheets.get({
+    fields: "properties.title,properties.timeZone,sheets.properties.title",
+    spreadsheetId: SPREADSHEET_ID,
+  });
+  const titles = new Set(
+    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+  );
+  const sheetNames = [
+    SHEETS.orders,
+    SHEETS.orderItems,
+    SHEETS.payments,
+    SHEETS.dayHistory,
+    SHEETS.dailyReceiptFiles,
+    SHEETS.auditLog,
+    SHEETS.syncFailures,
+  ];
+  const tabs = await Promise.all(
+    sheetNames.map(async (sheetName) => {
+      const exists = titles.has(sheetName);
+      const values = exists ? await getSheetValues(sheetName) : [];
+      const headers = (values[0] || []).map(clean_).filter(Boolean);
+      const normalized = headers.map(normalizeKey_);
+      const duplicateHeaders = uniqueStrings_(
+        normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+      );
+      const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
+        (header) => !normalized.includes(normalizeKey_(header)),
+      );
+      return { canRead: exists, duplicateHeaders, exists, headers, missingHeaders, name: sheetName };
+    }),
+  );
+  return success_({
+    calculatedBusinessDate: getCairoBusinessDate(),
+    runtimeProjectId:
+      process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "",
+    runtimeCairoNow: formatCairoDateTime(new Date()),
+    runtimeUtcNow: new Date().toISOString(),
+    spreadsheetFound: true,
+    spreadsheetIdMasked: maskId_(SPREADSHEET_ID),
+    spreadsheetTitle: metadata.data.properties?.title || "",
+    spreadsheetTimeZone: metadata.data.properties?.timeZone || "",
+    tabs,
+  });
+}
+
 async function dayHistory(dateKey: string) {
   if (!dateKey) throw new Error("Date key is required.");
   const data = await buildAppData();
@@ -3886,13 +4276,17 @@ async function buildAppDataForRole(role: string) {
   if (role !== "barista" && role !== "waiter") return data;
 
   if (role === "barista") {
+    const activeOrders = (data.dashboardOrders || []).filter((order: Row) => {
+      const status = normalizeOrderStatus(order.orderStatus);
+      return status !== "Picked Up" && status !== "Cancelled";
+    });
     return {
       dashboard: {
-        totalOrders: data.dashboard.totalOrders,
-        openReceipts: data.dashboard.openReceipts,
-        pickedUpReceipts: data.dashboard.pickedUpReceipts,
+        totalOrders: activeOrders.length,
+        openReceipts: activeOrders.length,
+        pickedUpReceipts: 0,
       },
-      dashboardOrders: data.dashboardOrders,
+      dashboardOrders: activeOrders,
       generatedAt: data.generatedAt,
     };
   }
@@ -5431,12 +5825,7 @@ function dateKeyFromValue_(value: unknown) {
 }
 
 function dateKey_(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "Africa/Cairo",
-    year: "numeric",
-  }).format(date);
+  return getCairoBusinessDate(date);
 }
 
 function allocateReceiptDiscounts_(

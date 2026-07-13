@@ -3,6 +3,7 @@ import { FeaturePermission, StaffRole, featurePermissions } from "./domain";
 export const permissionCatalog = [...featurePermissions];
 
 export const actionFeaturePermissions: Record<string, FeaturePermission> = {
+  acceptOrder: "orders.accept",
   addCustomer: "customers.create",
   addOrder: "orders.create",
   addPayment: "payments.create",
@@ -20,6 +21,7 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   dayHistory: "history.day.view",
   debugAuth: "settings.manage",
   debugSheets: "settings.manage",
+  diagnoseGoogleSheet: "settings.manage",
   exportData: "reports.export",
   generateVoucher: "vouchers.generate",
   getAppData: "dashboard.view",
@@ -33,6 +35,7 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   migrateSheetsWorkbook: "settings.manage",
   organizeSpreadsheet: "settings.manage",
   ownerOverview: "staff.view",
+  pickupOrder: "orders.pickedup",
   reconcileSheetsWorkbook: "settings.manage",
   redeemVoucher: "vouchers.redeem",
   removeCustomer: "customers.delete",
@@ -116,11 +119,10 @@ export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> =
     "receipts.print",
   ]),
   barista: new Set([
+    "dashboard.view",
     "orders.view",
     "orders.accept",
-    "orders.ready",
     "orders.pickedup",
-    "receipts.view",
   ]),
 };
 
@@ -214,6 +216,7 @@ export function visibleTabsForPermissions(
   effectivePermissions: string[] = [],
 ) {
   const normalizedRole = String(role || "").trim().toLowerCase();
+  if (normalizedRole === "barista") return [["dashboard", "Dashboard"]];
   const tabPermissions: Record<string, string[]> = {
     dashboard: ["dashboard.view"],
     customers: ["customers.view"],

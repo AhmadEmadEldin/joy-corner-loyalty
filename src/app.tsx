@@ -857,8 +857,8 @@ export function App() {
   }
 
   async function markReceiptDone(encodedPayload: string) {
-    await callAndReload(
-      "markReceiptDone",
+    return await callAndReload(
+      "pickupOrder",
       receiptPayloadFrom(encodedPayload),
       "Receipt marked picked up.",
     );
@@ -869,7 +869,11 @@ export function App() {
     action: string,
     message: string,
   ) {
-    await callAndReload(action, receiptPayloadFrom(encodedPayload), message);
+    return await callAndReload(
+      action,
+      receiptPayloadFrom(encodedPayload),
+      message,
+    );
   }
 
   async function resetDay() {
@@ -1068,10 +1072,10 @@ export function App() {
               "topItems",
             )}
             role={currentRole}
-            canAccept={canRunCurrentAction("markReceiptAccepted")}
+            canAccept={canRunCurrentAction("acceptOrder")}
             canPrepare={canRunCurrentAction("markReceiptPreparing")}
             canReady={canRunCurrentAction("markReceiptReady")}
-            canPickup={canRunCurrentAction("markReceiptDone")}
+            canPickup={canRunCurrentAction("pickupOrder")}
             canSetPayment={canRunCurrentAction("updateReceiptPayment")}
             canCancel={canRunCurrentAction("cancelReceipt")}
             onFilter={setFilter}
@@ -2249,6 +2253,12 @@ function DashboardView({
   onDone: (payload: string) => void;
 }) {
   const isBarista = role === "barista";
+  const displayedOrders = isBarista
+    ? orders.filter((order) => {
+        const status = normalizePreparationStatus(order.orderStatus);
+        return status !== "Picked Up" && status !== "Cancelled";
+      })
+    : orders;
 
   return (
     <>
@@ -2269,7 +2279,7 @@ function DashboardView({
         <section className="panel">
           <PanelHead
             title="Barista Pickup Board"
-            note={`${orders.length} receipt(s)`}
+            note={`${displayedOrders.length} active receipt(s)`}
           />
           <FilterBar
             id="dashboardOrders"
@@ -2290,9 +2300,9 @@ function DashboardView({
                   ]
             }
           />
-          {orders.length ? (
+          {displayedOrders.length ? (
             <div className="receipt-board">
-              {orders.map((order, index) => (
+              {displayedOrders.map((order, index) => (
                 <OrderTicket
                   key={`${stringValue(order.receiptId)}-${index}`}
                   order={order}
@@ -3530,12 +3540,12 @@ export function OrderTicket({
   canReady?: boolean;
   canSetPayment?: boolean;
   order: Row;
-  onDone: (payload: string) => Promise<void> | void;
+  onDone: (payload: string) => Promise<boolean | void> | boolean | void;
   onCollectPayment?: (payload: string) => Promise<void> | void;
   onSetPayment: (
     payload: string,
     paymentStatus: string,
-  ) => Promise<void> | void;
+  ) => Promise<boolean | void> | boolean | void;
   onStatus: (
     payload: string,
     action: string,
@@ -3547,7 +3557,11 @@ export function OrderTicket({
 }) {
   const due = numberValue(order.outstandingAmount);
   const changeAmount = numberValue(order.changeAmount);
-  const preparationStatus = normalizePreparationStatus(order.orderStatus);
+  const sourcePreparationStatus = normalizePreparationStatus(order.orderStatus);
+  const [optimisticPreparationStatus, setOptimisticPreparationStatus] =
+    useState<PreparationStatus | null>(null);
+  const preparationStatus =
+    optimisticPreparationStatus || sourcePreparationStatus;
   const paymentStatus = normalizePaymentStatusForDisplay(order.paymentStatus);
   const preparationClass = getPreparationStatusClass(preparationStatus);
   const paymentClass = getPaymentStatusClass(paymentStatus);
@@ -3574,7 +3588,6 @@ export function OrderTicket({
         .map((item) => item.trim())
         .filter(Boolean);
   const prepAction = nextPreparationAction(preparationStatus);
-  const baristaAction = baristaPreparationAction(preparationStatus);
   const canRunPrepAction = prepAction
     ? {
         markReceiptAccepted: canAccept,
@@ -3585,7 +3598,7 @@ export function OrderTicket({
 
   async function runTicketAction(
     actionKey: string,
-    callback: () => Promise<void> | void,
+    callback: () => Promise<boolean | void> | boolean | void,
   ) {
     if (pendingActionRef.current) return;
     pendingActionRef.current = actionKey;
@@ -3596,6 +3609,20 @@ export function OrderTicket({
       pendingActionRef.current = null;
       setPendingAction(null);
     }
+  }
+
+  async function runBaristaStatusAction(
+    actionKey: "acceptOrder" | "pickupOrder",
+    nextStatus: PreparationStatus,
+    callback: () => Promise<boolean | void> | boolean | void,
+  ) {
+    const previousStatus = preparationStatus;
+    setOptimisticPreparationStatus(nextStatus);
+    await runTicketAction(actionKey, async () => {
+      const succeeded = await callback();
+      if (succeeded === false) setOptimisticPreparationStatus(previousStatus);
+      return succeeded;
+    });
   }
 
   return (
@@ -3634,7 +3661,7 @@ export function OrderTicket({
           </div>
           <div className="actions">
             <PreparationStatusBadge status={preparationStatus} />
-            <PaymentStatusBadge status={paymentStatus} />
+            {view !== "barista" && <PaymentStatusBadge status={paymentStatus} />}
           </div>
         </div>
 
@@ -3731,31 +3758,47 @@ export function OrderTicket({
             </button>
           </>
         )}
-        {showPickupAction && view === "barista" && baristaAction && (
-          <button
-            className={baristaAction.kind === "pickup" ? "pickup" : "accept"}
-            disabled={
-              cancelled ||
-              Boolean(pendingAction) ||
-              (baristaAction.kind === "accept" ? !canAccept : !canPickup)
-            }
-            onClick={() =>
-              void runTicketAction(baristaAction.action, () =>
-                baristaAction.kind === "pickup"
-                  ? onDone(payload)
-                  : onStatus(
-                      payload,
-                      "markReceiptAccepted",
-                      "Receipt accepted.",
-                    ),
-              )
-            }
-            type="button"
-          >
-            {pendingAction === baristaAction.action
-              ? "Saving..."
-              : baristaAction.label}
-          </button>
+        {showPickupAction && view === "barista" && (
+          <>
+            <button
+              className="accept"
+              disabled={
+                cancelled ||
+                preparationStatus !== "Submitted" ||
+                !canAccept ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runBaristaStatusAction("acceptOrder", "Accepted", () =>
+                  onStatus(payload, "acceptOrder", "Receipt accepted."),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "acceptOrder"
+                ? "Accepting…"
+                : preparationStatus === "Accepted"
+                  ? "Accepted"
+                  : "Accept"}
+            </button>
+            <button
+              className="pickup"
+              disabled={
+                cancelled ||
+                !["Accepted", "Preparing", "Ready"].includes(preparationStatus) ||
+                !canPickup ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runBaristaStatusAction("pickupOrder", "Picked Up", () =>
+                  onDone(payload),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "pickupOrder" ? "Picking Up…" : "Pick Up"}
+            </button>
+          </>
         )}
         {showPickupAction && view !== "barista" && (
           <>
@@ -3867,15 +3910,6 @@ function nextPreparationAction(status: PreparationStatus) {
   return null;
 }
 
-function baristaPreparationAction(status: PreparationStatus) {
-  if (status === "Submitted") {
-    return { action: "markReceiptAccepted", kind: "accept" as const, label: "Accept" };
-  }
-  if (["Accepted", "Preparing", "Ready"].includes(status)) {
-    return { action: "markReceiptDone", kind: "pickup" as const, label: "Picked Up" };
-  }
-  return null;
-}
 
 function StockCard({ item }: { item: Row }) {
   const qtySold = numberValue(item.qtySold);
