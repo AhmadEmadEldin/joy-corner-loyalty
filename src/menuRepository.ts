@@ -35,6 +35,7 @@ export type NormalizedMenuItem = {
   ingredients: string[];
   itemId: string;
   itemName: string;
+  loyaltyEligible: boolean;
   name: string;
   preparationStation: "barista" | "kitchen";
   priceText: string;
@@ -107,6 +108,7 @@ export function normalizeMenu(menu: RawMenu): NormalizedMenuItem[] {
         ingredients: normalizeStringList(item.ingredients),
         itemId,
         itemName,
+        loyaltyEligible: true,
         name: itemName,
         preparationStation: stationForCategory(categoryName),
         priceText: sizes
@@ -151,6 +153,30 @@ export function resolveMenuPrice(itemId: string, size: string, itemName = "") {
     price: menuSize.price,
     size: menuSize.size,
   };
+}
+
+export function parseLiveMenuPrices(
+  priceText: unknown,
+  knownSizeNames: string[] = [],
+) {
+  const prices = String(priceText ?? "")
+    .split("/")
+    .map((part) => Number(part.trim().replace(/,/g, "")))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  if (!prices.length) return [];
+  const labels =
+    knownSizeNames.length === prices.length
+      ? knownSizeNames.map(cleanValue)
+      : prices.length === 1
+        ? ["Standard"]
+        : prices.map((_price, index) => `Option ${index + 1}`);
+  return prices.map((price, index) => ({
+    active: true,
+    price,
+    size: labels[index] || `Option ${index + 1}`,
+    sizeId: stableId(labels[index] || `option-${index + 1}`),
+    sizeName: labels[index] || `Option ${index + 1}`,
+  }));
 }
 
 export function validateNormalizedMenu(

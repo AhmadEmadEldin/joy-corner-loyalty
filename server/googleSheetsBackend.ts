@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
+import { createHash, randomBytes } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
@@ -7,8 +8,12 @@ import { getStorage } from "firebase-admin/storage";
 import { google, sheets_v4 } from "googleapis";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { featurePermissions } from "../src/domain";
-import { normalizedMenu, resolveMenuPrice } from "../src/menuRepository";
+import { featurePermissions, StaffRole } from "../src/domain";
+import {
+  normalizedMenu,
+  parseLiveMenuPrices,
+  resolveMenuPrice,
+} from "../src/menuRepository";
 import {
   formatCairoDateTime,
   getCairoBusinessDate,
@@ -17,7 +22,11 @@ import {
 import {
   canTransitionOrderStatus,
   normalizeOrderStatus,
+  validateOrderTransition,
 } from "../src/orderStatus";
+import { neutralizeSheetFormula } from "../src/sheetSafety";
+import { calculateLoyaltyBalance } from "../src/loyalty";
+import { canRedeemVoucher } from "../src/voucher";
 import {
   actionFeaturePermissions,
   hasPermission,
@@ -35,14 +44,11 @@ import {
   toMinorUnits,
 } from "../src/receiptCalculator";
 import { neonHealth, writeNeonAuditLog } from "./neon";
-import { buildNormalizedMenuSeed } from "./sheets/menuMigration";
 import {
   NORMALIZED_OPERATIONAL_SHEETS,
   NORMALIZED_SHEET_HEADERS,
-  NORMALIZED_SHEETS,
-  NormalizedSheetName,
 } from "./sheets/schema";
-import { schemaForSheet } from "./sheetSchema";
+import { SHEET_SCHEMAS, schemaForSheet } from "./sheetSchema";
 
 dotenv.config({ path: [".env.local", ".env"] });
 
@@ -53,17 +59,13 @@ const SPREADSHEET_ID = spreadsheetIdFromEnv(
 const SHEETS = {
   dashboard: "Dashboard",
   businessSettings: "Business Settings",
+  customerSummary: "Customer Summary",
   extras: "Extras",
   generatedVouchers: "Generated Vouchers",
   menu: "Menu",
-  menuCategories: "Menu Categories",
-  menuItems: "Menu Items",
-  menuItemSizes: "Menu Item Sizes",
-  menuItemFlavors: "Menu Item Flavors",
   customers: "Customers",
   orders: "Orders",
   orderItems: "Order Items",
-  orderItemExtras: "Order Item Extras",
   payments: "Payments",
   unpaidTracker: "Unpaid Tracker",
   rewards: "Rewards",
@@ -71,23 +73,16 @@ const SHEETS = {
   loyaltyWinners: "Loyalty Winners",
   rewardRedemptions: "Reward Redemptions",
   staff: "Staff",
-  staffUsers: "Staff Users",
   dayHistory: "Day History",
   dailyReceiptFiles: "Daily Receipt Files",
   auditLog: "Audit Log",
   syncFailures: "Sync Failures",
-  migrationExceptions: "Migration Exceptions",
+  schemaStatus: "Schema Status",
 } as const;
 
 const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.customers]: ["Customers", "Customer", "Clients", "Guests"],
-  [SHEETS.menuCategories]: ["Menu Categories", "Categories"],
-  [SHEETS.menuItems]: ["Menu Items", "Items Master"],
-  [SHEETS.menuItemSizes]: ["Menu Item Sizes", "Item Sizes", "Sizes"],
-  [SHEETS.menuItemFlavors]: ["Menu Item Flavors", "Flavors"],
-  [SHEETS.extras]: ["Extras", "Menu Extras"],
-  [SHEETS.staffUsers]: ["Staff Users", "Staff", "Users", "Team"],
-  [SHEETS.staff]: ["Staff"],
+  [SHEETS.staff]: ["Staff", "Staff Users", "Users", "Team"],
   [SHEETS.generatedVouchers]: [
     "Generated Vouchers",
     "Vouchers",
@@ -100,10 +95,10 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.dailyReceiptFiles]: ["Daily Receipt Files", "Daily Files"],
   [SHEETS.auditLog]: ["Audit Log", "Audit Logs", "Audits"],
   [SHEETS.orderItems]: ["Order Items", "Items"],
-  [SHEETS.orderItemExtras]: ["Order Item Extras", "Item Extras"],
   [SHEETS.syncFailures]: ["Sync Failures", "Sync Failure"],
   [SHEETS.businessSettings]: ["Business Settings", "Settings"],
-  [SHEETS.migrationExceptions]: ["Migration Exceptions", "Exceptions"],
+  [SHEETS.customerSummary]: ["Customer Summary"],
+  [SHEETS.schemaStatus]: ["Schema Status"],
 };
 
 const DAY_HISTORY_HEADERS = [
@@ -209,6 +204,14 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "dailyPdfId",
     "createdByUid",
     "createdByEmail",
+    "confirmationRequestedAt",
+    "confirmationRequestedBy",
+    "confirmedAt",
+    "confirmedBy",
+    "approvedAt",
+    "approvedBy",
+    "rejectionReason",
+    "cancellationReason",
   ],
   [SHEETS.orderItems]: [
     "orderItemId",
@@ -289,8 +292,6 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "generatedAt",
     "createdAt",
     "date",
-    "canvaStatus",
-    "canvaLink",
   ],
   [SHEETS.rewardRedemptions]: [
     "redemptionId",
@@ -302,7 +303,7 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "staff",
     "notes",
   ],
-  [SHEETS.staffUsers]: [
+  [SHEETS.staff]: [
     "email",
     "role",
     "name",
@@ -363,6 +364,16 @@ const SHEET_HEADERS: Record<string, string[]> = {
     "createdAt",
     "resolvedAt",
   ],
+  [SHEETS.schemaStatus]: [
+    "sheetName",
+    "exists",
+    "requiredHeaders",
+    "missingHeaders",
+    "duplicateHeaders",
+    "rowCount",
+    "lastCheckedAt",
+    "status",
+  ],
 };
 
 const SHEET_TAB_COLORS: Record<
@@ -381,7 +392,7 @@ const SHEET_TAB_COLORS: Record<
   [SHEETS.loyaltyWinners]: { red: 0.58, green: 0.36, blue: 0.64 },
   [SHEETS.generatedVouchers]: { red: 0.44, green: 0.38, blue: 0.78 },
   [SHEETS.rewardRedemptions]: { red: 0.34, green: 0.52, blue: 0.5 },
-  [SHEETS.staffUsers]: { red: 0.25, green: 0.25, blue: 0.25 },
+  [SHEETS.staff]: { red: 0.25, green: 0.25, blue: 0.25 },
   [SHEETS.dayHistory]: { red: 0.24, green: 0.38, blue: 0.55 },
   [SHEETS.auditLog]: { red: 0.42, green: 0.24, blue: 0.18 },
   [SHEETS.syncFailures]: { red: 0.68, green: 0.18, blue: 0.16 },
@@ -409,7 +420,7 @@ const ROLE_PERMISSIONS: Record<string, Set<string>> = Object.fromEntries(
   ]),
 );
 
-const REWARD_THRESHOLD = 5;
+const DEFAULT_REWARD_THRESHOLD = 5;
 const PORT = Number(
   process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001,
 );
@@ -426,7 +437,7 @@ type Actor = {
   effectivePermissions?: string[];
   profileFound?: boolean;
   revokedPermissions?: string[];
-  role: string;
+  role: StaffRole;
   type?: "staff";
   uid: string;
 };
@@ -723,6 +734,7 @@ async function sheetToObjects(sheetName: string): Promise<Row[]> {
     .map((row) => {
       const record: Row = {};
       headers.forEach((header, index) => {
+        if (sheetName === SHEETS.staff && header === "password") return;
         if (header) record[header] = clean_(row[index]);
       });
       return record;
@@ -751,10 +763,12 @@ async function writeObjectRow(sheetName: string, record: Payload) {
   }
   const schema = schemaForSheet(sheetName);
   const formulaColumns = new Set(schema?.formulaColumns || []);
-  const editableColumns = new Set([
-    ...(schema?.editableColumns || []),
-    ...(SHEET_HEADERS[sheetName] || []),
-  ].map(normalizeKey_));
+  const editableColumns = new Set(
+    [
+      ...(schema?.editableColumns || []),
+      ...(SHEET_HEADERS[sheetName] || []),
+    ].map(normalizeKey_),
+  );
   await writeDataRow(
     sheetName,
     headers.map((header) => {
@@ -821,6 +835,21 @@ export async function handleAction(action: string, payload: Payload) {
     return await submitCustomerOrder(payload, customer);
   }
 
+  if (action === "customerOrders") {
+    const customer = await authorizeCustomerAction(payload);
+    return success_({ orders: await customerOrders_(customer) });
+  }
+
+  if (action === "confirmCustomerOrder") {
+    const customer = await authorizeCustomerAction(payload);
+    return await transitionCustomerOrder_(payload, customer, "Confirmed");
+  }
+
+  if (action === "cancelCustomerOrder") {
+    const customer = await authorizeCustomerAction(payload);
+    return await transitionCustomerOrder_(payload, customer, "Cancelled");
+  }
+
   if (action === "debugAuth") {
     const actor = await authorizeAction("appData", payload);
     return success_({
@@ -885,18 +914,30 @@ export async function handleAction(action: string, payload: Payload) {
       return await updateReceiptPreparationStatus(payload, "Preparing", actor);
     case "markReceiptReady":
       return await updateReceiptPreparationStatus(payload, "Ready", actor);
+    case "requestOrderConfirmation":
+      return await updateReceiptPreparationStatus(
+        payload,
+        "Awaiting Confirmation",
+        actor,
+      );
+    case "confirmOrder":
+      return await updateReceiptPreparationStatus(payload, "Confirmed", actor);
+    case "approveOrder":
+      return await updateReceiptPreparationStatus(payload, "Approved", actor);
+    case "rejectOrder":
+      return await updateReceiptPreparationStatus(payload, "Rejected", actor);
     case "cancelReceipt":
       return await updateReceiptPreparationStatus(payload, "Cancelled", actor);
     case "markReceiptDone":
       return await markReceiptDone(payload, actor);
     case "pickupOrder":
       return await markReceiptDone(payload, actor);
+    case "completeOrder":
+      return await updateReceiptPreparationStatus(payload, "Completed", actor);
     case "generateVoucher":
-      return await generateVoucher(payload);
+      return await generateVoucher(payload, actor);
     case "redeemVoucher":
-      return await redeemVoucher(payload);
-    case "updateVoucherCanvaLink":
-      return await updateVoucherCanvaLink(payload);
+      return await redeemVoucher(payload, actor);
     case "resetDay":
       return await resetDay(actor);
     case "customerSearch":
@@ -924,46 +965,14 @@ export async function handleAction(action: string, payload: Payload) {
     case "updateMenuItem":
       return await updateMenuItem(payload, actor);
     case "upsertMenuCategory":
-      return await upsertNormalizedMenuRecord_(
-        SHEETS.menuCategories,
-        "Category ID",
-        payload,
-        actor,
-      );
     case "upsertMenuItem":
-      return await upsertNormalizedMenuRecord_(
-        SHEETS.menuItems,
-        "Item ID",
-        payload,
-        actor,
-      );
     case "upsertMenuSize":
-      return await upsertNormalizedMenuRecord_(
-        SHEETS.menuItemSizes,
-        "Size ID",
-        payload,
-        actor,
-      );
     case "archiveMenuCategory":
-      return await archiveNormalizedMenuRecord_(
-        SHEETS.menuCategories,
-        "Category ID",
-        payload,
-        actor,
-      );
     case "archiveMenuItem":
-      return await archiveNormalizedMenuRecord_(
-        SHEETS.menuItems,
-        "Item ID",
-        payload,
-        actor,
-      );
     case "archiveMenuSize":
-      return await archiveNormalizedMenuRecord_(
-        SHEETS.menuItemSizes,
-        "Size ID",
-        payload,
-        actor,
+      throw new ApiError(
+        "This legacy menu action is disabled. Update a row in the live Menu tab instead.",
+        410,
       );
     case "ownerOverview":
       return await ownerOverview(actor);
@@ -993,9 +1002,18 @@ async function authorizeAction(
 
   if (
     actor.role === "barista" &&
-    !new Set(["appData", "liveData", "acceptOrder", "pickupOrder"]).has(
-      action,
-    )
+    !new Set([
+      "appData",
+      "getAppData",
+      "liveData",
+      "acceptOrder",
+      "markReceiptAccepted",
+      "markReceiptPreparing",
+      "markReceiptReady",
+      "markReceiptDone",
+      "pickupOrder",
+      "completeOrder",
+    ]).has(action)
   ) {
     throw new ApiError(
       `Barista accounts may only access the dashboard, accept orders, and pick up orders.`,
@@ -1169,7 +1187,7 @@ async function staffProfileFromFirestore(uid: string, email: string) {
       profileFound: true,
       revoke,
       revokedPermissions: revoke,
-      role,
+      role: role as StaffRole,
       type: "staff" as const,
     };
   } catch (error) {
@@ -1624,7 +1642,7 @@ async function addOrder(payload: Payload) {
   );
   // Payment and pickup are separate steps. Paid orders must stay live on the
   // dashboard until staff marks them Picked Up or the owner runs End Day Reset.
-  const orderStatus = "Submitted";
+  const orderStatus = "Requested";
   const paidAmount = deriveReceiptPaidAmount_(
     paymentStatus,
     number_(payload.paidAmount),
@@ -1714,7 +1732,9 @@ async function addOrder(payload: Payload) {
 }
 
 async function addReceipt(payload: Payload, actor: Actor) {
-  const idempotencyKey = clean_(payload.clientRequestId || payload.idempotencyKey);
+  const idempotencyKey = clean_(
+    payload.clientRequestId || payload.idempotencyKey,
+  );
   if (idempotencyKey) {
     const existingReceiptId = await receiptIdForIdempotencyKey_(idempotencyKey);
     if (existingReceiptId) {
@@ -1783,7 +1803,9 @@ async function addReceipt(payload: Payload, actor: Actor) {
     receiptDiscountPercentage,
   );
   const receiptTotal = receiptTotals.receiptTotal;
-  const requestedPaidAmount = number_(payload.amountReceived || payload.paidAmount);
+  const requestedPaidAmount = number_(
+    payload.amountReceived || payload.paidAmount,
+  );
   const paidAmount = deriveReceiptPaidAmount_(
     submittedPaymentStatus,
     requestedPaidAmount,
@@ -1806,11 +1828,12 @@ async function addReceipt(payload: Payload, actor: Actor) {
   );
   const createdAt = new Date();
   const businessDate = dateKey_(createdAt);
-  const orderStatus = "Submitted";
+  const orderStatus = "Requested";
   const customerPhone = clean_(payload.customerPhone || payload.phone);
   const serviceType = clean_(payload.serviceType);
   let remainingPaidAmount = paidAmount;
   const writtenItems: string[] = [];
+  const orderItemRows: Payload[] = [];
   const receiptRows: Row[] = [];
   const itemDetails: Row[] = [];
   let totalQty = 0;
@@ -1898,7 +1921,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       notes: rowNotes,
       orderPlace,
     });
-    await writeObjectRow(SHEETS.orderItems, {
+    orderItemRows.push({
       orderItemId,
       orderId,
       menuItemId: resolvedPrice.itemId || clean_(receiptItem.itemId),
@@ -2001,6 +2024,24 @@ async function addReceipt(payload: Payload, actor: Actor) {
     unitPrice: "",
   });
 
+  try {
+    for (const orderItemRow of orderItemRows) {
+      await writeObjectRow(SHEETS.orderItems, orderItemRow);
+    }
+  } catch (error) {
+    await recordSyncFailure_(
+      "orderItems.write",
+      orderId,
+      error,
+      idempotencyKey,
+    );
+    throw new ApiError(
+      "The order was saved, but its line items could not be synchronized. Staff have been notified.",
+      503,
+      { orderId, requestId: idempotencyKey },
+    );
+  }
+
   if (paidAmount > 0) {
     await writeObjectRow(SHEETS.payments, {
       paymentId: stableUniqueId_("pay"),
@@ -2010,6 +2051,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       createdAt: new Date(),
       customerId,
       customerName,
+      customerNameSnapshot: customerName,
       method: paymentMethod,
       amount: paidAmount,
       amountApplied: receiptCalculation.amountApplied,
@@ -2018,9 +2060,26 @@ async function addReceipt(payload: Payload, actor: Actor) {
       paymentType: "Initial",
       receiptNumber: receiptId,
       collectedBy: staff,
+      receivedByName: staff,
+      receivedByUid: actor.uid,
+      paymentMethod,
       relatedOrderNotes: `Receipt: ${receiptId} - ${writtenItems.join(", ")}`,
     });
   }
+  await recordAuditLog_(actor, {
+    action: "order.create",
+    entityId: orderId,
+    entityType: "order",
+    newValue: {
+      itemCount: orderItemRows.length,
+      orderId,
+      paymentCreated: paidAmount > 0,
+      receiptNumber: receiptId,
+      total: receiptCalculation.grandTotal,
+    },
+    requestId: idempotencyKey,
+    success: true,
+  });
   const receipt = buildDashboardOrders_(receiptRows)[0] || {
     receiptId,
     receiptNumber: receiptId,
@@ -2032,7 +2091,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
     paidAmount: String(paidAmount),
     outstandingAmount: String(Math.max(0, receiptTotal - paidAmount)),
     paymentStatus,
-    orderStatus: "Submitted",
+    orderStatus: "Requested",
     notes,
   };
   const confirmedReceipt = {
@@ -2112,28 +2171,18 @@ async function customerMenu() {
 }
 
 async function syncMenuToSheets(actor: Actor) {
-  for (const item of normalizedMenu) {
-    await upsertSheetObject_(SHEETS.menu, "itemId", item.itemId, {
-      active: item.active ? "Yes" : "No",
-      category: item.category,
-      itemId: item.itemId,
-      itemName: item.itemName,
-      loyaltyEligible: "Yes",
-      price: item.priceText,
-    });
-  }
-  const normalizedSeed = await seedNormalizedMenu_(actor);
+  const menu = await menuForApp_();
 
   await recordAuditLog_(actor, {
-    action: "menu.seed.sync",
+    action: "menu.live.validate",
     entityType: "menu",
-    newValue: { itemCount: normalizedMenu.length, normalizedSeed },
+    newValue: { itemCount: menu.length, source: SHEETS.menu },
     success: true,
   });
 
   return success_({
     data: await buildAppDataForRole(actor.role),
-    message: `Synchronized ${normalizedMenu.length} menu item(s) and normalized menu tables to Google Sheets.`,
+    message: `Validated ${menu.length} live Menu item(s). The Sheet remains the source of truth.`,
   });
 }
 
@@ -2275,6 +2324,19 @@ async function registerCustomerProfile(payload: Payload, actor: CustomerActor) {
 }
 
 async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
+  const clientRequestId = clean_(
+    payload.clientRequestId || payload.idempotencyKey,
+  );
+  if (clientRequestId) {
+    const existing = await receiptIdForIdempotencyKey_(clientRequestId);
+    if (existing) {
+      return success_({
+        duplicate: true,
+        message: "This order request was already received.",
+        receiptId: existing,
+      });
+    }
+  }
   const item = await findMenuItem(
     clean_(payload.itemId),
     clean_(payload.itemName),
@@ -2305,6 +2367,7 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     `Firebase UID: ${actor.uid}`,
     actor.email ? `Email: ${actor.email}` : "",
     orderPlace ? `Place: ${orderPlace}` : "",
+    clientRequestId ? `Idempotency: ${clientRequestId}` : "",
     clean_(payload.notes),
     `Receipt: ${receiptId}`,
   ]
@@ -2317,12 +2380,21 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
   );
 
   await writeObjectRow(SHEETS.orders, {
+    activeBoard: true,
+    archived: false,
+    clientRequestId,
+    createdAt: new Date(),
+    createdByEmail: actor.email,
+    createdByUid: actor.uid,
     orderId,
     receiptNumber: receiptId,
     businessDate: dateKey_(new Date()),
     orderDateTime: new Date(),
     customerId: customer.customerId,
     customerName: getCustomerName_(customer.customer) || customerName,
+    customerNameSnapshot: getCustomerName_(customer.customer) || customerName,
+    customerPhone: phone,
+    customerPhoneSnapshot: phone,
     staff: "Customer Request",
     category:
       resolvedPrice.category || item.category || clean_(payload.category),
@@ -2331,11 +2403,32 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     unitPrice,
     discount: 0,
     total,
+    subtotal: total,
+    itemCount: 1,
+    itemSummary: `${itemName} x${qty}`,
+    itemsJson: JSON.stringify([
+      {
+        category: resolvedPrice.category || item.category,
+        itemName,
+        menuItemId: resolvedPrice.itemId,
+        qty,
+        size: resolvedPrice.size,
+        unitPrice,
+        lineTotal: total,
+      },
+    ]),
+    categorySummary: resolvedPrice.category || item.category,
+    paidAmount: 0,
+    remainingAmount: total,
+    outstandingAmount: total,
+    amountApplied: 0,
     pointsEarned: 0,
     pointsRedeemed: 0,
     paymentStatus: "Unpaid",
-    orderStatus: "Submitted",
+    orderStatus: "Requested",
     notes,
+    customerNotes: neutralizeSheetFormula(payload.notes, 500),
+    updatedAt: new Date(),
   });
   await writeObjectRow(SHEETS.orderItems, {
     orderItemId,
@@ -2351,7 +2444,9 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     extrasTotal: 0,
     lineTotal: total,
     notes,
-    preparationStatus: "Submitted",
+    preparationStatus: "Requested",
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 
   return success_({
@@ -2359,6 +2454,104 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     receiptId,
     total,
   });
+}
+
+async function customerOrders_(actor: CustomerActor) {
+  const uidMarker = `Firebase UID: ${actor.uid}`;
+  return (await sheetToObjects(SHEETS.orders))
+    .filter(
+      (order) =>
+        clean_(order.createdByUid) === actor.uid ||
+        clean_(order.notes).includes(uidMarker),
+    )
+    .map((order) => ({
+      businessDate: order.businessDate,
+      customerName: order.customerNameSnapshot || order.customerName,
+      itemSummary: order.itemSummary || order.item,
+      orderId: order.orderId,
+      orderStatus: normalizeOrderStatus(order.orderStatus),
+      paymentStatus: order.paymentStatus,
+      receiptNumber: order.receiptNumber,
+      total: order.total,
+      updatedAt: order.updatedAt || order.createdAt || order.orderDateTime,
+    }))
+    .reverse()
+    .slice(0, 50);
+}
+
+async function transitionCustomerOrder_(
+  payload: Payload,
+  actor: CustomerActor,
+  target: "Confirmed" | "Cancelled",
+) {
+  const orderId = clean_(payload.orderId);
+  if (!orderId) throw new ApiError("Order ID is required.", 400);
+  const values = await getSheetValues(SHEETS.orders);
+  const headers = (values[0] || []).map(normalizeKey_);
+  const orderIdIndex = headers.indexOf("orderId");
+  const statusIndex = headers.indexOf("orderStatus");
+  const ownerIndex = headers.indexOf("createdByUid");
+  const notesIndex = headers.indexOf("notes");
+  if (orderIdIndex < 0 || statusIndex < 0) {
+    throw new ApiError("Orders schema is missing identifiers or status.", 500);
+  }
+
+  for (let index = 1; index < values.length; index += 1) {
+    const row = values[index] || [];
+    if (clean_(row[orderIdIndex]) !== orderId) continue;
+    const ownsOrder =
+      clean_(row[ownerIndex]) === actor.uid ||
+      clean_(row[notesIndex]).includes(`Firebase UID: ${actor.uid}`);
+    const decision = validateOrderTransition({
+      actor: { customerOwnsOrder: ownsOrder, role: "customer" },
+      from: row[statusIndex],
+      reason: payload.reason,
+      to: target,
+    });
+    if (!decision.allowed) {
+      throw new ApiError(decision.reason || "Order transition denied.", 403);
+    }
+    await setCell(SHEETS.orders, index + 1, statusIndex, target);
+    const timestampIndex = headers.indexOf(
+      target === "Confirmed" ? "confirmedAt" : "updatedAt",
+    );
+    const detailIndex = headers.indexOf(
+      target === "Confirmed" ? "confirmedBy" : "cancellationReason",
+    );
+    if (timestampIndex >= 0) {
+      await setCell(SHEETS.orders, index + 1, timestampIndex, new Date());
+    }
+    if (detailIndex >= 0) {
+      await setCell(
+        SHEETS.orders,
+        index + 1,
+        detailIndex,
+        target === "Confirmed"
+          ? actor.uid
+          : neutralizeSheetFormula(payload.reason, 300),
+      );
+    }
+    await writeObjectRow(SHEETS.auditLog, {
+      action: `order.customer.${target.toLowerCase()}`,
+      auditId: stableUniqueId_("audit"),
+      entityId: orderId,
+      entityType: "order",
+      newValue: JSON.stringify({ status: target }),
+      previousValue: JSON.stringify({ status: decision.source }),
+      reason: neutralizeSheetFormula(payload.reason, 300),
+      requestId: clean_(payload.requestId),
+      role: "customer",
+      sessionMetadata: JSON.stringify({ uid: actor.uid }),
+      success: true,
+      timestamp: new Date(),
+      userId: actor.uid,
+    });
+    return success_({
+      message: `Order ${target.toLowerCase()}.`,
+      orders: await customerOrders_(actor),
+    });
+  }
+  throw new ApiError("Order was not found.", 404);
 }
 
 async function collectUnpaidPayment(payload: Payload, actor: Actor) {
@@ -2395,11 +2588,23 @@ async function collectUnpaidPayment(payload: Payload, actor: Actor) {
 
 async function updateReceiptPayment(payload: Payload, actor: Actor) {
   const paymentStatus = clean_(payload.paymentStatus || "Paid");
-  if (!["Paid", "Unpaid"].includes(paymentStatus)) {
-    throw new Error("Payment status must be Paid or Unpaid.");
+  if (paymentStatus === "Paid") {
+    throw new ApiError(
+      "Paid status is calculated from payment transactions. Use Collect Payment.",
+      409,
+    );
+  }
+  if (paymentStatus !== "Unpaid") {
+    throw new Error("Payment status can only be initialized as Unpaid.");
   }
 
   const result = await updateReceiptRows(payload, async (context) => {
+    if (["Paid", "Partial"].includes(context.currentPaymentStatus)) {
+      throw new ApiError(
+        "A paid or partially paid receipt cannot be reset without a refund transaction.",
+        409,
+      );
+    }
     await setCell(
       SHEETS.orders,
       context.row,
@@ -2418,20 +2623,6 @@ async function updateReceiptPayment(payload: Payload, actor: Actor) {
     }
   });
 
-  if (paymentStatus === "Paid" && result.newlyPaidTotal > 0) {
-    await writeObjectRow(SHEETS.payments, {
-      paymentId: stableUniqueId_("pay"),
-      orderId: clean_(payload.orderId),
-      paymentDate: new Date(),
-      customerId: result.customerId,
-      customerName: result.customerName,
-      method: clean_(payload.paymentMethod || payload.method || "Cash"),
-      amount: result.newlyPaidTotal,
-      collectedBy: clean_(payload.staff || payload.collectedBy || "Cashier 1"),
-      relatedOrderNotes: `Receipt paid: ${result.itemNames.join(", ")}`,
-    });
-  }
-
   return success_({
     updatedRows: result.updatedRows,
     data: await buildLiveDataForRole(actor.role),
@@ -2439,6 +2630,22 @@ async function updateReceiptPayment(payload: Payload, actor: Actor) {
 }
 
 async function collectReceiptPayment(payload: Payload, actor: Actor) {
+  const clientRequestId = clean_(payload.clientRequestId || payload.requestId);
+  const paymentId = clientRequestId
+    ? stablePaymentId_(clientRequestId)
+    : stableUniqueId_("pay");
+  if (clientRequestId) {
+    const duplicate = (await safeSheetObjects_(SHEETS.payments)).find(
+      (payment) => clean_(payment.paymentId) === paymentId,
+    );
+    if (duplicate) {
+      return success_({
+        duplicate: true,
+        paymentId,
+        message: "This payment was already recorded.",
+      });
+    }
+  }
   const amount = number_(payload.amountReceived || payload.amount);
   if (amount <= 0)
     throw new ApiError("Paid amount must be greater than 0.", 400);
@@ -2454,6 +2661,14 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
   const receiptNumberIndex = headers.indexOf("receiptNumber");
   const totalIndex = headers.indexOf("total");
   const statusIndex = headers.indexOf("paymentStatus");
+  const paidAmountIndex = headers.indexOf("paidAmount");
+  const remainingAmountIndex = headers.indexOf("remainingAmount");
+  const outstandingAmountIndex = headers.indexOf("outstandingAmount");
+  const amountReceivedIndex = headers.indexOf("amountReceived");
+  const amountAppliedIndex = headers.indexOf("amountApplied");
+  const changeAmountIndex = headers.indexOf("changeAmount");
+  const paymentMethodIndex = headers.indexOf("paymentMethod");
+  const updatedAtIndex = headers.indexOf("updatedAt");
   const notesIndex = headers.indexOf("notes");
   const itemIndex = headers.indexOf("item");
   const receiptId = clean_(payload.receiptId);
@@ -2530,16 +2745,23 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     matched.reduce((sum, row) => sum + row.paid, 0),
   );
   const remainingBefore = Math.max(0, total - paidBefore);
-  const paymentMethod = clean_(payload.paymentMethod || payload.method || "Cash");
+  const paymentMethod = clean_(
+    payload.paymentMethod || payload.method || "Cash",
+  );
   if (paymentMethod.toLowerCase() !== "cash" && amount > remainingBefore) {
-    throw new ApiError("Non-cash payment cannot exceed the remaining total.", 400, {
-      remainingAmount: remainingBefore,
-    });
+    throw new ApiError(
+      "Non-cash payment cannot exceed the remaining total.",
+      400,
+      {
+        remainingAmount: remainingBefore,
+      },
+    );
   }
   const amountApplied = Math.min(amount, remainingBefore);
-  const changeAmount = paymentMethod.toLowerCase() === "cash"
-    ? Math.max(0, amount - remainingBefore)
-    : 0;
+  const changeAmount =
+    paymentMethod.toLowerCase() === "cash"
+      ? Math.max(0, amount - remainingBefore)
+      : 0;
 
   let remainingToAllocate = amountApplied;
   for (const [index, row] of matched.entries()) {
@@ -2547,7 +2769,10 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     const allocation =
       index === matched.length - 1
         ? remainingToAllocate
-        : Math.min(rowRemaining, amountApplied * (rowRemaining / remainingBefore));
+        : Math.min(
+            rowRemaining,
+            amountApplied * (rowRemaining / remainingBefore),
+          );
     const paidNow = Math.round(allocation * 100) / 100;
     remainingToAllocate = Math.max(0, remainingToAllocate - paidNow);
     if (paidNow > 0 && notesIndex >= 0) {
@@ -2566,14 +2791,41 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
   const paymentStatus = derivePaymentStatus_(paidAmount, total);
   for (const row of matched) {
     await setCell(SHEETS.orders, row.row, statusIndex, paymentStatus);
+    if (paidAmountIndex >= 0)
+      await setCell(SHEETS.orders, row.row, paidAmountIndex, paidAmount);
+    if (remainingAmountIndex >= 0)
+      await setCell(
+        SHEETS.orders,
+        row.row,
+        remainingAmountIndex,
+        remainingAmount,
+      );
+    if (outstandingAmountIndex >= 0)
+      await setCell(
+        SHEETS.orders,
+        row.row,
+        outstandingAmountIndex,
+        remainingAmount,
+      );
+    if (amountReceivedIndex >= 0)
+      await setCell(SHEETS.orders, row.row, amountReceivedIndex, amount);
+    if (amountAppliedIndex >= 0)
+      await setCell(SHEETS.orders, row.row, amountAppliedIndex, amountApplied);
+    if (changeAmountIndex >= 0)
+      await setCell(SHEETS.orders, row.row, changeAmountIndex, changeAmount);
+    if (paymentMethodIndex >= 0)
+      await setCell(SHEETS.orders, row.row, paymentMethodIndex, paymentMethod);
+    if (updatedAtIndex >= 0)
+      await setCell(SHEETS.orders, row.row, updatedAtIndex, new Date());
   }
 
   await writeObjectRow(SHEETS.payments, {
-    paymentId: stableUniqueId_("pay"),
+    paymentId,
     orderId,
     paymentDate: new Date(),
     customerId,
     customerName,
+    customerNameSnapshot: customerName,
     method: paymentMethod,
     amount: amountApplied,
     amountApplied,
@@ -2586,8 +2838,31 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     collectedBy: clean_(
       payload.collectedBy || actor.displayName || actor.email,
     ),
+    receivedByName: actor.displayName || actor.email,
+    receivedByUid: actor.uid,
+    paymentMethod,
     relatedOrderNotes: `Receipt payment collected: ${matched.map((row) => row.itemName).join(", ")}`,
-    notes: clean_(payload.notes),
+    notes: [
+      neutralizeSheetFormula(payload.notes, 500),
+      clientRequestId ? `Idempotency: ${clientRequestId}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  });
+
+  await recordAuditLog_(actor, {
+    action: "payment.create",
+    entityId: paymentId,
+    entityType: "payment",
+    newValue: {
+      amountApplied,
+      amountReceived: amount,
+      changeAmount,
+      orderId,
+      paymentMethod,
+    },
+    requestId: clientRequestId,
+    success: true,
   });
 
   await mirrorActiveOrder_({
@@ -2596,7 +2871,12 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     paidAmount,
     remainingAmount,
     paymentStatus,
-    lastPayment: { amountApplied, amountReceived: amount, changeAmount, paymentMethod },
+    lastPayment: {
+      amountApplied,
+      amountReceived: amount,
+      changeAmount,
+      paymentMethod,
+    },
   });
 
   return success_({
@@ -2614,14 +2894,34 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
 
 async function updateReceiptPreparationStatus(
   payload: Payload,
-  nextStatus: "Accepted" | "Preparing" | "Ready" | "Picked Up" | "Cancelled",
+  nextStatus:
+    | "Awaiting Confirmation"
+    | "Confirmed"
+    | "Approved"
+    | "Accepted"
+    | "Preparing"
+    | "Ready"
+    | "Picked Up"
+    | "Completed"
+    | "Rejected"
+    | "Cancelled",
   actor: Actor,
 ) {
   const result = await updateReceiptRows(payload, async (context) => {
     const currentStatus = normalizeOrderStatus(context.currentOrderStatus);
-    if (!canTransitionOrderStatus(currentStatus, nextStatus)) {
+    const decision = validateOrderTransition({
+      actor: { role: actor.role },
+      from: currentStatus,
+      reason: payload.reason,
+      to: nextStatus,
+    });
+    if (
+      !decision.allowed ||
+      !canTransitionOrderStatus(currentStatus, nextStatus)
+    ) {
       throw new ApiError(
-        `Order status cannot move from ${currentStatus} to ${nextStatus}.`,
+        decision.reason ||
+          `Order status cannot move from ${currentStatus} to ${nextStatus}.`,
         409,
       );
     }
@@ -2635,8 +2935,46 @@ async function updateReceiptPreparationStatus(
       );
     }
 
+    const transitionColumns: Partial<
+      Record<typeof nextStatus, [string, string]>
+    > = {
+      "Awaiting Confirmation": [
+        "confirmationRequestedAt",
+        "confirmationRequestedBy",
+      ],
+      Confirmed: ["confirmedAt", "confirmedBy"],
+      Approved: ["approvedAt", "approvedBy"],
+      Rejected: ["updatedAt", "rejectionReason"],
+      Cancelled: ["updatedAt", "cancellationReason"],
+    };
+    const transition = transitionColumns[nextStatus];
+    if (transition) {
+      const [timeHeader, actorHeader] = transition;
+      const timeIndex = context.headers.indexOf(timeHeader);
+      const actorIndex = context.headers.indexOf(actorHeader);
+      if (timeIndex >= 0) {
+        await setCell(SHEETS.orders, context.row, timeIndex, new Date());
+      }
+      if (actorIndex >= 0) {
+        await setCell(
+          SHEETS.orders,
+          context.row,
+          actorIndex,
+          ["Rejected", "Cancelled"].includes(nextStatus)
+            ? neutralizeSheetFormula(payload.reason, 300)
+            : actor.uid,
+        );
+      }
+    }
+
     if (context.notesIndex >= 0) {
-      const note = `Status changed to ${nextStatus} on ${new Date().toLocaleString()}`;
+      const transitionReason = neutralizeSheetFormula(payload.reason, 300);
+      const note = [
+        `Status changed to ${nextStatus} on ${formatCairoDateTime(new Date())}`,
+        transitionReason ? `Reason: ${transitionReason}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
       await setCell(
         SHEETS.orders,
         context.row,
@@ -2647,10 +2985,21 @@ async function updateReceiptPreparationStatus(
   });
 
   await mirrorActiveOrder_({
-    active: nextStatus !== "Picked Up" && nextStatus !== "Cancelled",
+    active: !["Completed", "Cancelled"].includes(nextStatus),
     orderId: clean_(payload.orderId),
     orderStatus: nextStatus,
     receiptNumber: clean_(payload.receiptId || payload.receiptNumber),
+  });
+
+  await recordAuditLog_(actor, {
+    action: "order.status.transition",
+    entityId: clean_(payload.orderId || payload.receiptId),
+    entityType: "order",
+    newValue: { status: nextStatus },
+    previousValue: { status: clean_(payload.currentStatus) },
+    reason: neutralizeSheetFormula(payload.reason, 300),
+    requestId: clean_(payload.requestId || payload.clientRequestId),
+    success: true,
   });
 
   return success_({
@@ -2663,14 +3012,26 @@ async function markReceiptDone(payload: Payload, actor: Actor) {
   return await updateReceiptPreparationStatus(payload, "Picked Up", actor);
 }
 
-async function generateVoucher(payload: Payload) {
+async function generateVoucher(payload: Payload, actor: Actor) {
   const customerId = getPayloadCustomerId_(payload);
+  if (!customerId) throw new ApiError("Customer ID is required.", 400);
   const customer = await findCustomer(customerId);
   const favoriteDrink =
     clean_(payload.favoriteDrink) || getFavoriteDrink_(customer) || "Drink";
   const customerName =
     getCustomerName_(customer) || clean_(payload.customerName);
-  const voucherCode = createVoucherCode_(customerId);
+  const appData = await buildAppData();
+  const reward = (appData.rewards || []).find(
+    (entry: Row) => getRowCustomerId_(entry) === customerId,
+  );
+  if (!reward || number_(reward.freeDrinksReady) <= 0) {
+    throw new ApiError(
+      "This customer has no unreserved free-drink reward.",
+      409,
+    );
+  }
+  const voucherCode = await createVoucherCode_();
+  const createdAt = new Date();
 
   await writeObjectRow(SHEETS.generatedVouchers, {
     voucherCode,
@@ -2686,17 +3047,37 @@ async function generateVoucher(payload: Payload) {
     voucherText: `Congratulations ${customerName}!`,
     voucherReward: `Enjoy 1 Free ${favoriteDrink}`,
     redeemStatus: "Not Redeemed",
-    generatedAt: new Date(),
-    createdAt: new Date(),
-    date: new Date(),
-    canvaStatus: "Pending",
-    canvaLink: "",
+    generatedAt: createdAt,
+    createdAt,
+    date: createdAt,
   });
 
-  return success_({ voucherCode, data: await buildAppData() });
+  await recordAuditLog_(actor, {
+    action: "voucher.generate",
+    entityId: voucherCode,
+    entityType: "voucher",
+    newValue: { customerId, rewardType: "Free Drink", voucherCode },
+    requestId: clean_(payload.requestId || payload.clientRequestId),
+    success: true,
+  });
+
+  return success_({
+    voucher: {
+      customerId,
+      customerName,
+      generatedAt: createdAt.toISOString(),
+      qrPayload: `joycorner:voucher:${voucherCode}`,
+      redeemStatus: "Not Redeemed",
+      rewardType: "Free Drink",
+      voucherCode,
+      voucherId: voucherCode,
+    },
+    voucherCode,
+    data: await buildAppData(),
+  });
 }
 
-async function redeemVoucher(payload: Payload) {
+async function redeemVoucher(payload: Payload, actor: Actor) {
   const voucherCode = clean_(payload.voucherCode);
   if (!voucherCode) throw new Error("Voucher code is required.");
 
@@ -2712,37 +3093,22 @@ async function redeemVoucher(payload: Payload) {
 
   for (let row = 1; row < values.length; row += 1) {
     if (clean_(values[row]?.[codeIndex]) === voucherCode) {
+      if (!canRedeemVoucher(values[row]?.[statusIndex])) {
+        throw new ApiError(
+          "This voucher is not available for redemption.",
+          409,
+        );
+      }
       await setCell(SHEETS.generatedVouchers, row + 1, statusIndex, "Redeemed");
-      await appendRedemption(values[row] || [], header, payload);
-      return success_({ data: await buildAppData() });
-    }
-  }
-
-  throw new Error(`Voucher not found: ${voucherCode}`);
-}
-
-async function updateVoucherCanvaLink(payload: Payload) {
-  const voucherCode = clean_(payload.voucherCode);
-  const canvaLink = clean_(payload.canvaLink);
-  if (!voucherCode || !canvaLink) {
-    throw new Error("Voucher code and Canva link are required.");
-  }
-
-  const values = await getSheetValues(SHEETS.generatedVouchers);
-  const header = (values[0] || []).map(normalizeKey_);
-  const codeIndex = headerIndex_(header, ["voucherCode", "code", "id"]);
-  const statusIndex = headerIndex_(header, ["canvaStatus"]);
-  const linkIndex = headerIndex_(header, ["canvaLink", "link"]);
-  if (codeIndex < 0 || statusIndex < 0 || linkIndex < 0) {
-    throw new Error(
-      "Generated Vouchers sheet needs Voucher Code, Canva Status, and Canva Link columns.",
-    );
-  }
-
-  for (let row = 1; row < values.length; row += 1) {
-    if (clean_(values[row]?.[codeIndex]) === voucherCode) {
-      await setCell(SHEETS.generatedVouchers, row + 1, statusIndex, "Created");
-      await setCell(SHEETS.generatedVouchers, row + 1, linkIndex, canvaLink);
+      await appendRedemption(values[row] || [], header, payload, actor);
+      await recordAuditLog_(actor, {
+        action: "voucher.redeem",
+        entityId: voucherCode,
+        entityType: "voucher",
+        newValue: { redeemStatus: "Redeemed", redeemedBy: actor.uid },
+        requestId: clean_(payload.requestId || payload.clientRequestId),
+        success: true,
+      });
       return success_({ data: await buildAppData() });
     }
   }
@@ -2771,11 +3137,29 @@ type ArchiveBusinessDayOptions = {
   triggeredBy: Actor;
 };
 
+const archiveLocks = new Set<string>();
+
 async function archiveBusinessDay_(options: ArchiveBusinessDayOptions) {
+  if (archiveLocks.has(options.businessDate)) {
+    throw new ApiError(
+      `End Day is already running for ${options.businessDate}.`,
+      409,
+    );
+  }
+  archiveLocks.add(options.businessDate);
+  try {
+    return await archiveBusinessDayUnlocked_(options);
+  } finally {
+    archiveLocks.delete(options.businessDate);
+  }
+}
+
+async function archiveBusinessDayUnlocked_(options: ArchiveBusinessDayOptions) {
   const data = await buildAppData();
   const businessDate = options.businessDate;
   const orders = (data.orders || []).filter(
-    (order) => orderDateKey_(order) === businessDate && !isArchivedOrder_(order),
+    (order) =>
+      orderDateKey_(order) === businessDate && !isArchivedOrder_(order),
   );
   const payments = (data.payments || []).filter(
     (payment) => paymentDateKey_(payment) === businessDate,
@@ -2802,39 +3186,56 @@ async function archiveBusinessDay_(options: ArchiveBusinessDayOptions) {
   }
 
   const summary = buildDaySummary_(businessDate, orders, payments, redemptions);
-  const archiveBatchId = clean_(existingFile?.archiveBatchId) || stableUniqueId_("archive");
-  const dailyFileId = clean_(existingFile?.dailyFileId) || stableUniqueId_("dailyPdf");
+  const archiveBatchId =
+    clean_(existingFile?.archiveBatchId) || stableUniqueId_("archive");
+  const dailyFileId =
+    clean_(existingFile?.dailyFileId) || stableUniqueId_("dailyPdf");
   const generatedAt = new Date();
-  const pdf = buildDailyReceiptsPdf_(businessDate, orders, summary, options.triggeredBy);
+  const pdf = buildDailyReceiptsPdf_(
+    businessDate,
+    orders,
+    summary,
+    options.triggeredBy,
+  );
   const storage = await uploadDailyReceiptsPdf_(businessDate, pdf);
 
-  await upsertSheetObject_(SHEETS.dailyReceiptFiles, "businessDate", businessDate, {
-    archiveBatchId,
-    archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
+  await upsertSheetObject_(
+    SHEETS.dailyReceiptFiles,
+    "businessDate",
     businessDate,
-    dailyFileId,
-    downloadUrl: storage.downloadUrl,
-    fileName: storage.fileName,
-    generatedAt,
-    generatedByName: options.triggeredBy.displayName || options.triggeredBy.email,
-    generatedByUid: options.triggeredBy.uid,
-    generationType: options.triggerType,
-    notes: "Generated from structured Orders and Order Items records.",
-    orderItemCount: orders.reduce((sum, order) => sum + number_(order.qty), 0),
-    receiptCount: summary.receiptCount,
-    storagePath: storage.path,
-    storageProvider: "Firebase Storage",
-    totalPaid: summary.totalPaid,
-    totalRemaining: summary.totalUnpaid,
-    totalSales: summary.totalSales,
-    version: number_(existingFile?.version) + 1 || 1,
-  });
+    {
+      archiveBatchId,
+      archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
+      businessDate,
+      dailyFileId,
+      downloadUrl: storage.downloadUrl,
+      fileName: storage.fileName,
+      generatedAt,
+      generatedByName:
+        options.triggeredBy.displayName || options.triggeredBy.email,
+      generatedByUid: options.triggeredBy.uid,
+      generationType: options.triggerType,
+      notes: "Generated from structured Orders and Order Items records.",
+      orderItemCount: orders.reduce(
+        (sum, order) => sum + number_(order.qty),
+        0,
+      ),
+      receiptCount: summary.receiptCount,
+      storagePath: storage.path,
+      storageProvider: "Firebase Storage",
+      totalPaid: summary.totalPaid,
+      totalRemaining: summary.totalUnpaid,
+      totalSales: summary.totalSales,
+      version: number_(existingFile?.version) + 1 || 1,
+    },
+  );
   await upsertSheetObject_(SHEETS.dayHistory, "dateKey", businessDate, {
     ...summary,
     archiveBatchId,
     archiveTrigger: options.triggerType,
     archivedAt: generatedAt,
-    archivedByName: options.triggeredBy.displayName || options.triggeredBy.email,
+    archivedByName:
+      options.triggeredBy.displayName || options.triggeredBy.email,
     archivedByUid: options.triggeredBy.uid,
     businessDate,
     dailyPdfId: dailyFileId,
@@ -2899,12 +3300,14 @@ function buildDailyReceiptsPdf_(
     80,
   );
   autoTable(pdf, {
-    body: [[
-      summary.receiptCount,
-      moneyText_(summary.totalSales),
-      moneyText_(summary.totalPaid),
-      moneyText_(summary.totalUnpaid),
-    ]],
+    body: [
+      [
+        summary.receiptCount,
+        moneyText_(summary.totalSales),
+        moneyText_(summary.totalPaid),
+        moneyText_(summary.totalUnpaid),
+      ],
+    ],
     head: [["Receipts", "Total sales", "Total paid", "Remaining"]],
     startY: 94,
     styles: { fontSize: 8 },
@@ -3213,7 +3616,7 @@ async function migrateSheetsWorkbook(actor: Actor, payload: Payload = {}) {
   const backup = await backupSheetsWorkbook(actor);
   const migrationVersion = `sheets-normalized-${migrationTimestamp_()}`;
   const createdOrRepairedTabs = await ensureNormalizedWorkbook_();
-  const menuSeed = await seedNormalizedMenu_(actor);
+  const liveMenuItemCount = (await menuForApp_()).length;
   const reconciliation = await reconcileSheetsWorkbook(actor);
 
   await upsertSheetObject_(
@@ -3238,7 +3641,7 @@ async function migrateSheetsWorkbook(actor: Actor, payload: Payload = {}) {
     newValueJson: JSON.stringify({
       backupId: (backup as Payload).backupId,
       createdOrRepairedTabs,
-      menuSeed,
+      liveMenuItemCount,
       reconciliation,
     }),
     requestId: stableUniqueId_("req"),
@@ -3250,7 +3653,7 @@ async function migrateSheetsWorkbook(actor: Actor, payload: Payload = {}) {
   return success_({
     backup,
     createdOrRepairedTabs,
-    menuSeed,
+    liveMenuItemCount,
     migrationVersion,
     reconciliation,
   });
@@ -3273,7 +3676,9 @@ async function previewSheetsMigration_() {
         const headers = (values[0] || []).map(clean_).filter(Boolean);
         const normalized = headers.map(normalizeKey_);
         const duplicateHeaders = uniqueStrings_(
-          normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+          normalized.filter(
+            (header, index) => header && normalized.indexOf(header) !== index,
+          ),
         );
         const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
           (header) => !normalized.includes(normalizeKey_(header)),
@@ -3324,24 +3729,29 @@ async function ensureNormalizedWorkbook_() {
 }
 
 async function seedBusinessSettings_() {
-  const defaults: Array<[string, string, string, string]> = [
-    ["schemaVersion", "2026-07-normalized", "string", "Normalized workbook schema version"],
-    ["business_timezone", "Africa/Cairo", "string", "Business timezone"],
-    ["businessTimeZone", "Africa/Cairo", "string", "Canonical business timezone"],
-    ["closing_time", "23:59", "time", "Default closing time"],
-    ["currency", "EGP", "string", "Receipt currency"],
-    ["loyalty_drinks_required", "7", "number", "Paid drinks per reward"],
-    ["tax_percentage", "0", "number", "Default tax percentage"],
-    ["receipt_prefix", "REC", "string", "Receipt number prefix"],
-    ["automatic_end_day_enabled", "false", "boolean", "Automatic close flag"],
-    ["ordersTab", SHEETS.orders, "string", "Orders tab name"],
-    ["orderItemsTab", SHEETS.orderItems, "string", "Order Items tab name"],
-    ["paymentsTab", SHEETS.payments, "string", "Payments tab name"],
-    ["customersTab", SHEETS.customers, "string", "Customers tab name"],
-    ["dayHistoryTab", SHEETS.dayHistory, "string", "Day History tab name"],
-    ["dailyReceiptFilesTab", SHEETS.dailyReceiptFiles, "string", "Daily Receipt Files tab name"],
+  const defaults: Array<[string, string, string]> = [
+    [
+      "schemaVersion",
+      "2026-07-normalized",
+      "Normalized workbook schema version",
+    ],
+    ["businessTimeZone", "Africa/Cairo", "Canonical business timezone"],
+    ["loyaltyThreshold", "5", "Eligible paid drinks required per reward"],
+    ["currency", "EGP", "Business currency"],
+    ["customersTab", SHEETS.customers, "Customers source tab"],
+    ["ordersTab", SHEETS.orders, "Orders source tab"],
+    ["orderItemsTab", SHEETS.orderItems, "Order items source tab"],
+    ["paymentsTab", SHEETS.payments, "Payments source tab"],
+    ["dayHistoryTab", SHEETS.dayHistory, "Daily archive history tab"],
+    [
+      "dailyReceiptFilesTab",
+      SHEETS.dailyReceiptFiles,
+      "Stored daily PDF records tab",
+    ],
+    ["auditLogTab", SHEETS.auditLog, "Audit log tab"],
+    ["syncFailuresTab", SHEETS.syncFailures, "Synchronization failures tab"],
   ];
-  for (const [settingKey, settingValue, valueType, description] of defaults) {
+  for (const [settingKey, settingValue, description] of defaults) {
     await upsertSheetObject_(
       SHEETS.businessSettings,
       "Setting Key",
@@ -3352,77 +3762,9 @@ async function seedBusinessSettings_() {
         settingValue,
         updatedAt: new Date(),
         updatedBy: "system",
-        valueType,
       },
     );
   }
-}
-
-async function seedNormalizedMenu_(actor: Actor) {
-  const seed = buildNormalizedMenuSeed(normalizedMenu);
-  await ensureNormalizedWorkbook_();
-
-  for (const category of seed.categories) {
-    await upsertSheetObject_(
-      SHEETS.menuCategories,
-      "Category ID",
-      clean_(category.categoryId),
-      category,
-    );
-  }
-  for (const item of seed.items) {
-    await upsertSheetObject_(
-      SHEETS.menuItems,
-      "Item ID",
-      clean_(item.itemId),
-      item,
-    );
-  }
-  for (const size of seed.sizes) {
-    await upsertSheetObject_(
-      SHEETS.menuItemSizes,
-      "Size ID",
-      clean_(size.sizeId),
-      size,
-    );
-  }
-  for (const flavor of seed.flavors) {
-    await upsertSheetObject_(
-      SHEETS.menuItemFlavors,
-      "Flavor ID",
-      clean_(flavor.flavorId),
-      flavor,
-    );
-  }
-  for (const extra of seed.extras) {
-    await upsertSheetObject_(
-      SHEETS.extras,
-      "Extra ID",
-      clean_(extra.extraId),
-      extra,
-    );
-  }
-
-  await recordAuditLog_(actor, {
-    action: "menu.normalized.seed",
-    entityType: "menu",
-    newValue: {
-      categories: seed.categories.length,
-      extras: seed.extras.length,
-      flavors: seed.flavors.length,
-      items: seed.items.length,
-      sizes: seed.sizes.length,
-    },
-    success: true,
-  });
-
-  return {
-    categories: seed.categories.length,
-    extras: seed.extras.length,
-    flavors: seed.flavors.length,
-    items: seed.items.length,
-    sizes: seed.sizes.length,
-  };
 }
 
 async function reconcileSheetsWorkbook(actor: Actor) {
@@ -3773,30 +4115,35 @@ async function mirrorActiveOrder_(order: Row) {
   if (!orderId) return;
   try {
     const safeOrder = JSON.parse(JSON.stringify(order)) as Row;
-    await getFirestore().collection("activeOrders").doc(orderId).set(
-      {
-        ...safeOrder,
-        active:
-          order.active !== false &&
-          !["picked up", "cancelled", "canceled"].includes(
-            clean_(order.orderStatus).toLowerCase(),
-          ),
-        orderId,
-        sheetSyncStatus: "synced",
-        updatedAt: FieldValue.serverTimestamp(),
-        ...(clean_(order.orderStatus) === "Accepted"
-          ? { acceptedAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(clean_(order.orderStatus) === "Picked Up"
-          ? { pickedUpAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(clean_(order.orderStatus) === "Archived"
-          ? { archivedAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(order.createdAt ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      },
-      { merge: true },
-    );
+    await getFirestore()
+      .collection("activeOrders")
+      .doc(orderId)
+      .set(
+        {
+          ...safeOrder,
+          active:
+            order.active !== false &&
+            !["picked up", "cancelled", "canceled"].includes(
+              clean_(order.orderStatus).toLowerCase(),
+            ),
+          orderId,
+          sheetSyncStatus: "synced",
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(clean_(order.orderStatus) === "Accepted"
+            ? { acceptedAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(clean_(order.orderStatus) === "Picked Up"
+            ? { pickedUpAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(clean_(order.orderStatus) === "Archived"
+            ? { archivedAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(order.createdAt
+            ? {}
+            : { createdAt: FieldValue.serverTimestamp() }),
+        },
+        { merge: true },
+      );
   } catch (error) {
     await recordSyncFailure_("firestore.activeOrders", orderId, error);
     safeServerError_("Firestore active order mirror failed", error);
@@ -3831,19 +4178,12 @@ async function archiveTodayOrders_(
   if (values.length < 2) return 0;
 
   const headers = (values[0] || []).map(normalizeKey_);
-  const orderStatusIndex = headers.indexOf("orderStatus");
   const notesIndex = headers.indexOf("notes");
   const activeBoardIndex = headers.indexOf("activeBoard");
   const archivedIndex = headers.indexOf("archived");
   const archivedAtIndex = headers.indexOf("archivedAt");
   const archiveBatchIdIndex = headers.indexOf("archiveBatchId");
   const dailyPdfIdIndex = headers.indexOf("dailyPdfId");
-
-  if (orderStatusIndex < 0) {
-    throw new Error(
-      "Orders sheet needs an Order Status column before reset can run.",
-    );
-  }
 
   let archivedRows = 0;
 
@@ -3857,7 +4197,6 @@ async function archiveTodayOrders_(
     if (orderDateKey_(rowRecord) !== dateKey || isArchivedOrder_(rowRecord))
       continue;
 
-    await setCell(SHEETS.orders, index + 1, orderStatusIndex, "Archived");
     if (activeBoardIndex >= 0)
       await setCell(SHEETS.orders, index + 1, activeBoardIndex, false);
     if (archivedIndex >= 0)
@@ -3865,12 +4204,18 @@ async function archiveTodayOrders_(
     if (archivedAtIndex >= 0)
       await setCell(SHEETS.orders, index + 1, archivedAtIndex, resetAt);
     if (archiveBatchIdIndex >= 0)
-      await setCell(SHEETS.orders, index + 1, archiveBatchIdIndex, archiveBatchId);
+      await setCell(
+        SHEETS.orders,
+        index + 1,
+        archiveBatchIdIndex,
+        archiveBatchId,
+      );
     if (dailyPdfIdIndex >= 0)
       await setCell(SHEETS.orders, index + 1, dailyPdfIdIndex, dailyPdfId);
     const orderIdIndex = headers.indexOf("orderId");
     const orderId = orderIdIndex >= 0 ? clean_(row[orderIdIndex]) : "";
-    if (orderId) await mirrorActiveOrder_({ active: false, orderId, orderStatus: "Archived" });
+    if (orderId)
+      await mirrorActiveOrder_({ active: false, archived: true, orderId });
     if (notesIndex >= 0) {
       const currentNotes = clean_(row[notesIndex]);
       const archiveNote = `End day reset archived at ${resetAt} by ${resetBy}`;
@@ -3904,7 +4249,18 @@ async function buildAppData() {
   lists.orderPlace = buildOrderPlaceOptions_(orders, lists);
   const unpaid = buildUnpaidTracker_(realCustomers, orders);
   const customers = enrichCustomers_(realCustomers, orders, unpaid);
-  const rewards = buildRewards_(customers, orders, vouchers);
+  const businessSettings = await businessSettings_();
+  const loyaltyThreshold = positiveWholeNumber_(
+    businessSettings.loyaltyThreshold,
+    DEFAULT_REWARD_THRESHOLD,
+  );
+  const rewards = buildRewards_(
+    customers,
+    orders,
+    vouchers,
+    loyaltyThreshold,
+    menu,
+  );
   const winners = rewards.filter(
     (reward) => number_(reward.freeDrinksReady) > 0,
   );
@@ -3960,73 +4316,62 @@ async function menuForApp_() {
     sheetMenu = [];
   }
 
-  const byId = new Map(
-    normalizedMenu.map((item) => [item.itemId, { ...item } as Row]),
-  );
-
-  for (const sheetItem of sheetMenu) {
-    const itemId = getRowItemId_(sheetItem);
-    if (!itemId) continue;
-
-    const existing = byId.get(itemId);
-    const active = activeValue_(sheetItem.active);
-    const priceText = clean_(sheetItem.priceText || sheetItem.price);
-    if (existing) {
-      byId.set(itemId, {
-        ...existing,
-        active,
-        category: clean_(sheetItem.category) || existing.category,
-        itemName:
-          clean_(sheetItem.itemName || sheetItem.name) || existing.itemName,
-        name: clean_(sheetItem.itemName || sheetItem.name) || existing.name,
-        priceText: priceText || existing.priceText,
-        suggestedPrice: String(
-          parsePrice_(priceText) || existing.suggestedPrice || "",
-        ),
-      });
-      continue;
-    }
-
-    const itemName = clean_(sheetItem.itemName || sheetItem.name);
-    const category = clean_(sheetItem.category || "Menu");
-    const price = parsePrice_(priceText);
-    if (!itemName || !price) continue;
-
-    byId.set(itemId, {
-      active,
-      availability: active ? "available" : "unavailable",
-      availableExtras: [],
-      category,
-      categoryId: category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      currency: "EGP",
-      displayOrder: byId.size + 10000,
-      flavors: [],
-      ingredients: [],
-      itemId,
-      itemName,
-      name: itemName,
-      preparationStation:
-        /food|dessert|sandwich|bakery|croissant|waffle|cake/i.test(category)
-          ? "kitchen"
-          : "barista",
-      priceText,
-      sizes: [
-        {
-          active: true,
-          menuItemId: itemId,
-          price,
-          size: "Standard",
-          sizeId: "standard",
-          sizeName: "Standard",
-        },
-      ],
-      soldOut: !active,
-      standardSize: "Standard",
-      suggestedPrice: String(price),
-    });
+  if (!sheetMenu.length) {
+    return normalizedMenu.filter((item) => item.active && !item.soldOut);
   }
 
-  return Array.from(byId.values()).filter((item) => activeValue_(item.active));
+  return sheetMenu
+    .map((sheetItem, index) => {
+      const itemId = getRowItemId_(sheetItem);
+      const itemName = clean_(sheetItem.itemName || sheetItem.name);
+      const category = clean_(sheetItem.category || "Menu");
+      const template = normalizedMenu.find(
+        (item) => item.itemName.toLowerCase() === itemName.toLowerCase(),
+      );
+      const priceText = clean_(sheetItem.priceText || sheetItem.price);
+      const sizes = parseLiveMenuPrices(
+        priceText,
+        template?.sizes.map((size) => size.sizeName || size.size) || [],
+      ).map((size) => ({ ...size, menuItemId: itemId }));
+      const active = activeValue_(sheetItem.active);
+      if (!itemId || !itemName || !sizes.length || !active) return null;
+      const standardSize =
+        sizes.find((size) => size.size.toLowerCase() === "medium")?.size ||
+        sizes[0]?.size ||
+        "Standard";
+      return {
+        active,
+        availability: active ? "available" : "unavailable",
+        availableExtras: template?.availableExtras || [],
+        category,
+        categoryId:
+          template?.categoryId ||
+          category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        currency: "EGP",
+        displayOrder: index,
+        flavors: template?.flavors || [],
+        ingredients: template?.ingredients || [],
+        itemId,
+        itemName,
+        loyaltyEligible: clean_(sheetItem.loyaltyEligible || "Yes"),
+        name: itemName,
+        preparationStation:
+          template?.preparationStation ||
+          (/food|dessert|sandwich|bakery|croissant|waffle|cake/i.test(category)
+            ? "kitchen"
+            : "barista"),
+        priceText,
+        sizes,
+        soldOut: !active,
+        standardSize,
+        suggestedPrice: String(
+          sizes.find((size) => size.size === standardSize)?.price ||
+            sizes[0]?.price ||
+            "",
+        ),
+      };
+    })
+    .filter(Boolean) as Row[];
 }
 
 async function searchCustomers(query: string) {
@@ -4119,7 +4464,7 @@ async function debugSheets() {
     SHEETS.payments,
     SHEETS.rewards,
     SHEETS.loyaltyWinners,
-    SHEETS.staffUsers,
+    SHEETS.staff,
   ]) {
     let resolvedSheetName = "";
     try {
@@ -4146,28 +4491,27 @@ async function debugSheets() {
 }
 
 async function validateSheetSchema() {
-  const requiredTabs = [
-    SHEETS.orders,
-    SHEETS.orderItems,
-    SHEETS.payments,
-    SHEETS.customers,
-    SHEETS.menu,
-    SHEETS.dayHistory,
-    SHEETS.generatedVouchers,
-    SHEETS.rewardRedemptions,
-    SHEETS.staff,
-    SHEETS.lists,
-  ];
+  const requiredTabs = Object.values(SHEET_SCHEMAS).map(
+    (schema) => schema.sheetName,
+  );
   const sheets = await getSheetsClient();
   const metadata = await sheets.spreadsheets.get({
     fields: "sheets.properties.title",
     spreadsheetId: SPREADSHEET_ID,
   });
   const existing = new Set(
-    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+    (metadata.data.sheets || []).map((sheet) =>
+      clean_(sheet.properties?.title),
+    ),
   );
   const legacyBySheet: Record<string, string[]> = {
-    [SHEETS.orders]: ["receiptSerial", "item", "qty", "unitPrice", "outstandingAmount"],
+    [SHEETS.orders]: [
+      "receiptSerial",
+      "item",
+      "qty",
+      "unitPrice",
+      "outstandingAmount",
+    ],
     [SHEETS.orderItems]: ["notes"],
     [SHEETS.payments]: ["paymentDate", "method", "amount", "collectedBy"],
   };
@@ -4180,21 +4524,46 @@ async function validateSheetSchema() {
     const duplicateHeaders = normalized.filter(
       (header, index) => header && normalized.indexOf(header) !== index,
     );
-    const required = SHEET_HEADERS[sheetName] || [];
+    const schema = schemaForSheet(sheetName);
+    const required = schema?.requiredHeaders || SHEET_HEADERS[sheetName] || [];
     const missingRequiredHeaders = required.filter(
       (header) => !normalized.includes(normalizeKey_(header)),
     );
     const legacyHeaders = (legacyBySheet[sheetName] || []).filter((header) =>
       normalized.includes(normalizeKey_(header)),
     );
-    report.push({
+    const rowCount = Math.max(0, values.length - 1);
+    const status =
+      !exists || missingRequiredHeaders.length
+        ? "FAIL"
+        : duplicateHeaders.length ||
+            (schema?.legacyIgnoredColumns || []).some((header) =>
+              normalized.includes(normalizeKey_(header)),
+            )
+          ? "WARNING"
+          : "PASS";
+    const result = {
       sheetName,
       exists,
       headers,
       missingRequiredHeaders,
       duplicateHeaders: uniqueStrings_(duplicateHeaders),
       legacyHeaders,
-      valid: exists && !missingRequiredHeaders.length && !duplicateHeaders.length,
+      protectedColumns: schema?.protectedColumns || [],
+      rowCount,
+      status,
+      valid: status !== "FAIL",
+    };
+    report.push(result);
+    await upsertSheetObject_(SHEETS.schemaStatus, "sheetName", sheetName, {
+      duplicateHeaders: result.duplicateHeaders.join(", "),
+      exists,
+      lastCheckedAt: new Date(),
+      missingHeaders: missingRequiredHeaders.join(", "),
+      requiredHeaders: required.join(", "),
+      rowCount,
+      sheetName,
+      status,
     });
   }
   return success_({ spreadsheetId: maskId_(SPREADSHEET_ID), sheets: report });
@@ -4207,7 +4576,9 @@ async function diagnoseGoogleSheet() {
     spreadsheetId: SPREADSHEET_ID,
   });
   const titles = new Set(
-    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+    (metadata.data.sheets || []).map((sheet) =>
+      clean_(sheet.properties?.title),
+    ),
   );
   const sheetNames = [
     SHEETS.orders,
@@ -4225,18 +4596,29 @@ async function diagnoseGoogleSheet() {
       const headers = (values[0] || []).map(clean_).filter(Boolean);
       const normalized = headers.map(normalizeKey_);
       const duplicateHeaders = uniqueStrings_(
-        normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+        normalized.filter(
+          (header, index) => header && normalized.indexOf(header) !== index,
+        ),
       );
       const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
         (header) => !normalized.includes(normalizeKey_(header)),
       );
-      return { canRead: exists, duplicateHeaders, exists, headers, missingHeaders, name: sheetName };
+      return {
+        canRead: exists,
+        duplicateHeaders,
+        exists,
+        headers,
+        missingHeaders,
+        name: sheetName,
+      };
     }),
   );
   return success_({
     calculatedBusinessDate: getCairoBusinessDate(),
     runtimeProjectId:
-      process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "",
+      process.env.JOY_FIREBASE_PROJECT_ID ||
+      process.env.VITE_FIREBASE_PROJECT_ID ||
+      "",
     runtimeCairoNow: formatCairoDateTime(new Date()),
     runtimeUtcNow: new Date().toISOString(),
     spreadsheetFound: true,
@@ -4278,7 +4660,7 @@ async function buildAppDataForRole(role: string) {
   if (role === "barista") {
     const activeOrders = (data.dashboardOrders || []).filter((order: Row) => {
       const status = normalizeOrderStatus(order.orderStatus);
-      return status !== "Picked Up" && status !== "Cancelled";
+      return ["Approved", "Accepted", "Preparing", "Ready"].includes(status);
     });
     return {
       dashboard: {
@@ -4441,7 +4823,13 @@ function buildDaySummary_(
   };
 }
 
-function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
+function buildRewards_(
+  customers: Row[],
+  orders: Row[],
+  vouchers: Row[],
+  rewardThreshold = DEFAULT_REWARD_THRESHOLD,
+  menu: Row[] = [],
+) {
   return customers
     .map((customer) => {
       const customerId = getRowCustomerId_(customer);
@@ -4452,25 +4840,25 @@ function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
         rowsMatchCustomer_(order, customer),
       );
       const paidDrinks = customerOrders.reduce((total, order) => {
-        return total + paidEligibleDrinkQty_(order);
+        return total + paidEligibleDrinkQty_(order, menu);
       }, 0);
-      const earnedFreeDrinks = Math.floor(paidDrinks / REWARD_THRESHOLD);
       const customerVouchers = vouchers.filter((voucher) =>
         rowsMatchCustomer_(voucher, customer),
       );
-      const generatedVoucherCount = customerVouchers.length;
-      const redeemedVoucherCount = customerVouchers.filter(
-        (voucher) => clean_(voucher.redeemStatus).toLowerCase() === "redeemed",
-      ).length;
-      const pendingVoucherCount = generatedVoucherCount - redeemedVoucherCount;
-      const freeDrinksReady = Math.max(
-        0,
-        earnedFreeDrinks - generatedVoucherCount,
-      );
-      const progress = paidDrinks % REWARD_THRESHOLD;
-      const remaining = progress
-        ? REWARD_THRESHOLD - progress
-        : REWARD_THRESHOLD;
+      const loyalty = calculateLoyaltyBalance({
+        eligiblePaidDrinks: paidDrinks,
+        threshold: rewardThreshold,
+        voucherStatuses: customerVouchers.map(
+          (voucher) => voucher.redeemStatus,
+        ),
+      });
+      const earnedFreeDrinks = loyalty.earnedFreeDrinks;
+      const redeemedVoucherCount = loyalty.redeemedFreeDrinks;
+      const pendingVoucherCount = loyalty.activeGeneratedVouchers;
+      const generatedVoucherCount = pendingVoucherCount + redeemedVoucherCount;
+      const freeDrinksReady = loyalty.freeDrinksReady;
+      const progress = loyalty.nextRewardProgress;
+      const remaining = progress ? rewardThreshold - progress : rewardThreshold;
       const favoriteDrink = getFavoriteDrink_(customer);
 
       return {
@@ -4484,7 +4872,7 @@ function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
         pendingVouchers: String(pendingVoucherCount),
         redeemedVouchers: String(redeemedVoucherCount),
         freeDrinksReady: String(freeDrinksReady),
-        nextRewardProgress: `${progress}/${REWARD_THRESHOLD}`,
+        nextRewardProgress: `${progress}/${rewardThreshold}`,
         winner: freeDrinksReady > 0 ? "Yes" : "No",
         redeemStatus:
           pendingVoucherCount > 0
@@ -4501,7 +4889,7 @@ function buildRewards_(customers: Row[], orders: Row[], vouchers: Row[]) {
     .filter(Boolean) as Row[];
 }
 
-function paidEligibleDrinkQty_(order: Row) {
+function paidEligibleDrinkQty_(order: Row, menu: Row[] = []) {
   if (!isOrderPaidForRewards_(order)) return 0;
   return receiptItemDetails_(order).reduce((total, detail) => {
     const itemOrder = {
@@ -4510,19 +4898,36 @@ function paidEligibleDrinkQty_(order: Row) {
       item: detail.itemName,
       qty: detail.qty,
     };
-    return isRewardEligibleOrder_(itemOrder)
+    const menuItem = menu.find(
+      (item) =>
+        clean_(item.itemId) &&
+        clean_(item.itemId) === clean_(detail.menuItemId),
+    );
+    const explicitlyEligible = /^(yes|true|1)$/i.test(
+      clean_(menuItem?.loyaltyEligible || (detail as Row).loyaltyEligible),
+    );
+    const explicitlyIneligible = /^(no|false|0)$/i.test(
+      clean_(menuItem?.loyaltyEligible || (detail as Row).loyaltyEligible),
+    );
+    return !explicitlyIneligible &&
+      (explicitlyEligible || isRewardEligibleOrder_(itemOrder))
       ? total + orderQty_(itemOrder)
       : total;
   }, 0);
 }
 
 function isOrderPaidForRewards_(order: Row) {
+  const orderStatus = normalizeOrderStatus(order.orderStatus);
+  if (["Cancelled", "Rejected"].includes(orderStatus)) return false;
   const paymentStatus = clean_(order.paymentStatus).toLowerCase();
   if (paymentStatus === "paid") return true;
   return number_(order.total) > 0 && outstandingAmount_(order) <= 0;
 }
 
 function isRewardEligibleOrder_(order: Row) {
+  const text =
+    `${clean_(order.category)} ${orderItemName_(order)}`.toLowerCase();
+  if (/\b(free|reward|voucher|complimentary)\b/.test(text)) return false;
   if (number_(order.pointsEarned) > 0) return true;
 
   return isDrinkOrder_(order);
@@ -4967,7 +5372,7 @@ function enrichVoucher_(voucher: Row) {
       voucher.reward ||
       (favoriteDrink ? `Enjoy 1 Free ${favoriteDrink}` : ""),
     redeemStatus: voucher.redeemStatus || voucher.status || "Not Redeemed",
-    canvaStatus: voucher.canvaStatus || "Pending",
+    qrPayload: `joycorner:voucher:${voucher.voucherCode || voucher.code || voucher.id || ""}`,
     generatedAt:
       voucher.generatedAt ||
       voucher.createdAt ||
@@ -4996,6 +5401,32 @@ function resolveMenuSelection_(payload: Payload, fallbackItem: Row) {
   const requestedSize = clean_(
     payload.size || payload.menuSize || fallbackItem.standardSize,
   );
+  if (!activeValue_(fallbackItem.active) || fallbackItem.soldOut === true) {
+    throw new ApiError("This menu item is not currently available.", 409);
+  }
+  const liveSizes = Array.isArray(fallbackItem.sizes)
+    ? (fallbackItem.sizes as Row[])
+    : [];
+  const liveSize = liveSizes.find(
+    (entry) =>
+      clean_(entry.size || entry.sizeName) === requestedSize &&
+      activeValue_(entry.active),
+  );
+  if (liveSizes.length && !liveSize) {
+    throw new ApiError(
+      `Menu size not found or inactive for ${itemName || itemId}.`,
+      409,
+    );
+  }
+  if (liveSize) {
+    return {
+      category: clean_(fallbackItem.category),
+      itemId,
+      itemName,
+      price: number_(liveSize.price),
+      size: clean_(liveSize.size || liveSize.sizeName),
+    };
+  }
   const resolved = resolveMenuPrice(itemId, requestedSize, itemName);
 
   if (resolved) return resolved;
@@ -5259,6 +5690,7 @@ async function updateReceiptRows(
   updater: (context: {
     currentOrderStatus: string;
     currentPaymentStatus: string;
+    headers: string[];
     notes: string;
     notesIndex: number;
     orderStatusIndex: number;
@@ -5351,6 +5783,7 @@ async function updateReceiptRows(
       notes: rowNotes,
       currentPaymentStatus: rowStatus,
       currentOrderStatus: rowOrderStatus,
+      headers,
     });
 
     updatedRows += 1;
@@ -5378,6 +5811,7 @@ async function appendRedemption(
   voucherRow: string[],
   header: string[],
   payload: Payload,
+  actor: Actor,
 ) {
   const get = (key: string, aliases: string[] = []) => {
     const index = headerIndex_(header, [key].concat(aliases));
@@ -5393,7 +5827,7 @@ async function appendRedemption(
     get("customerName", ["fullName", "name"]),
     get("favoriteDrink", ["drink", "rewardDrink"]) || "Free Drink",
     0,
-    clean_(payload.staff || "Cashier 1"),
+    actor.displayName || actor.email,
     `Redeemed voucher ${get("voucherCode", ["code"])}`,
   ]);
 }
@@ -5720,10 +6154,44 @@ function stableUniqueId_(prefix: string) {
   return `${prefix}-${random}`;
 }
 
-function createVoucherCode_(customerId: string) {
-  const idPart = String(customerId || "CUST").replace(/[^A-Z0-9]/gi, "");
-  const randomPart = Math.floor(1000 + Math.random() * 9000);
-  return `JC-${idPart}-${randomPart}`;
+async function createVoucherCode_() {
+  const date = getCairoBusinessDate().replace(/-/g, "");
+  const existing = new Set(
+    (await safeSheetObjects_(SHEETS.generatedVouchers)).map((voucher) =>
+      clean_(voucher.voucherCode || voucher.code),
+    ),
+  );
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const suffix = randomBytes(4).toString("hex").slice(0, 6).toUpperCase();
+    const code = `JC-VCH-${date}-${suffix}`;
+    if (!existing.has(code)) return code;
+  }
+  throw new ApiError(
+    "Could not generate a unique voucher code. Please retry.",
+    503,
+  );
+}
+
+async function businessSettings_() {
+  const settings = await safeSheetObjects_(SHEETS.businessSettings);
+  return Object.fromEntries(
+    settings
+      .map((row) => [clean_(row.settingKey), clean_(row.settingValue)] as const)
+      .filter(([key]) => Boolean(key)),
+  ) as Record<string, string>;
+}
+
+function positiveWholeNumber_(value: unknown, fallback: number) {
+  const parsed = Math.floor(number_(value));
+  return parsed > 0 ? parsed : fallback;
+}
+
+function stablePaymentId_(clientRequestId: string) {
+  const digest = createHash("sha256")
+    .update(clientRequestId)
+    .digest("hex")
+    .slice(0, 24);
+  return `pay-${digest}`;
 }
 
 async function createReceiptSerial() {
@@ -5937,7 +6405,7 @@ async function staffOptions_(fallback: string[]) {
   ];
 
   try {
-    const staffUsers = await sheetToObjects(SHEETS.staffUsers);
+    const staffUsers = await sheetToObjects(SHEETS.staff);
     const sheetStaff = staffUsers
       .filter((staff) => {
         const status = clean_(
@@ -6062,10 +6530,29 @@ function valueForHeader_(record: Payload, header: string) {
 
 function valueForHeaderForSheet_(record: Payload, header: string) {
   const value = valueForHeader_(record, header);
+  if (isUntrustedTextHeader_(header)) {
+    return neutralizeSheetFormula(value, 1000);
+  }
   if (!isPhoneHeader_(header)) return value;
 
   const phone = clean_(value);
   return phone ? `'${phone}` : "";
+}
+
+function isUntrustedTextHeader_(header: string) {
+  return new Set([
+    "customerName",
+    "customerNameSnapshot",
+    "customerNotes",
+    "fullName",
+    "itemNotes",
+    "name",
+    "notes",
+    "orderPlace",
+    "reason",
+    "rejectionReason",
+    "cancellationReason",
+  ]).has(header);
 }
 
 function isPhoneHeader_(header: string) {
@@ -6164,8 +6651,8 @@ function normalizePermissionValues_(value: unknown) {
 
 async function upsertStaffDirectoryRow_(profile: Row) {
   await ensureSheetHeaders_(
-    SHEETS.staffUsers,
-    SHEET_HEADERS[SHEETS.staffUsers] || [
+    SHEETS.staff,
+    SHEET_HEADERS[SHEETS.staff] || [
       "email",
       "role",
       "name",
@@ -6177,7 +6664,7 @@ async function upsertStaffDirectoryRow_(profile: Row) {
       "updatedAt",
     ],
   );
-  await upsertSheetObject_(SHEETS.staffUsers, "uid", clean_(profile.uid), {
+  await upsertSheetObject_(SHEETS.staff, "uid", clean_(profile.uid), {
     active: activeValue_(profile.active) ? "Yes" : "No",
     displayName: clean_(profile.displayName || profile.name || profile.email),
     email: clean_(profile.email).toLowerCase(),
