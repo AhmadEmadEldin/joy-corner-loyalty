@@ -19,6 +19,7 @@
     "importHelpers": true,
     "noImplicitOverride": true,
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "rootDir": ".",
     "outDir": "dist",
@@ -44,7 +45,7 @@
   "include": [
     "./server/**/*",
     "./src/**/*",
-    "./scripts/write_standalone_html.ts",
+    "./scripts/**/*.ts",
     "./webpack.config.ts"
   ],
   "ts-node": {

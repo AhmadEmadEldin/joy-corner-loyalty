@@ -21,7 +21,7 @@ Firebase Hosting
 - `public/index.html` is the HTML shell.
 - `public/assets/` is the single runtime asset folder copied into `dist/assets`.
 
-Avoid adding production secrets, Google Sheets clients, or Canva API clients in `src/`.
+Avoid adding production secrets or Google Sheets clients in `src/`.
 
 ## Backend
 

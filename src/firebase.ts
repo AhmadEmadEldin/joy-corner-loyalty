@@ -9,9 +9,13 @@ import {
   signOut,
 } from "firebase/auth";
 import {
+  collection,
   doc,
   getDoc,
   getFirestore,
+  onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
@@ -32,7 +36,12 @@ export type StaffProfile = {
   active?: boolean;
   createdAt?: unknown;
   displayName: string;
+  effectivePermissions?: string[];
   email: string;
+  grant?: string[];
+  permissions?: string[];
+  revoke?: string[];
+  revokedPermissions?: string[];
   role: StaffRole;
   type?: "staff";
   uid: string;
@@ -58,8 +67,8 @@ const requiredFirebaseKeys: Array<keyof typeof __FIREBASE_CONFIG__> = [
   "projectId",
 ];
 
-export const firebaseReady = requiredFirebaseKeys.every(
-  (key) => Boolean(__FIREBASE_CONFIG__[key]),
+export const firebaseReady = requiredFirebaseKeys.every((key) =>
+  Boolean(__FIREBASE_CONFIG__[key]),
 );
 
 const app = firebaseReady ? initializeApp(__FIREBASE_CONFIG__) : null;
@@ -77,6 +86,32 @@ if (app) {
 
 export default app;
 
+export function watchActiveOrders(
+  onChange: (orders: Record<string, unknown>[]) => void,
+  onError: (message: string) => void,
+) {
+  if (!firestore) return () => undefined;
+  const activeOrders = query(
+    collection(firestore, "activeOrders"),
+    orderBy("createdAt", "desc"),
+  );
+  return onSnapshot(
+    activeOrders,
+    (snapshot) =>
+      onChange(
+        snapshot.docs
+          .map(
+            (item): Record<string, unknown> => ({
+              orderId: item.id,
+              ...item.data(),
+            }),
+          )
+          .filter((item) => item.active !== false),
+      ),
+    (error) => onError(error.message || "Live order updates failed."),
+  );
+}
+
 export function watchStaffAuth(
   onChange: (session: { profile: StaffProfile; user: User } | null) => void,
   onError: (message: string) => void,
@@ -86,7 +121,7 @@ export function watchStaffAuth(
     return () => undefined;
   }
 
-  return onAuthStateChanged(auth, async (user) => {
+  return onAuthStateChanged(auth, async (user: User | null) => {
     try {
       onChange(user ? { profile: await ensureStaffProfile(user), user } : null);
     } catch (error) {
@@ -111,7 +146,9 @@ export function watchFirebaseUser(
     return () => undefined;
   }
 
-  return onAuthStateChanged(auth, onChange, (error) => onError(errorMessage(error)));
+  return onAuthStateChanged(auth, onChange, (error: Error) =>
+    onError(errorMessage(error)),
+  );
 }
 
 export async function signInCustomer(email: string, password: string) {
@@ -128,7 +165,11 @@ export async function signUpCustomer(
   phone = "",
 ) {
   if (!auth) throw new Error("Firebase is not configured yet.");
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const credential = await createUserWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
   await createCustomerProfile(credential.user, displayName, phone);
   return credential;
 }
@@ -165,7 +206,11 @@ async function ensureCustomerProfile(user: User): Promise<CustomerProfile> {
     throw new Error("No customer profile found. Please sign up first.");
   }
 
-  const profile = customerProfileFromData(user.uid, user.email || "", snapshot.data());
+  const profile = customerProfileFromData(
+    user.uid,
+    user.email || "",
+    snapshot.data(),
+  );
   if (!activeValue(profile.active)) {
     throw new Error("Customer account is inactive.");
   }
@@ -232,7 +277,9 @@ async function staffProfileFromFirestore(
   const profile = await readStaffProfileDoc(uid, email);
 
   if (!profile) {
-    throw new Error("No active Firestore staff profile found for this account.");
+    throw new Error(
+      "No active Firestore staff profile found for this account.",
+    );
   }
 
   return profile;
@@ -268,11 +315,26 @@ function staffProfileFromData(
   return {
     active: true,
     displayName: stringValue(data.displayName || data.name || email),
+    effectivePermissions: stringArrayValue(data.effectivePermissions),
     email,
+    grant: stringArrayValue(data.grant || data.permissions),
+    permissions: stringArrayValue(data.grant || data.permissions),
+    revoke: stringArrayValue(data.revoke || data.revokedPermissions),
+    revokedPermissions: stringArrayValue(
+      data.revoke || data.revokedPermissions,
+    ),
     role,
     type: "staff",
     uid,
   };
+}
+
+function stringArrayValue(value: unknown) {
+  if (Array.isArray(value)) return value.map(stringValue).filter(Boolean);
+  return stringValue(value)
+    .split(/[,\n|]+/)
+    .map(stringValue)
+    .filter(Boolean);
 }
 
 function normalizeRole(value: unknown): StaffRole | null {
