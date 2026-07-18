@@ -572,6 +572,29 @@ textarea {
   gap: 14px;
 }
 
+.customer-order-history {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 18px;
+}
+
+.customer-order-card {
+  align-items: center;
+  background: rgba(255, 250, 240, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.customer-order-card p {
+  margin: 4px 0 0;
+}
+
 .segmented {
   display: grid;
   gap: 8px;
@@ -1232,10 +1255,34 @@ tbody tr:hover {
   color: #5c4a2f;
 }
 
+.preparation-status-badge.status-requested {
+  background: #dbeafe;
+  border-color: rgba(29, 78, 216, 0.22);
+  color: #1e40af;
+}
+
+.preparation-status-badge.status-awaiting-confirmation {
+  background: #fef3c7;
+  border-color: rgba(180, 83, 9, 0.24);
+  color: #92400e;
+}
+
+.preparation-status-badge.status-confirmed {
+  background: #cffafe;
+  border-color: rgba(14, 116, 144, 0.22);
+  color: #155e75;
+}
+
+.preparation-status-badge.status-approved {
+  background: #e0e7ff;
+  border-color: rgba(67, 56, 202, 0.24);
+  color: #3730a3;
+}
+
 .preparation-status-badge.status-accepted {
-  background: #ffedd5;
-  border-color: rgba(194, 92, 14, 0.28);
-  color: #9a3412;
+  background: #f3e8ff;
+  border-color: rgba(126, 34, 206, 0.24);
+  color: #6b21a8;
 }
 
 .preparation-status-badge.status-preparing {
@@ -1260,6 +1307,18 @@ tbody tr:hover {
   background: #ead5d5;
   border-color: rgba(127, 29, 29, 0.22);
   color: #7f1d1d;
+}
+
+.preparation-status-badge.status-completed {
+  background: #e5e7eb;
+  border-color: rgba(55, 65, 81, 0.2);
+  color: #374151;
+}
+
+.preparation-status-badge.status-rejected {
+  background: #fee2e2;
+  border-color: rgba(185, 28, 28, 0.24);
+  color: #991b1b;
 }
 
 .payment-status-badge.payment-awaiting,
@@ -1295,6 +1354,13 @@ tbody tr:hover {
   background: #ede9fe;
   border-color: rgba(109, 40, 217, 0.22);
   color: #5b21b6;
+}
+
+.payment-status-badge.payment-voided,
+.pill.payment-voided {
+  background: #e5e7eb;
+  border-color: rgba(75, 85, 99, 0.2);
+  color: #4b5563;
 }
 
 .barista-receipt.status-accepted {
@@ -1372,7 +1438,8 @@ tbody tr:hover {
 
 .orders-receipt::before,
 .barista-receipt::before {
-  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px auto no-repeat;
+  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px
+    auto no-repeat;
   content: "";
   inset: 0;
   filter: grayscale(1) contrast(3) brightness(0);

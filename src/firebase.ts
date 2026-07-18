@@ -121,7 +121,7 @@ export function watchStaffAuth(
     return () => undefined;
   }
 
-  return onAuthStateChanged(auth, async (user) => {
+  return onAuthStateChanged(auth, async (user: User | null) => {
     try {
       onChange(user ? { profile: await ensureStaffProfile(user), user } : null);
     } catch (error) {
@@ -146,7 +146,7 @@ export function watchFirebaseUser(
     return () => undefined;
   }
 
-  return onAuthStateChanged(auth, onChange, (error) =>
+  return onAuthStateChanged(auth, onChange, (error: Error) =>
     onError(errorMessage(error)),
   );
 }
@@ -320,7 +320,9 @@ function staffProfileFromData(
     grant: stringArrayValue(data.grant || data.permissions),
     permissions: stringArrayValue(data.grant || data.permissions),
     revoke: stringArrayValue(data.revoke || data.revokedPermissions),
-    revokedPermissions: stringArrayValue(data.revoke || data.revokedPermissions),
+    revokedPermissions: stringArrayValue(
+      data.revoke || data.revokedPermissions,
+    ),
     role,
     type: "staff",
     uid,

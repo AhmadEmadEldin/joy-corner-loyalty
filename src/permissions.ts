@@ -4,6 +4,7 @@ export const permissionCatalog = [...featurePermissions];
 
 export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   acceptOrder: "orders.accept",
+  approveOrder: "orders.update",
   addCustomer: "customers.create",
   addOrder: "orders.create",
   addPayment: "payments.create",
@@ -14,6 +15,8 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   archiveMenuSize: "menu.delete",
   backupSheetsWorkbook: "settings.manage",
   cancelReceipt: "orders.update",
+  completeOrder: "orders.pickedup",
+  confirmOrder: "orders.update",
   collectUnpaidPayment: "unpaid.collect",
   collectReceiptPayment: "payments.create",
   customerHistory: "customers.history",
@@ -32,6 +35,8 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   markReceiptDone: "orders.pickedup",
   markReceiptPreparing: "orders.update",
   markReceiptReady: "orders.ready",
+  rejectOrder: "orders.update",
+  requestOrderConfirmation: "orders.update",
   migrateSheetsWorkbook: "settings.manage",
   organizeSpreadsheet: "settings.manage",
   ownerOverview: "staff.view",
@@ -48,7 +53,6 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   updateCustomer: "customers.update",
   updateMenuItem: "menu.update",
   updateReceiptPayment: "payments.create",
-  updateVoucherCanvaLink: "vouchers.generate",
   validateSheetSchema: "settings.manage",
   upsertMenuCategory: "menu.update",
   upsertMenuItem: "menu.update",
@@ -56,7 +60,10 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   upsertStaff: "staff.create",
 };
 
-export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> = {
+export const roleFeaturePermissions: Record<
+  StaffRole,
+  Set<FeaturePermission>
+> = {
   owner: new Set(featurePermissions),
   manager: new Set([
     "dashboard.view",
@@ -122,6 +129,8 @@ export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> =
     "dashboard.view",
     "orders.view",
     "orders.accept",
+    "orders.update",
+    "orders.ready",
     "orders.pickedup",
   ]),
 };
@@ -145,7 +154,9 @@ export function normalizePermissionList(value: unknown) {
   const normalized: string[] = [];
 
   raw.forEach((item) => {
-    const permission = String(item ?? "").trim().toLowerCase();
+    const permission = String(item ?? "")
+      .trim()
+      .toLowerCase();
     if (!permission) return;
     if (seen.has(permission)) {
       duplicates.add(permission);
@@ -178,7 +189,9 @@ export function resolveEffectivePermissions(options: {
   role: string;
 }): PermissionResolution {
   const roleDefaults = Array.from(permissionsForRole(options.role));
-  const grantInput = normalizePermissionList(options.grant ?? options.permissions ?? []);
+  const grantInput = normalizePermissionList(
+    options.grant ?? options.permissions ?? [],
+  );
   const revokeInput = normalizePermissionList(
     options.revoke ?? options.revokedPermissions ?? [],
   );
@@ -189,10 +202,10 @@ export function resolveEffectivePermissions(options: {
     permissionCatalog.includes(permission as never),
   ) as FeaturePermission[];
   const revokeSet = new Set(revoke);
-  const overlaps = grant.filter((permission) => revokeSet.has(permission)).sort();
-  const effectivePermissions = Array.from(
-    new Set([...roleDefaults, ...grant]),
-  )
+  const overlaps = grant
+    .filter((permission) => revokeSet.has(permission))
+    .sort();
+  const effectivePermissions = Array.from(new Set([...roleDefaults, ...grant]))
     .filter((permission) => !revokeSet.has(permission))
     .sort() as FeaturePermission[];
 
@@ -215,7 +228,9 @@ export function visibleTabsForPermissions(
   role: string,
   effectivePermissions: string[] = [],
 ) {
-  const normalizedRole = String(role || "").trim().toLowerCase();
+  const normalizedRole = String(role || "")
+    .trim()
+    .toLowerCase();
   if (normalizedRole === "barista") return [["dashboard", "Dashboard"]];
   const tabPermissions: Record<string, string[]> = {
     dashboard: ["dashboard.view"],
@@ -231,7 +246,11 @@ export function visibleTabsForPermissions(
   const roleDefaults = Array.from(permissionsForRole(normalizedRole));
   const permissionsSet = new Set(
     (effectivePermissions || [])
-      .map((permission) => String(permission ?? "").trim().toLowerCase())
+      .map((permission) =>
+        String(permission ?? "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean),
   );
   const hasRequiredPermission = (permission: string) =>
@@ -250,11 +269,14 @@ export function visibleTabsForPermissions(
     ["menu", "Menu"],
     ["owner", "Owner"],
   ].filter(([tabId]) => {
-    const requiredPermissions = tabPermissions[tabId as keyof typeof tabPermissions] || [];
+    const requiredPermissions =
+      tabPermissions[tabId as keyof typeof tabPermissions] || [];
     if (tabId === "owner") {
       return normalizedRole === "owner";
     }
-    return requiredPermissions.every((permission) => hasRequiredPermission(permission));
+    return requiredPermissions.every((permission) =>
+      hasRequiredPermission(permission),
+    );
   }) as Array<[string, string]>;
 }
 
@@ -267,7 +289,9 @@ export function hasPermission(options: {
   revokedPermissions?: unknown;
   role: string;
 }) {
-  const feature = String(options.feature || "").trim().toLowerCase();
+  const feature = String(options.feature || "")
+    .trim()
+    .toLowerCase();
   if (!feature) return false;
   if (options.role.toLowerCase() === "owner") return true;
   const effective =

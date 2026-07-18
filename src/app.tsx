@@ -666,7 +666,7 @@ export function App() {
           ),
           changeAmount: stringValue(receipt.changeAmount),
           paymentStatus: stringValue(receipt.paymentStatus),
-          orderStatus: stringValue(receipt.orderStatus || "Submitted"),
+          orderStatus: stringValue(receipt.orderStatus || "Requested"),
           orderDescription:
             stringValue(receipt.orderDescription) ||
             (Array.isArray(receipt.orderItems)
@@ -850,6 +850,8 @@ export function App() {
       {
         ...receiptPayloadFrom(encodedPayload),
         amount: numericAmount,
+        clientRequestId:
+          globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
         paymentMethod: "Cash",
       },
       "Receipt payment collected.",
@@ -1354,6 +1356,8 @@ function CustomerOrderPage() {
   );
   const [loading, setLoading] = useState(false);
   const [menu, setMenu] = useState<Row[]>([]);
+  const [customerOrders, setCustomerOrders] = useState<Row[]>([]);
+  const [selectedCustomerItemId, setSelectedCustomerItemId] = useState("");
 
   useEffect(() => {
     return watchFirebaseUser(
@@ -1364,14 +1368,18 @@ function CustomerOrderPage() {
 
   useEffect(() => {
     if (!customerUser) return;
-    void loadCustomerMenu();
+    void loadCustomerData();
   }, [customerUser?.uid]);
 
-  async function loadCustomerMenu() {
+  async function loadCustomerData() {
     try {
       setLoading(true);
-      const response = await callServer("customerMenu");
-      setMenu(response.data?.menu || response.menu || []);
+      const [menuResponse, ordersResponse] = await Promise.all([
+        callServer("customerMenu"),
+        callServer("customerOrders"),
+      ]);
+      setMenu(menuResponse.data?.menu || menuResponse.menu || []);
+      setCustomerOrders(ordersResponse.orders || []);
       setStatus("Choose an item and send your request.");
     } catch (error) {
       setStatus(errorMessage(error));
@@ -1427,6 +1435,8 @@ function CustomerOrderPage() {
       payload.unitPrice =
         numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
     }
+    payload.clientRequestId =
+      globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
     try {
       setLoading(true);
@@ -1434,6 +1444,29 @@ function CustomerOrderPage() {
       const response = await callServer("submitCustomerOrder", payload);
       setStatus(response.message || "Order request sent to Joy Corner.");
       form.reset();
+      setSelectedCustomerItemId("");
+      await loadCustomerData();
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function transitionCustomerOrder(
+    action: "confirmCustomerOrder" | "cancelCustomerOrder",
+    orderId: string,
+  ) {
+    const reason =
+      action === "cancelCustomerOrder"
+        ? window.prompt("Cancellation reason", "Customer changed their mind")
+        : "";
+    if (reason === null) return;
+    try {
+      setLoading(true);
+      const response = await callServer(action, { orderId, reason });
+      setCustomerOrders(response.orders || []);
+      setStatus(response.message || "Order updated.");
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -1446,6 +1479,14 @@ function CustomerOrderPage() {
     "--joy-culture-strip": `url(${joyCultureStripUrl})`,
     "--joy-your-time": `url(${joyYourTimeUrl})`,
   } as CSSProperties;
+  const selectedCustomerItem = menu.find(
+    (item) => stringValue(item.itemId) === selectedCustomerItemId,
+  );
+  const selectedCustomerSizes = Array.isArray(selectedCustomerItem?.sizes)
+    ? (selectedCustomerItem.sizes as Row[]).filter(
+        (size) => size.active !== false && numberValue(size.price) > 0,
+      )
+    : [];
 
   return (
     <div className="app-shell customer-order-shell" style={appStyle}>
@@ -1561,7 +1602,14 @@ function CustomerOrderPage() {
                 />
                 <label>
                   Item
-                  <select name="itemId" required>
+                  <select
+                    name="itemId"
+                    onChange={(event) =>
+                      setSelectedCustomerItemId(event.currentTarget.value)
+                    }
+                    required
+                    value={selectedCustomerItemId}
+                  >
                     <option value="">Choose from menu</option>
                     {menu.map((item) => (
                       <option
@@ -1578,6 +1626,22 @@ function CustomerOrderPage() {
                     ))}
                   </select>
                 </label>
+                {selectedCustomerSizes.length > 0 && (
+                  <label>
+                    Size / Price
+                    <select name="size" required>
+                      {selectedCustomerSizes.map((size) => (
+                        <option
+                          key={stringValue(size.sizeId || size.size)}
+                          value={stringValue(size.size || size.sizeName)}
+                        >
+                          {stringValue(size.size || size.sizeName)} -{" "}
+                          {money(numberValue(size.price))} EGP
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   Quantity
                   <input
@@ -1608,6 +1672,74 @@ function CustomerOrderPage() {
                   Send Request
                 </button>
               </form>
+            )}
+            {customerUser && (
+              <section
+                className="customer-order-history"
+                aria-label="Your orders"
+              >
+                <h2>Your Orders</h2>
+                {customerOrders.length ? (
+                  customerOrders.map((order) => {
+                    const orderId = stringValue(order.orderId);
+                    const orderStatus = normalizePreparationStatus(
+                      order.orderStatus,
+                    );
+                    return (
+                      <article className="customer-order-card" key={orderId}>
+                        <div>
+                          <strong>
+                            {stringValue(order.receiptNumber || orderId)}
+                          </strong>
+                          <p>{stringValue(order.itemSummary)}</p>
+                        </div>
+                        <div className="actions">
+                          <PreparationStatusBadge status={orderStatus} />
+                          <PaymentStatusBadge
+                            status={stringValue(order.paymentStatus)}
+                          />
+                          {orderStatus === "Awaiting Confirmation" && (
+                            <button
+                              className="primary"
+                              disabled={loading}
+                              onClick={() =>
+                                void transitionCustomerOrder(
+                                  "confirmCustomerOrder",
+                                  orderId,
+                                )
+                              }
+                              type="button"
+                            >
+                              Confirm
+                            </button>
+                          )}
+                          {[
+                            "Requested",
+                            "Awaiting Confirmation",
+                            "Confirmed",
+                          ].includes(orderStatus) && (
+                            <button
+                              className="danger"
+                              disabled={loading}
+                              onClick={() =>
+                                void transitionCustomerOrder(
+                                  "cancelCustomerOrder",
+                                  orderId,
+                                )
+                              }
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })
+                ) : (
+                  <p className="muted">No order requests yet.</p>
+                )}
+              </section>
             )}
             <p className="status">{status}</p>
           </div>
@@ -3221,7 +3353,7 @@ function VouchersView({
           ["favoriteDrink", "Drink"],
           ["voucherReward", "Reward"],
           ["redeemStatus", "Redeem"],
-          ["canvaStatus", "Canva"],
+          ["qrPayload", "QR Payload"],
           ["generatedAt", "Generated"],
         ]}
         rows={vouchers}
@@ -3588,13 +3720,18 @@ export function OrderTicket({
         .map((item) => item.trim())
         .filter(Boolean);
   const prepAction = nextPreparationAction(preparationStatus);
-  const canRunPrepAction = prepAction
-    ? {
+  const canRunPrepAction = Boolean(
+    prepAction &&
+      {
         markReceiptAccepted: canAccept,
         markReceiptPreparing: canPrepare,
         markReceiptReady: canReady,
-      }[prepAction.action] !== false
-    : false;
+        markReceiptDone: canPickup,
+        completeOrder: canPickup,
+        requestOrderConfirmation: canPrepare,
+        approveOrder: canPrepare,
+      }[prepAction.action],
+  );
 
   async function runTicketAction(
     actionKey: string,
@@ -3612,7 +3749,7 @@ export function OrderTicket({
   }
 
   async function runBaristaStatusAction(
-    actionKey: "acceptOrder" | "pickupOrder",
+    actionKey: string,
     nextStatus: PreparationStatus,
     callback: () => Promise<boolean | void> | boolean | void,
   ) {
@@ -3661,7 +3798,9 @@ export function OrderTicket({
           </div>
           <div className="actions">
             <PreparationStatusBadge status={preparationStatus} />
-            {view !== "barista" && <PaymentStatusBadge status={paymentStatus} />}
+            {view !== "barista" && (
+              <PaymentStatusBadge status={paymentStatus} />
+            )}
           </div>
         </div>
 
@@ -3700,7 +3839,7 @@ export function OrderTicket({
               <span>Discount: {money(receiptDiscountPercentage)}%</span>
             )}
             <span className={`pill ${paymentClass}`}>
-              {paymentStatus === "Partially Paid" && due > 0
+              {paymentStatus === "Partial" && due > 0
                 ? `Remaining ${money(due)} EGP`
                 : paymentStatus}
             </span>
@@ -3716,25 +3855,15 @@ export function OrderTicket({
               className="secondary"
               disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
               onClick={() =>
-                void runTicketAction("payment-paid", () =>
-                  onSetPayment(payload, "Paid"),
-                )
-              }
-              type="button"
-            >
-              {pendingAction === "payment-paid" ? "Saving..." : "Paid"}
-            </button>
-            <button
-              className="secondary"
-              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
-              onClick={() =>
                 void runTicketAction("collect-payment", () =>
                   onCollectPayment(payload),
                 )
               }
               type="button"
             >
-              {pendingAction === "collect-payment" ? "Saving..." : "Collect"}
+              {pendingAction === "collect-payment"
+                ? "Saving..."
+                : "Collect Payment"}
             </button>
             <button
               className="secondary"
@@ -3764,7 +3893,7 @@ export function OrderTicket({
               className="accept"
               disabled={
                 cancelled ||
-                preparationStatus !== "Submitted" ||
+                preparationStatus !== "Approved" ||
                 !canAccept ||
                 Boolean(pendingAction)
               }
@@ -3781,11 +3910,50 @@ export function OrderTicket({
                   ? "Accepted"
                   : "Accept"}
             </button>
+            {preparationStatus === "Accepted" && (
+              <button
+                className="accept"
+                disabled={!canPrepare || Boolean(pendingAction)}
+                onClick={() =>
+                  void runBaristaStatusAction(
+                    "markReceiptPreparing",
+                    "Preparing",
+                    () =>
+                      onStatus(
+                        payload,
+                        "markReceiptPreparing",
+                        "Receipt marked preparing.",
+                      ),
+                  )
+                }
+                type="button"
+              >
+                Start Preparing
+              </button>
+            )}
+            {preparationStatus === "Preparing" && (
+              <button
+                className="accept"
+                disabled={!canReady || Boolean(pendingAction)}
+                onClick={() =>
+                  void runBaristaStatusAction("markReceiptReady", "Ready", () =>
+                    onStatus(
+                      payload,
+                      "markReceiptReady",
+                      "Receipt marked ready.",
+                    ),
+                  )
+                }
+                type="button"
+              >
+                Mark Ready
+              </button>
+            )}
             <button
               className="pickup"
               disabled={
                 cancelled ||
-                !["Accepted", "Preparing", "Ready"].includes(preparationStatus) ||
+                preparationStatus !== "Ready" ||
                 !canPickup ||
                 Boolean(pendingAction)
               }
@@ -3798,6 +3966,23 @@ export function OrderTicket({
             >
               {pendingAction === "pickupOrder" ? "Picking Up…" : "Pick Up"}
             </button>
+            {preparationStatus === "Picked Up" && (
+              <button
+                className="secondary"
+                disabled={!canPickup || Boolean(pendingAction)}
+                onClick={() =>
+                  void runBaristaStatusAction(
+                    "completeOrder",
+                    "Completed",
+                    () =>
+                      onStatus(payload, "completeOrder", "Order completed."),
+                  )
+                }
+                type="button"
+              >
+                Complete
+              </button>
+            )}
           </>
         )}
         {showPickupAction && view !== "barista" && (
@@ -3846,12 +4031,19 @@ export function OrderTicket({
             className="danger"
             disabled={cancelled || pickedUp || Boolean(pendingAction)}
             onClick={() => {
-              const confirmed = window.confirm(
-                "Mark this receipt as cancelled? It will stay visible for the owner audit.",
+              const reason = window.prompt(
+                "Cancellation reason (required after acceptance)",
+                "Operational cancellation",
               );
-              if (!confirmed) return;
+              if (reason === null || !reason.trim()) return;
               void runTicketAction("cancelReceipt", () =>
-                onStatus(payload, "cancelReceipt", "Receipt cancelled."),
+                onStatus(
+                  encodeURIComponent(
+                    JSON.stringify({ ...receiptPayloadFrom(payload), reason }),
+                  ),
+                  "cancelReceipt",
+                  "Receipt cancelled.",
+                ),
               );
             }}
             type="button"
@@ -3886,11 +4078,29 @@ function PaymentStatusBadge({ status }: { status: string }) {
 }
 
 function nextPreparationAction(status: PreparationStatus) {
-  if (status === "Submitted") {
+  if (status === "Requested") {
+    return {
+      action: "requestOrderConfirmation",
+      label: "Request Confirmation",
+      message: "Customer confirmation requested.",
+      nextStatus: "Awaiting Confirmation" as PreparationStatus,
+    };
+  }
+
+  if (status === "Confirmed") {
+    return {
+      action: "approveOrder",
+      label: "Approve",
+      message: "Order approved for preparation.",
+      nextStatus: "Approved" as PreparationStatus,
+    };
+  }
+  if (status === "Approved") {
     return {
       action: "markReceiptAccepted",
       label: "Accept",
       message: "Receipt accepted.",
+      nextStatus: "Accepted" as PreparationStatus,
     };
   }
   if (status === "Accepted") {
@@ -3898,6 +4108,7 @@ function nextPreparationAction(status: PreparationStatus) {
       action: "markReceiptPreparing",
       label: "Start",
       message: "Receipt marked preparing.",
+      nextStatus: "Preparing" as PreparationStatus,
     };
   }
   if (status === "Preparing") {
@@ -3905,11 +4116,27 @@ function nextPreparationAction(status: PreparationStatus) {
       action: "markReceiptReady",
       label: "Ready",
       message: "Receipt marked ready.",
+      nextStatus: "Ready" as PreparationStatus,
+    };
+  }
+  if (status === "Ready") {
+    return {
+      action: "markReceiptDone",
+      label: "Picked Up",
+      message: "Receipt marked picked up.",
+      nextStatus: "Picked Up" as PreparationStatus,
+    };
+  }
+  if (status === "Picked Up") {
+    return {
+      action: "completeOrder",
+      label: "Complete",
+      message: "Order completed.",
+      nextStatus: "Completed" as PreparationStatus,
     };
   }
   return null;
 }
-
 
 function StockCard({ item }: { item: Row }) {
   const qtySold = numberValue(item.qtySold);
