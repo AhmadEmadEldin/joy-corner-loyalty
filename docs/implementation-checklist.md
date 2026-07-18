@@ -105,7 +105,7 @@ Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED WITH EXACT REASON`.
 
 ## Phase 9 - Google Sheets Restructure
 
-- `IN PROGRESS` Existing integration manages Dashboard, Menu, Customers, Orders, Payments, Unpaid Tracker, Rewards, Lists, Loyalty Winners, Reward Redemptions, Staff Users, and Day History.
+- `DONE` Existing integration uses the exact live workbook tabs documented in `LIVE_SHEET_SCHEMA.md`.
 - `DONE` Add Order Items tab safely.
 - `DONE` Add Audit Log tab safely.
 - `DONE` Add Sync Failures tab safely.

@@ -16,7 +16,7 @@ Laptop / VS Code
 -> Backend reads Firestore users/{uid}
 -> Backend enforces role permissions
 -> Backend reads/writes Google Sheets
--> Optional Canva voucher metadata stays backend-controlled
+-> Backend generates internal Joy Corner voucher codes and redemption records
 -> React renders the role-specific dashboard
 ```
 
@@ -52,28 +52,15 @@ Canonical sheet ID:
 1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8
 ```
 
-Expected tabs:
+The exact production tabs are `Staff`, `Dashboard`, `Customers`, `Orders`, `Rewards`, `Loyalty Winners`, `Generated Vouchers`, `Reward Redemptions`, `Unpaid Tracker`, `Menu`, `Payments`, `Lists`, `Day History`, `Order Items`, `Audit Log`, `Sync Failures`, `Customer Summary`, `Daily Receipt Files`, `Business Settings`, and `Schema Status`. See [docs/LIVE_SHEET_SCHEMA.md](docs/LIVE_SHEET_SCHEMA.md).
 
-- `Dashboard`
-- `Menu`
-- `Customers`
-- `Orders`
-- `Payments`
-- `Unpaid Tracker`
-- `Rewards`
-- `Lists`
-- `Loyalty Winners`
-- `Reward Redemptions`
-
-The backend also supports existing helper tabs used by the app, such as `Generated Vouchers`, `Staff`/`Staff Users`, and `History`/`Day History`.
-
-The staff and customer ordering interfaces use `src/joy_corner_menu_with_sizes.json` through `src/menuRepository.ts` as the menu price source of truth. Waiters select a menu item and size; visible unit-price editing is disabled, and the backend resolves the submitted item/size price again before writing the order.
+The live `Menu` tab is the menu and price source of truth. Multi-price text is parsed into selectable sizes, the browser never controls the trusted unit price, and the backend validates the active item, size, and price before writing an order. The bundled JSON is only a naming fallback for matching size labels.
 
 Receipt line totals and paid amounts are recalculated with `src/receiptCalculator.ts` on both the frontend and backend. The waiter UI blocks concurrent submissions, sends an idempotency key with each receipt, and the backend returns the existing receipt when the same idempotency key is seen again.
 
-End Day reset is owner-only and writes an immutable Day History row before marking same-day order rows as archived. If the current `YYYY-MM-DD` business date already exists in Day History, the backend rejects the reset with HTTP `409` to prevent duplicate closure. Customer rows, loyalty history, generated vouchers, payments, and unpaid balances are not deleted by the reset flow.
+End Day reset is owner-only and writes an immutable Day History row before marking same-day order rows as archived. Repeating a completed Cairo business date returns the existing archive metadata without creating another closure; concurrent attempts receive HTTP `409`. Customer rows, loyalty history, generated vouchers, payments, and unpaid balances are not deleted.
 
-## Firestore Staff Users
+## Firestore Staff Profiles
 
 Every staff member must have a Firebase Auth email/password account and a matching Firestore document:
 
@@ -170,7 +157,7 @@ Staff accounts use `/` for staff access and must not use `/order`. Customer acco
 - `manager`: full operational data except owner-only reset controls.
 - `cashier`: full operational data except owner-only controls.
 - `waiter`: order-taking data, customer lookup, menu, and receipt workflow.
-- `barista`: dashboard pickup board and pickup completion only.
+- `barista`: approved preparation queue, preparation progress, ready, and pickup controls only.
 
 The UI hides unavailable actions, and the backend enforces the same role permissions for every API action.
 
@@ -218,7 +205,7 @@ npm run deploy:firebase:rules
 - Never commit `.env.local`, `.env`, or service account secrets.
 - Do not call Google Sheets directly from the browser.
 - Production Google Sheets access uses the Firebase Functions runtime service account. Share the Sheet with that service account as Editor.
-- Keep Canva credentials server-side only. If Canva secrets are not configured, voucher link/update workflows should fail clearly without breaking loyalty tracking.
+- Joy Corner vouchers are generated internally; no external design API or OAuth account is required.
 - Rotate service account keys if they were ever pasted into public code, GitHub, old integrations, or frontend variables.
 
 ## Firebase Function Secrets
@@ -235,13 +222,7 @@ For `joycornerapp-c784d`, share the Google Sheet with this runtime service accou
 606859361107-compute@developer.gserviceaccount.com
 ```
 
-Optional Canva secrets, only when backend voucher generation is connected:
-
-```powershell
-firebase functions:secrets:set CANVA_CLIENT_ID
-firebase functions:secrets:set CANVA_CLIENT_SECRET
-firebase functions:secrets:set CANVA_REFRESH_TOKEN
-```
+Voucher generation and redemption require no third-party design credentials.
 
 ## Optional Neon Reporting Database
 

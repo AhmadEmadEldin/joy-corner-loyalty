@@ -52,7 +52,7 @@ Not part of final production architecture:
 
 ## 5. Core Users
 
-### 5.1 Staff Users
+### 5.1 Staff Profiles
 
 Staff users sign in using Firebase Auth email/password.
 
@@ -220,7 +220,7 @@ The frontend must never receive:
 
 - Google service account private keys
 - Google client email secrets
-- Canva API secrets
+- Third-party API secrets
 - Any backend-only credential
 
 ## 9. Firebase Functions Requirements
@@ -473,4 +473,4 @@ Possible future improvements:
 - Add role management UI for owner.
 - Add inventory stock management.
 - Add receipt printing.
-- Add automated voucher design generation if backend Canva integration is finalized.
+- Add optional internal voucher artwork templates.

@@ -17,15 +17,10 @@ The deployed Firebase Function runtime has workbook access through its configure
 The migration service creates or repairs canonical headers for:
 
 - Dashboard
-- Menu Categories
-- Menu Items
-- Menu Item Sizes
-- Menu Item Flavors
 - Extras
 - Customers
 - Orders
 - Order Items
-- Order Item Extras
 - Payments
 - Unpaid Tracker
 - Rewards
@@ -37,16 +32,12 @@ The migration service creates or repairs canonical headers for:
 - Day History
 - Audit Log
 - Sync Failures
-- Migration Exceptions
 
 ## Menu Migration
 
 The menu migration mapper seeds normalized tables from `src/joy_corner_menu_with_sizes.json`.
 
-- Menu categories are written to `Menu Categories`.
-- Menu items are written to `Menu Items`.
-- Size-specific numeric prices are written to `Menu Item Sizes`.
-- Flavors are written to `Menu Item Flavors`.
+- The existing `Menu` tab remains the only menu source and is never replaced by bundled seed data.
 - Extras are written to `Extras`.
 - Legacy multi-price text such as `59 / 69 / 79` is not used as authoritative pricing.
 
@@ -56,7 +47,7 @@ Implemented backend reconciliation calculates customer unpaid balances from open
 
 ## Exceptions
 
-The migration creates `Migration Exceptions` for unresolved legacy records. The current local run could not inspect row-level exceptions because local Google credentials are missing.
+Operational write failures are recorded in `Sync Failures`; schema inspection results are recorded in `Schema Status`.
 
 ## Formula Errors
 

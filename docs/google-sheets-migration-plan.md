@@ -10,7 +10,7 @@
 
 The migration creates or repairs:
 
-Dashboard, Menu Categories, Menu Items, Menu Item Sizes, Menu Item Flavors, Extras, Customers, Orders, Order Items, Order Item Extras, Payments, Unpaid Tracker, Rewards, Loyalty Winners, Reward Redemptions, Staff, Lists, Business Settings, Day History, Audit Log, Sync Failures, and Migration Exceptions.
+This historical plan is superseded by `LIVE_SHEET_SCHEMA.md`. The application uses the twenty tabs that already exist in the production workbook and does not create separate menu category, item, size, flavor, extra, or migration-exception tabs.
 
 ## Migration Strategy
 
@@ -19,10 +19,10 @@ Dashboard, Menu Categories, Menu Items, Menu Item Sizes, Menu Item Flavors, Extr
 3. Preserve old tab contents. Existing tabs are not deleted.
 4. Create missing normalized tabs and append missing canonical columns.
 5. Seed normalized menu tables from `src/joy_corner_menu_with_sizes.json`.
-6. Store size prices as numeric rows in Menu Item Sizes.
+6. Parse size prices from each live `Menu` row and validate the selected option server-side.
 7. Migrate customer profile fields into the canonical Customers columns.
 8. Convert legacy Orders rows into one Orders row per receipt/order and one Order Items row per product line where evidence is sufficient.
-9. Create Migration Exceptions rows for ambiguous legacy relationships.
+9. Record operational failures in `Sync Failures` and schema checks in `Schema Status`.
 10. Reconcile unpaid balances from Unpaid Tracker rows back to Customers.
 11. Remove unsupported core formulas by writing backend-managed winner rows.
 12. Write Audit Log rows for backup, migration, menu seed, reconciliation, and exceptions.
@@ -41,10 +41,10 @@ Dashboard, Menu Categories, Menu Items, Menu Item Sizes, Menu Item Flavors, Extr
 After migration, verify:
 
 - Normalized tabs exist with canonical headers.
-- Menu Item Sizes has numeric `Price EGP` values.
+- Live Menu price text is parsed into validated numeric options.
 - No duplicate stable IDs exist in normalized tabs.
 - Orders reference Customers by `Customer ID`.
-- Order Items reference Orders and Menu Items.
+- Order Items reference the master Orders row and the live Menu item ID.
 - Payments reference Orders when a safe relationship exists.
 - Customer unpaid balances match open Unpaid Tracker records.
 - Key tabs contain no `#NAME?`, `#REF!`, `#VALUE!`, or `#DIV/0!` errors.
