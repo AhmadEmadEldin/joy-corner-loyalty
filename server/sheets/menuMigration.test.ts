@@ -36,16 +36,18 @@ describe("normalized Google Sheets menu migration", () => {
     ).toBe(Number(firstSize?.priceEgp));
   });
 
-  it("defines every required normalized workbook tab", () => {
-    expect(Object.keys(NORMALIZED_SHEET_HEADERS)).toEqual(
-      expect.arrayContaining([
-        "Menu",
-        "Orders",
-        "Order Items",
-        "Payments",
-        "Business Settings",
-        "Schema Status",
-      ]),
-    );
+  it("defines the exact owner-facing workbook tabs", () => {
+    expect(Object.keys(NORMALIZED_SHEET_HEADERS)).toEqual([
+      "Dashboard",
+      "Settings",
+      "Staff",
+      "Menu",
+      "Customers",
+      "Orders",
+      "Order Items",
+      "Payments",
+      "Loyalty",
+      "System Log",
+    ]);
   });
 });
