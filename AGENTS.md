@@ -9,4 +9,4 @@ This repository is now a standalone Joy Corner Loyalty staff web app.
 - Firebase Function entry: `firebase-functions.cjs`
 - Node/Google Sheets backend: `server/googleSheetsBackend.ts`
 
-Avoid adding Canva SDK imports or Canva app manifest files unless the project is intentionally converted back into a Canva app.
+Avoid adding third-party design SDKs or app manifests. Vouchers are generated internally by the Joy Corner backend.

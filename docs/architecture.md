@@ -10,4 +10,4 @@ Joy Corner is a standalone staff POS and loyalty web app.
 - Google Sheets remains the operational reporting layer.
 - Neon PostgreSQL is implemented as the normalized historical/reporting backup when `NEON_DATABASE_URL` and `NEON_BACKUP_ENABLED=true` are configured.
 
-Browser code must never receive Google service account keys, Firebase Admin keys, Neon connection strings, or Canva secrets.
+Browser code must never receive Google service account keys, Firebase Admin keys, Neon connection strings, or other backend secrets.

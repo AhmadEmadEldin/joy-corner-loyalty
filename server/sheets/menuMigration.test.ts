@@ -39,13 +39,12 @@ describe("normalized Google Sheets menu migration", () => {
   it("defines every required normalized workbook tab", () => {
     expect(Object.keys(NORMALIZED_SHEET_HEADERS)).toEqual(
       expect.arrayContaining([
-        "Menu Categories",
-        "Menu Items",
-        "Menu Item Sizes",
+        "Menu",
+        "Orders",
         "Order Items",
-        "Order Item Extras",
+        "Payments",
         "Business Settings",
-        "Migration Exceptions",
+        "Schema Status",
       ]),
     );
   });
