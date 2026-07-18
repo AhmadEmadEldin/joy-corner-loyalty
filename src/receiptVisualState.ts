@@ -1,58 +1,77 @@
 export type PreparationStatus =
-  | "Submitted"
+  | "Requested"
+  | "Awaiting Confirmation"
+  | "Confirmed"
+  | "Approved"
   | "Accepted"
   | "Preparing"
   | "Ready"
   | "Picked Up"
+  | "Completed"
+  | "Rejected"
   | "Cancelled";
 
 export type PaymentStatus =
-  | "Awaiting Payment"
-  | "Partially Paid"
-  | "Paid"
   | "Unpaid"
-  | "Refunded";
+  | "Partial"
+  | "Paid"
+  | "Refunded"
+  | "Voided";
 
 const preparationStatusMap: Record<string, PreparationStatus> = {
   accepted: "Accepted",
+  approved: "Approved",
+  awaitingconfirmation: "Awaiting Confirmation",
   cancelled: "Cancelled",
   canceled: "Cancelled",
-  done: "Picked Up",
-  open: "Submitted",
+  closed: "Completed",
+  completed: "Completed",
+  confirmed: "Confirmed",
+  done: "Completed",
+  open: "Requested",
   pickedup: "Picked Up",
   pickup: "Picked Up",
   preparing: "Preparing",
   ready: "Ready",
-  requested: "Submitted",
+  rejected: "Rejected",
+  requested: "Requested",
   served: "Picked Up",
-  submitted: "Submitted",
+  submitted: "Requested",
 };
 
 const paymentStatusMap: Record<string, PaymentStatus> = {
-  awaiting: "Awaiting Payment",
-  awaitingpayment: "Awaiting Payment",
-  partial: "Partially Paid",
-  partiallypaid: "Partially Paid",
+  awaiting: "Unpaid",
+  awaitingpayment: "Unpaid",
+  partial: "Partial",
+  partiallypaid: "Partial",
   paid: "Paid",
   refunded: "Refunded",
+  reversed: "Refunded",
   unpaid: "Unpaid",
+  void: "Voided",
+  voided: "Voided",
 };
 
 export const preparationStatusStyles: Record<PreparationStatus, string> = {
-  Submitted: "status-submitted",
+  Requested: "status-requested",
+  "Awaiting Confirmation": "status-awaiting-confirmation",
+  Confirmed: "status-confirmed",
+  Approved: "status-approved",
   Accepted: "status-accepted",
   Preparing: "status-preparing",
   Ready: "status-ready",
   "Picked Up": "status-picked-up",
+  Completed: "status-completed",
+  Rejected: "status-rejected",
   Cancelled: "status-cancelled",
 };
 
 export const paymentStatusStyles: Record<PaymentStatus, string> = {
-  "Awaiting Payment": "payment-awaiting",
-  "Partially Paid": "payment-partial",
-  Paid: "payment-paid",
   Unpaid: "payment-unpaid",
+  Partial: "payment-partial",
+  Paid: "payment-paid",
   Refunded: "payment-refunded",
+  Voided: "payment-voided",
 };
 
 function statusKey(value: unknown) {
@@ -63,13 +82,13 @@ function statusKey(value: unknown) {
 }
 
 export function normalizePreparationStatus(value: unknown): PreparationStatus {
-  return preparationStatusMap[statusKey(value)] || "Submitted";
+  return preparationStatusMap[statusKey(value)] || "Requested";
 }
 
 export function normalizePaymentStatusForDisplay(
   value: unknown,
 ): PaymentStatus {
-  return paymentStatusMap[statusKey(value)] || "Awaiting Payment";
+  return paymentStatusMap[statusKey(value)] || "Unpaid";
 }
 
 export function getPreparationStatusClass(value: unknown) {
@@ -85,5 +104,5 @@ export function isPickedUpStatus(value: unknown) {
 }
 
 export function isFinishedPreparationStatus(value: unknown) {
-  return normalizePreparationStatus(value) === "Ready";
+  return normalizePreparationStatus(value) === "Completed";
 }
