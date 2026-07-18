@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import express from "express";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
@@ -99,7 +101,7 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.dayHistory]: ["Day History", "History"],
   [SHEETS.dailyReceiptFiles]: ["Daily Receipt Files", "Daily Files"],
   [SHEETS.auditLog]: ["Audit Log", "Audit Logs", "Audits"],
-  [SHEETS.orderItems]: ["Order Items", "Items"],
+  [SHEETS.orderItems]: ["Order Items"],
   [SHEETS.orderItemExtras]: ["Order Item Extras", "Item Extras"],
   [SHEETS.syncFailures]: ["Sync Failures", "Sync Failure"],
   [SHEETS.businessSettings]: ["Business Settings", "Settings"],
@@ -469,6 +471,10 @@ function initFirebaseAdmin() {
 }
 
 function firebaseCredential() {
+  // Cloud Functions must use the deployed runtime service account (ADC), never
+  // a developer machine's service-account file path.
+  if (runningInGoogleCloud_()) return undefined;
+
   const json = process.env.JOY_FIREBASE_SERVICE_ACCOUNT_JSON;
   const projectId =
     process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
@@ -537,14 +543,51 @@ async function getDriveClient_() {
 }
 
 function googleAuth_(scopes: string[]) {
-  const keyFile =
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ||
-    process.env.JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (runningInGoogleCloud_()) {
+    const configuredPath = clean_(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    if (configuredPath && !cloudCredentialPathWarningLogged) {
+      cloudCredentialPathWarningLogged = true;
+      console.warn(
+        "Ignoring GOOGLE_APPLICATION_CREDENTIALS in the deployed runtime; using Application Default Credentials.",
+      );
+    }
+    return new google.auth.GoogleAuth({ scopes });
+  }
+
+  const keyFile = localGoogleCredentialPath_();
   return new google.auth.GoogleAuth({
     ...(keyFile ? { keyFile } : {}),
     scopes,
   });
+}
+
+let cloudCredentialPathWarningLogged = false;
+
+function runningInGoogleCloud_() {
+  return (
+    process.env.FIREBASE_FUNCTIONS === "1" ||
+    Boolean(process.env.K_SERVICE) ||
+    Boolean(process.env.FUNCTION_TARGET)
+  );
+}
+
+function localGoogleCredentialPath_() {
+  const configuredPath = clean_(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  if (!configuredPath) return "";
+
+  const resolvedPath =
+    path.win32.isAbsolute(configuredPath) || path.posix.isAbsolute(configuredPath)
+      ? configuredPath
+      : path.resolve(process.cwd(), configuredPath);
+
+  if (!existsSync(resolvedPath)) {
+    throw new ApiError(
+      `Configured service-account file does not exist: ${resolvedPath}`,
+      500,
+    );
+  }
+
+  return resolvedPath;
 }
 
 function quotedSheet(name: string) {
@@ -598,6 +641,21 @@ async function resolveSheetName(sheetName: string) {
     missingTab: sheetName,
     spreadsheetId: maskId_(SPREADSHEET_ID),
   });
+}
+
+async function assertReceiptWriteTargets_() {
+  const [orders, orderItems, payments] = await Promise.all([
+    resolveSheetName(SHEETS.orders),
+    resolveSheetName(SHEETS.orderItems),
+    resolveSheetName(SHEETS.payments),
+  ]);
+  const resolved = [orders, orderItems, payments];
+  if (new Set(resolved).size !== resolved.length) {
+    throw new ApiError(
+      `Receipt configuration error: Orders, Order Items, and Payments must resolve to different tabs. Resolved: ${resolved.join(", ")}.`,
+      500,
+    );
+  }
 }
 
 function columnLetter(index: number) {
@@ -1624,7 +1682,7 @@ async function addOrder(payload: Payload) {
   );
   // Payment and pickup are separate steps. Paid orders must stay live on the
   // dashboard until staff marks them Picked Up or the owner runs End Day Reset.
-  const orderStatus = "Submitted";
+  const orderStatus = "Requested";
   const paidAmount = deriveReceiptPaidAmount_(
     paymentStatus,
     number_(payload.paidAmount),
@@ -1714,6 +1772,7 @@ async function addOrder(payload: Payload) {
 }
 
 async function addReceipt(payload: Payload, actor: Actor) {
+  await assertReceiptWriteTargets_();
   const idempotencyKey = clean_(payload.clientRequestId || payload.idempotencyKey);
   if (idempotencyKey) {
     const existingReceiptId = await receiptIdForIdempotencyKey_(idempotencyKey);
@@ -1806,12 +1865,12 @@ async function addReceipt(payload: Payload, actor: Actor) {
   );
   const createdAt = new Date();
   const businessDate = dateKey_(createdAt);
-  const orderStatus = "Submitted";
+  const orderStatus = "Requested";
   const customerPhone = clean_(payload.customerPhone || payload.phone);
   const serviceType = clean_(payload.serviceType);
   let remainingPaidAmount = paidAmount;
-  const writtenItems: string[] = [];
   const receiptRows: Row[] = [];
+  const orderItemRows: Payload[] = [];
   const itemDetails: Row[] = [];
   let totalQty = 0;
   let pointsEarnedTotal = 0;
@@ -1898,7 +1957,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       notes: rowNotes,
       orderPlace,
     });
-    await writeObjectRow(SHEETS.orderItems, {
+    orderItemRows.push({
       orderItemId,
       orderId,
       menuItemId: resolvedPrice.itemId || clean_(receiptItem.itemId),
@@ -1920,7 +1979,6 @@ async function addReceipt(payload: Payload, actor: Actor) {
     });
 
     remainingPaidAmount -= rowPaidAmount;
-    writtenItems.push(itemName || "Item");
   }
 
   const itemSummary = itemDetails
@@ -2001,6 +2059,10 @@ async function addReceipt(payload: Payload, actor: Actor) {
     unitPrice: "",
   });
 
+  for (const orderItemRow of orderItemRows) {
+    await writeObjectRow(SHEETS.orderItems, orderItemRow);
+  }
+
   if (paidAmount > 0) {
     await writeObjectRow(SHEETS.payments, {
       paymentId: stableUniqueId_("pay"),
@@ -2010,6 +2072,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
       createdAt: new Date(),
       customerId,
       customerName,
+      customerNameSnapshot: customerName,
       method: paymentMethod,
       amount: paidAmount,
       amountApplied: receiptCalculation.amountApplied,
@@ -2018,9 +2081,25 @@ async function addReceipt(payload: Payload, actor: Actor) {
       paymentType: "Initial",
       receiptNumber: receiptId,
       collectedBy: staff,
-      relatedOrderNotes: `Receipt: ${receiptId} - ${writtenItems.join(", ")}`,
+      receivedByName: staff,
+      receivedByUid: actor.uid,
+      paymentMethod,
+      notes: `Initial payment for receipt ${receiptId}`,
     });
   }
+
+  await recordAuditLog_(actor, {
+    action: "receipt.create",
+    entityId: orderId,
+    entityType: "order",
+    newValue: {
+      orderId,
+      paymentCreated: paidAmount > 0,
+      receiptNumber: receiptId,
+      total: receiptCalculation.grandTotal,
+    },
+    success: true,
+  });
   const receipt = buildDashboardOrders_(receiptRows)[0] || {
     receiptId,
     receiptNumber: receiptId,
@@ -2032,7 +2111,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
     paidAmount: String(paidAmount),
     outstandingAmount: String(Math.max(0, receiptTotal - paidAmount)),
     paymentStatus,
-    orderStatus: "Submitted",
+    orderStatus: "Requested",
     notes,
   };
   const confirmedReceipt = {
@@ -2334,7 +2413,7 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     pointsEarned: 0,
     pointsRedeemed: 0,
     paymentStatus: "Unpaid",
-    orderStatus: "Submitted",
+    orderStatus: "Requested",
     notes,
   });
   await writeObjectRow(SHEETS.orderItems, {
@@ -2351,7 +2430,7 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     extrasTotal: 0,
     lineTotal: total,
     notes,
-    preparationStatus: "Submitted",
+    preparationStatus: "Requested",
   });
 
   return success_({
@@ -2993,13 +3072,15 @@ async function dayArchiveExists_(dateKey: string) {
 
 async function ensureSheetHeaders_(sheetName: string, headers: string[]) {
   const sheets = await getSheetsClient();
+  let resolvedSheetName: string;
+  let values: string[][];
 
   try {
-    const values = await getSheetValues(sheetName);
-    const resolvedSheetName = await resolveSheetName(sheetName);
-    await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
-    return;
-  } catch {
+    resolvedSheetName = await resolveSheetName(sheetName);
+    values = await getSheetValues(resolvedSheetName);
+  } catch (error) {
+    if (!isMissingSheetError_(error)) throw error;
+
     await sheets.spreadsheets.batchUpdate({
       requestBody: {
         requests: [
@@ -3014,14 +3095,27 @@ async function ensureSheetHeaders_(sheetName: string, headers: string[]) {
       },
       spreadsheetId: SPREADSHEET_ID,
     });
+    sheetTitlesPromise = null;
+
+    await sheets.spreadsheets.values.update({
+      range: `${quotedSheet(sheetName)}!A1:${columnLetter(headers.length - 1)}1`,
+      requestBody: { values: [headers] },
+      spreadsheetId: SPREADSHEET_ID,
+      valueInputOption: "USER_ENTERED",
+    });
+    return;
   }
 
-  await sheets.spreadsheets.values.update({
-    range: `${quotedSheet(sheetName)}!A1:${columnLetter(headers.length - 1)}1`,
-    requestBody: { values: [headers] },
-    spreadsheetId: SPREADSHEET_ID,
-    valueInputOption: "USER_ENTERED",
-  });
+  await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
+}
+
+function isMissingSheetError_(error: unknown) {
+  if (error instanceof ApiError) {
+    return /Google Sheet tab missing/i.test(error.message);
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /Unable to parse range|sheet.*not found|tab.*missing/i.test(message);
 }
 
 async function repairSheetHeaders_(
@@ -3507,14 +3601,15 @@ function migrationTimestamp_() {
 
 async function ensureSheetExists_(sheetName: string, headers: string[]) {
   const sheets = await getSheetsClient();
+  let resolvedSheetName: string;
+  let values: string[][];
 
   try {
-    const resolvedSheetName = await resolveSheetName(sheetName);
-    const values = await getSheetValues(sheetName);
-    await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
+    resolvedSheetName = await resolveSheetName(sheetName);
+    values = await getSheetValues(resolvedSheetName);
+  } catch (error) {
+    if (!isMissingSheetError_(error)) throw error;
 
-    return resolvedSheetName;
-  } catch {
     await sheets.spreadsheets.batchUpdate({
       requestBody: {
         requests: [
@@ -3540,6 +3635,9 @@ async function ensureSheetExists_(sheetName: string, headers: string[]) {
 
     return sheetName;
   }
+
+  await repairSheetHeaders_(resolvedSheetName, values[0] || [], headers);
+  return resolvedSheetName;
 }
 
 async function formatSheetTab_(

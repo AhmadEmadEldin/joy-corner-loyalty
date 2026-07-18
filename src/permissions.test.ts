@@ -70,6 +70,10 @@ describe("permissions", () => {
     expect(permissionsForRole("barista").has("orders.ready")).toBe(false);
     expect(permissionsForRole("barista").has("orders.accept")).toBe(true);
     expect(permissionsForRole("barista").has("orders.pickedup")).toBe(true);
+    expect(permissionsForRole("cashier").has("orders.accept")).toBe(true);
+    expect(permissionsForRole("cashier").has("orders.pickedup")).toBe(true);
+    expect(permissionsForRole("manager").has("orders.accept")).toBe(true);
+    expect(permissionsForRole("manager").has("orders.pickedup")).toBe(true);
     expect(permissionsForRole("barista").has("settings.manage")).toBe(false);
     expect(permissionsForRole("manager").has("vouchers.generate")).toBe(true);
     expect(permissionsForRole("manager").has("permissions.manage")).toBe(false);

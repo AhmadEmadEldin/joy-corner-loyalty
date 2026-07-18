@@ -96,7 +96,7 @@ describe("OrderTicket", () => {
           resolveStatus = resolve;
         }),
     );
-    renderTicket({ orderStatus: "Submitted" }, { onStatus });
+    renderTicket({ orderStatus: "Requested" }, { onStatus });
 
     const accept = screen.getByRole("button", { name: "Accept" });
     fireEvent.click(accept);
@@ -115,7 +115,7 @@ describe("OrderTicket", () => {
   });
 
   it("keeps the barista board to Accept and Pick Up only", () => {
-    const { rerender } = renderTicket({ orderStatus: "Submitted" });
+    const { rerender } = renderTicket({ orderStatus: "Requested" });
 
     expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
     expect(
@@ -125,6 +125,9 @@ describe("OrderTicket", () => {
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ready" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Wrong / Cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Paid" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Collect" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
 
     rerender(
       <OrderTicket

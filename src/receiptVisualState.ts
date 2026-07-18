@@ -1,4 +1,5 @@
 export type PreparationStatus =
+  | "Requested"
   | "Submitted"
   | "Accepted"
   | "Preparing"
@@ -23,9 +24,9 @@ const preparationStatusMap: Record<string, PreparationStatus> = {
   pickup: "Picked Up",
   preparing: "Preparing",
   ready: "Ready",
-  requested: "Submitted",
+  requested: "Requested",
   served: "Picked Up",
-  submitted: "Submitted",
+  submitted: "Requested",
 };
 
 const paymentStatusMap: Record<string, PaymentStatus> = {
@@ -39,6 +40,7 @@ const paymentStatusMap: Record<string, PaymentStatus> = {
 };
 
 export const preparationStatusStyles: Record<PreparationStatus, string> = {
+  Requested: "status-submitted",
   Submitted: "status-submitted",
   Accepted: "status-accepted",
   Preparing: "status-preparing",
@@ -63,7 +65,7 @@ function statusKey(value: unknown) {
 }
 
 export function normalizePreparationStatus(value: unknown): PreparationStatus {
-  return preparationStatusMap[statusKey(value)] || "Submitted";
+  return preparationStatusMap[statusKey(value)] || "Requested";
 }
 
 export function normalizePaymentStatusForDisplay(

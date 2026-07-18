@@ -1,7 +1,8 @@
 import { OrderStatus } from "./domain";
 
 export const orderStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
-  Draft: ["Submitted", "Cancelled"],
+  Draft: ["Requested", "Cancelled"],
+  Requested: ["Accepted", "Cancelled"],
   Submitted: ["Accepted", "Cancelled"],
   Accepted: ["Preparing", "Picked Up", "Cancelled"],
   Preparing: ["Ready", "Picked Up", "Cancelled"],
@@ -32,9 +33,10 @@ const legacyStatusMap: Record<string, OrderStatus> = {
   preparing: "Preparing",
   ready: "Ready",
   refunded: "Refunded",
-  requested: "Submitted",
+  requested: "Requested",
   served: "Picked Up",
-  submitted: "Submitted",
+  // Historical receipts used "Submitted" before the barista-only flow.
+  submitted: "Requested",
   unpaid: "Unpaid",
 };
 
@@ -43,7 +45,7 @@ export function normalizeOrderStatus(value: unknown): OrderStatus {
     .trim()
     .toLowerCase()
     .replace(/[-_\s]+/g, "");
-  return legacyStatusMap[key] || "Submitted";
+  return legacyStatusMap[key] || "Requested";
 }
 
 export function canTransitionOrderStatus(from: unknown, to: unknown) {

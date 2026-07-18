@@ -3,6 +3,7 @@ import { canTransitionOrderStatus, normalizeOrderStatus } from "./orderStatus";
 describe("orderStatus", () => {
   it("normalizes legacy status names", () => {
     expect(normalizeOrderStatus("Open")).toBe("Submitted");
+    expect(normalizeOrderStatus("Submitted")).toBe("Requested");
     expect(normalizeOrderStatus("Picked Up")).toBe("Picked Up");
     expect(normalizeOrderStatus("picked_up")).toBe("Picked Up");
     expect(normalizeOrderStatus("PickedUp")).toBe("Picked Up");
@@ -10,7 +11,7 @@ describe("orderStatus", () => {
   });
 
   it("allows legal preparation transitions", () => {
-    expect(canTransitionOrderStatus("Submitted", "Accepted")).toBe(true);
+    expect(canTransitionOrderStatus("Requested", "Accepted")).toBe(true);
     expect(canTransitionOrderStatus("Accepted", "Preparing")).toBe(true);
     expect(canTransitionOrderStatus("Preparing", "Ready")).toBe(true);
     expect(canTransitionOrderStatus("Ready", "Picked Up")).toBe(true);

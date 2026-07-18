@@ -67,6 +67,7 @@ export const featurePermissions = [
 
 export const orderStatuses = [
   "Draft",
+  "Requested",
   "Submitted",
   "Accepted",
   "Preparing",

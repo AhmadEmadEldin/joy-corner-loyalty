@@ -1,4 +1,6 @@
 process.env.FIREBASE_FUNCTIONS = "1";
+// Keep the Functions deployment fingerprint aligned with the TypeScript backend.
+// Barista flow revision: Requested -> Accepted -> Picked Up.
 
 require("tsx/cjs");
 

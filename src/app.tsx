@@ -2253,12 +2253,10 @@ function DashboardView({
   onDone: (payload: string) => void;
 }) {
   const isBarista = role === "barista";
-  const displayedOrders = isBarista
-    ? orders.filter((order) => {
-        const status = normalizePreparationStatus(order.orderStatus);
-        return status !== "Picked Up" && status !== "Cancelled";
-      })
-    : orders;
+  const displayedOrders = orders.filter((order) => {
+    const status = normalizePreparationStatus(order.orderStatus);
+    return status !== "Picked Up" && status !== "Cancelled";
+  });
 
   return (
     <>
@@ -2311,12 +2309,12 @@ function DashboardView({
                   onSetPayment={onSetPayment}
                   onStatus={onStatus}
                   canAccept={canAccept}
-                  canCancel={isBarista ? false : canCancel}
+                  canCancel={false}
                   canPickup={canPickup}
-                  canPrepare={canPrepare}
-                  canReady={canReady}
-                  canSetPayment={isBarista ? false : canSetPayment}
-                  showPaymentActions={!isBarista && canSetPayment}
+                  canPrepare={false}
+                  canReady={false}
+                  canSetPayment={false}
+                  showPaymentActions={false}
                   showPickupAction
                   view="barista"
                 />
@@ -3764,7 +3762,7 @@ export function OrderTicket({
               className="accept"
               disabled={
                 cancelled ||
-                preparationStatus !== "Submitted" ||
+                preparationStatus !== "Requested" ||
                 !canAccept ||
                 Boolean(pendingAction)
               }
@@ -5035,6 +5033,8 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "markReceiptPreparing",
     "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "resetDay",
@@ -5061,6 +5061,8 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "markReceiptPreparing",
     "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "customerSearch",
@@ -5085,6 +5087,8 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "markReceiptPreparing",
     "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "customerSearch",
@@ -5111,10 +5115,8 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "appData",
     "getAppData",
     "liveData",
-    "markReceiptAccepted",
-    "markReceiptPreparing",
-    "markReceiptReady",
-    "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "debugAuth",
   ]),
 };
