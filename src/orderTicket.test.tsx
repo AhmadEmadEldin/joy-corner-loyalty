@@ -17,7 +17,7 @@ const baseOrder = {
   customerName: "Mona",
   orderDateTime: "2026-07-08 10:00",
   orderDescription: "Latte x1",
-  orderStatus: "Submitted",
+  orderStatus: "Requested",
   outstandingAmount: 75,
   paidAmount: 0,
   paymentStatus: "Unpaid",
@@ -63,9 +63,9 @@ describe("OrderTicket", () => {
     expect(screen.getByText("Picked Up")).toBeTruthy();
   });
 
-  it("marks only the barista ready ticket as finished", () => {
+  it("marks only the barista completed ticket as finished", () => {
     const { rerender } = renderTicket({
-      orderStatus: "Ready",
+      orderStatus: "Completed",
       paymentStatus: "Unpaid",
     });
     expect(screen.getByText("Mona").closest("article")?.classList).toContain(
@@ -74,7 +74,11 @@ describe("OrderTicket", () => {
 
     rerender(
       <OrderTicket
-        order={{ ...baseOrder, orderStatus: "Ready", paymentStatus: "Unpaid" }}
+        order={{
+          ...baseOrder,
+          orderStatus: "Completed",
+          paymentStatus: "Unpaid",
+        }}
         onDone={jest.fn()}
         onSetPayment={jest.fn()}
         onStatus={jest.fn()}
@@ -96,7 +100,7 @@ describe("OrderTicket", () => {
           resolveStatus = resolve;
         }),
     );
-    renderTicket({ orderStatus: "Submitted" }, { onStatus });
+    renderTicket({ orderStatus: "Approved" }, { onStatus });
 
     const accept = screen.getByRole("button", { name: "Accept" });
     fireEvent.click(accept);
@@ -114,16 +118,17 @@ describe("OrderTicket", () => {
     });
   });
 
-  it("keeps the barista board to Accept and Pick Up only", () => {
-    const { rerender } = renderTicket({ orderStatus: "Submitted" });
+  it("enforces the barista sequence before pickup", () => {
+    const { rerender } = renderTicket({ orderStatus: "Approved" });
 
     expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Pick Up" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Ready" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Start Preparing" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Wrong / Cancel" })).toBeNull();
 
     rerender(
@@ -139,9 +144,24 @@ describe("OrderTicket", () => {
     );
 
     expect(
-      (screen.getByRole("button", { name: "Accepted" }) as HTMLButtonElement)
+      screen.getByRole("button", { name: "Start Preparing" }),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Pick Up" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+
+    rerender(
+      <OrderTicket
+        order={{ ...baseOrder, orderStatus: "Ready" }}
+        onDone={jest.fn()}
+        onSetPayment={jest.fn()}
+        onStatus={jest.fn()}
+        showPaymentActions={false}
+        showPickupAction
+        view="barista"
+      />,
+    );
     expect(
       (screen.getByRole("button", { name: "Pick Up" }) as HTMLButtonElement)
         .disabled,

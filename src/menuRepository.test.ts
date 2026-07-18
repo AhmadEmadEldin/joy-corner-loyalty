@@ -1,6 +1,7 @@
 import {
   findNormalizedMenuItem,
   normalizedMenu,
+  parseLiveMenuPrices,
   resolveMenuPrice,
   validateNormalizedMenu,
 } from "./menuRepository";
@@ -42,5 +43,19 @@ describe("menuRepository", () => {
     expect(
       normalizedMenu.every((item) => item.sizes.every((size) => size.sizeId)),
     ).toBe(true);
+  });
+
+  it("parses the live Sheet multi-price format without inventing a trusted price", () => {
+    expect(
+      parseLiveMenuPrices("70 / 85 / 100", ["Small", "Medium", "Large"]),
+    ).toMatchObject([
+      { price: 70, size: "Small" },
+      { price: 85, size: "Medium" },
+      { price: 100, size: "Large" },
+    ]);
+    expect(parseLiveMenuPrices("45 / 60")).toMatchObject([
+      { price: 45, size: "Option 1" },
+      { price: 60, size: "Option 2" },
+    ]);
   });
 });

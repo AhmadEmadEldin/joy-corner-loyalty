@@ -1,26 +1,92 @@
-import { canTransitionOrderStatus, normalizeOrderStatus } from "./orderStatus";
+import {
+  canTransitionOrderStatus,
+  normalizeOrderStatus,
+  validateOrderTransition,
+} from "./orderStatus";
 
 describe("orderStatus", () => {
-  it("normalizes legacy status names", () => {
-    expect(normalizeOrderStatus("Open")).toBe("Submitted");
-    expect(normalizeOrderStatus("Picked Up")).toBe("Picked Up");
+  it("normalizes historical values without changing Sheet cells", () => {
+    expect(normalizeOrderStatus("Open")).toBe("Requested");
+    expect(normalizeOrderStatus("Submitted")).toBe("Requested");
+    expect(normalizeOrderStatus("Done")).toBe("Completed");
+    expect(normalizeOrderStatus("Closed")).toBe("Completed");
     expect(normalizeOrderStatus("picked_up")).toBe("Picked Up");
-    expect(normalizeOrderStatus("PickedUp")).toBe("Picked Up");
-    expect(normalizeOrderStatus("Served")).toBe("Picked Up");
   });
 
-  it("allows legal preparation transitions", () => {
-    expect(canTransitionOrderStatus("Submitted", "Accepted")).toBe(true);
-    expect(canTransitionOrderStatus("Accepted", "Preparing")).toBe(true);
-    expect(canTransitionOrderStatus("Preparing", "Ready")).toBe(true);
-    expect(canTransitionOrderStatus("Ready", "Picked Up")).toBe(true);
+  it("allows only the canonical sequence", () => {
+    const sequence = [
+      "Requested",
+      "Awaiting Confirmation",
+      "Confirmed",
+      "Approved",
+      "Accepted",
+      "Preparing",
+      "Ready",
+      "Picked Up",
+      "Completed",
+    ];
+    sequence.slice(0, -1).forEach((status, index) => {
+      expect(canTransitionOrderStatus(status, sequence[index + 1])).toBe(true);
+    });
+    expect(canTransitionOrderStatus("Requested", "Preparing")).toBe(false);
+    expect(canTransitionOrderStatus("Preparing", "Completed")).toBe(false);
+    expect(canTransitionOrderStatus("Completed", "Preparing")).toBe(false);
+    expect(canTransitionOrderStatus("Cancelled", "Requested")).toBe(false);
   });
 
-  it("rejects invalid reverse preparation transitions", () => {
-    expect(canTransitionOrderStatus("Picked Up", "Accepted")).toBe(false);
+  it("enforces role and cancellation-reason rules", () => {
+    expect(
+      validateOrderTransition({
+        actor: { role: "cashier" },
+        from: "Confirmed",
+        to: "Approved",
+      }).allowed,
+    ).toBe(true);
+    expect(
+      validateOrderTransition({
+        actor: { role: "barista" },
+        from: "Confirmed",
+        to: "Approved",
+      }).allowed,
+    ).toBe(false);
+    expect(
+      validateOrderTransition({
+        actor: { role: "barista" },
+        from: "Approved",
+        to: "Accepted",
+      }).allowed,
+    ).toBe(true);
+    expect(
+      validateOrderTransition({
+        actor: { role: "manager" },
+        from: "Preparing",
+        to: "Cancelled",
+      }).allowed,
+    ).toBe(false);
+    expect(
+      validateOrderTransition({
+        actor: { role: "manager" },
+        from: "Preparing",
+        to: "Cancelled",
+        reason: "Machine fault",
+      }).allowed,
+    ).toBe(true);
   });
 
-  it("blocks invalid transitions out of archived orders", () => {
-    expect(canTransitionOrderStatus("Archived", "Ready")).toBe(false);
+  it("allows customers to confirm or cancel only their own orders", () => {
+    expect(
+      validateOrderTransition({
+        actor: { customerOwnsOrder: true, role: "customer" },
+        from: "Awaiting Confirmation",
+        to: "Confirmed",
+      }).allowed,
+    ).toBe(true);
+    expect(
+      validateOrderTransition({
+        actor: { customerOwnsOrder: false, role: "customer" },
+        from: "Awaiting Confirmation",
+        to: "Confirmed",
+      }).allowed,
+    ).toBe(false);
   });
 });
