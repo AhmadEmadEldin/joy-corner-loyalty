@@ -38,7 +38,9 @@ Laptop / VS Code
 
 ## Google Sheet
 
-Use the spreadsheet named `Joy_Corner_Integrated_WITH_Loyalty_Winners`.
+Production currently remains the legacy spreadsheet named
+`Joy_Corner_Integrated_WITH_Loyalty_Winners`. Do not change the configured
+spreadsheet ID until the owner completes `docs/PRODUCTION_SWITCH_CHECKLIST.md`.
 
 Set its ID as:
 
@@ -52,13 +54,26 @@ Canonical sheet ID:
 1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8
 ```
 
-The exact production tabs are `Staff`, `Dashboard`, `Customers`, `Orders`, `Rewards`, `Loyalty Winners`, `Generated Vouchers`, `Reward Redemptions`, `Unpaid Tracker`, `Menu`, `Payments`, `Lists`, `Day History`, `Order Items`, `Audit Log`, `Sync Failures`, `Customer Summary`, `Daily Receipt Files`, `Business Settings`, and `Schema Status`. See [docs/LIVE_SHEET_SCHEMA.md](docs/LIVE_SHEET_SCHEMA.md).
+The rebuilt working copy uses exactly these tabs, in order: `Dashboard`,
+`Settings`, `Staff`, `Menu`, `Customers`, `Orders`, `Order Items`, `Payments`,
+`Loyalty`, and `System Log`. Its verified migration and rollback details are in
+`docs/DATA_RECONCILIATION.md`, `docs/MIGRATION_EXCEPTIONS.md`, and
+`docs/ROLLBACK_PLAN.md`.
 
 The live `Menu` tab is the menu and price source of truth. Multi-price text is parsed into selectable sizes, the browser never controls the trusted unit price, and the backend validates the active item, size, and price before writing an order. The bundled JSON is only a naming fallback for matching size labels.
 
 Receipt line totals and paid amounts are recalculated with `src/receiptCalculator.ts` on both the frontend and backend. The waiter UI blocks concurrent submissions, sends an idempotency key with each receipt, and the backend returns the existing receipt when the same idempotency key is seen again.
 
-End Day reset is owner-only and writes an immutable Day History row before marking same-day order rows as archived. Repeating a completed Cairo business date returns the existing archive metadata without creating another closure; concurrent attempts receive HTTP `409`. Customer rows, loyalty history, generated vouchers, payments, and unpaid balances are not deleted.
+End Day reset is owner-only and writes immutable typed events to `System Log`
+before marking same-day order rows as archived. Repeating a completed Cairo
+business date returns the existing archive metadata without creating another
+closure; concurrent attempts receive HTTP `409`. Customer rows, loyalty
+history, vouchers, payments, and unpaid balances are not deleted.
+
+Offline-safe operational actions are stored in IndexedDB with device IDs and
+client request IDs. They synchronize only after Firebase identity is rechecked;
+conflicts and exhausted retries are visible in the owner Device Sync Center.
+See `docs/OFFLINE_SYNC.md`.
 
 ## Firestore Staff Profiles
 
