@@ -1,6 +1,8 @@
 import {
   findNormalizedMenuItem,
   normalizedMenu,
+  parseLiveMenuSizes,
+  resolveLiveMenuPrice,
   resolveMenuPrice,
   validateNormalizedMenu,
 } from "./menuRepository";
@@ -42,5 +44,33 @@ describe("menuRepository", () => {
     expect(
       normalizedMenu.every((item) => item.sizes.every((size) => size.sizeId)),
     ).toBe(true);
+  });
+
+  it("parses editable Google Sheet prices into predictable live sizes", () => {
+    expect(parseLiveMenuSizes("59 / 69 / 79", "ITEM-0002")).toEqual([
+      expect.objectContaining({ price: 59, size: "Small" }),
+      expect.objectContaining({ price: 69, size: "Medium" }),
+      expect.objectContaining({ price: 79, size: "Large" }),
+    ]);
+  });
+
+  it("resolves a selected price from a live Sheet menu item", () => {
+    const sizes = parseLiveMenuSizes("34 / 39", "ITEM-0001", [
+      "Single",
+      "Double",
+    ]);
+    expect(
+      resolveLiveMenuPrice(
+        {
+          category: "Hot Beverages",
+          itemId: "ITEM-0001",
+          itemName: "Turkish Coffee",
+          name: "Turkish Coffee",
+          sizes,
+          standardSize: "Single",
+        },
+        "Double",
+      ),
+    ).toMatchObject({ itemId: "ITEM-0001", price: 39, size: "Double" });
   });
 });
