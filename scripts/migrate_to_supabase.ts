@@ -345,11 +345,7 @@ async function main() {
       const legacyId = text(reference.values, "customerId");
       if (customerIds.has(legacyId)) continue;
 
-      const referenceName = text(
-        reference.values,
-        "customerName",
-        "fullName",
-      );
+      const referenceName = text(reference.values, "customerName", "fullName");
       const referencePhone = normalizePhone(
         text(reference.values, "customerPhone", "phone", "phoneWhatsApp"),
       );
@@ -660,8 +656,7 @@ async function main() {
               text(row.values, "paymentMethod", "method"),
             ),
             payment_status: "paid",
-            pickup_name:
-              text(row.values, "customerName") || "Legacy payment",
+            pickup_name: text(row.values, "customerName") || "Legacy payment",
             source: "migration",
             status: "closed",
             subtotal: amount,
@@ -774,8 +769,14 @@ async function main() {
       if (normalizeKey(favoriteDrink) !== "drink") {
         const found = await client
           .from("menu_items")
-          .select("id")
+          .select("id,active,available,loyalty_eligible,base_price,created_at")
           .ilike("name", favoriteDrink)
+          .order("active", { ascending: false })
+          .order("available", { ascending: false })
+          .order("loyalty_eligible", { ascending: false })
+          .order("base_price", { ascending: true })
+          .order("created_at", { ascending: true })
+          .limit(1)
           .maybeSingle();
         if (found.error) throw found.error;
         if (!found.data)
@@ -884,9 +885,7 @@ async function main() {
       sheet,
       rows.map((row) => [row.rowNumber, row.values]),
     ]);
-    return createHash("sha256")
-      .update(JSON.stringify(canonical))
-      .digest("hex");
+    return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
   }
 
   function isImportableSourceRow(sheet: string, row: SourceRow) {
@@ -929,11 +928,17 @@ async function main() {
   function errorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
     if (error && typeof error === "object") {
-      const candidate = error as { code?: unknown; details?: unknown; message?: unknown };
-      return [candidate.message, candidate.details, candidate.code]
-        .filter(Boolean)
-        .map(String)
-        .join(" | ") || JSON.stringify(error);
+      const candidate = error as {
+        code?: unknown;
+        details?: unknown;
+        message?: unknown;
+      };
+      return (
+        [candidate.message, candidate.details, candidate.code]
+          .filter(Boolean)
+          .map(String)
+          .join(" | ") || JSON.stringify(error)
+      );
     }
     return String(error);
   }
