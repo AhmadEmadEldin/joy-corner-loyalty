@@ -1,5 +1,5 @@
 begin;
-select plan(16);
+select plan(21);
 
 select has_function(
   'public',
@@ -39,6 +39,31 @@ select ok(
   'kitchen projection has RLS enabled'
 );
 
+select ok(
+  not has_column_privilege('authenticated', 'public.profiles', 'full_name', 'UPDATE'),
+  'customers cannot bypass the audited profile RPC'
+);
+select ok(
+  not has_function_privilege('authenticated', 'private.calculate_rewards_for_order(uuid)', 'EXECUTE'),
+  'internal reward helper is not directly executable'
+);
+select ok(
+  to_regclass('public.notifications_user_created_idx') is not null,
+  'customer notification ordering has a supporting index'
+);
+select ok(
+  to_regclass('public.vouchers_customer_issued_idx') is not null,
+  'customer voucher ordering has a supporting index'
+);
+select ok(
+  not exists (
+    select 1 from pg_catalog.pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'payments'
+  ),
+  'raw payment rows are not published to Realtime'
+);
+
 select * from finish();
 rollback;
-

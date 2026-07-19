@@ -186,6 +186,19 @@ export async function signInStaff(
   }
 }
 
+export async function sendStaffMagicLink(email: string): Promise<void> {
+  const normalizedEmail = email.trim();
+  if (!normalizedEmail) throw new Error("Enter your staff email first.");
+  const { error } = await getSupabaseClient().auth.signInWithOtp({
+    email: normalizedEmail,
+    options: {
+      emailRedirectTo: `${window.location.origin}/supabase/staff`,
+      shouldCreateUser: false,
+    },
+  });
+  if (error) fail("Could not send the secure sign-in link.", error);
+}
+
 export async function loadStaffProfile(): Promise<AuthProfile> {
   const { data, error } = await getSupabaseClient()
     .from("profiles")
@@ -308,7 +321,9 @@ export async function loadMenu(): Promise<MenuItem[]> {
     client.from("menu_categories").select("id,name").order("sort_order"),
     client
       .from("menu_items")
-      .select("id,category_id,name,description,image_url,available,loyalty_eligible")
+      .select(
+        "id,category_id,name,description,image_url,available,loyalty_eligible",
+      )
       .order("sort_order"),
     client
       .from("menu_item_sizes")
@@ -379,40 +394,40 @@ export async function loadCustomerDashboard(): Promise<{
   const client = getSupabaseClient();
   const [orders, orderItems, orderModifiers, rewards, vouchers, notifications] =
     await Promise.all([
-    client
-      .from("orders")
-      .select(
-        "id,order_number,status,confirmation_status,payment_status,payment_method,pickup_name,customer_notes,subtotal,discount_total,voucher_discount,tax_total,total,rejection_reason,cancellation_reason,created_at",
-      )
-      .order("created_at", { ascending: false }),
-    client
-      .from("order_items")
-      .select(
-        "id,order_id,item_name_snapshot,category_name_snapshot,size_name,quantity,unit_price,modifiers_total,total_price,customer_notes",
-      )
-      .order("created_at"),
-    client
-      .from("order_item_modifiers")
-      .select(
-        "order_item_id,modifier_name_snapshot,unit_price,quantity,total_price",
-      )
-      .order("created_at"),
-    client
-      .from("rewards_accounts")
-      .select("points_balance,eligible_purchase_count,free_rewards_available")
-      .maybeSingle(),
-    client
-      .from("vouchers")
-      .select(
-        "id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,status,expires_at",
-      )
-      .order("issued_at", { ascending: false }),
-    client
-      .from("notifications")
-      .select("id,type,title,message,read,related_order_id,created_at")
-      .order("created_at", { ascending: false })
-      .limit(50),
-  ]);
+      client
+        .from("orders")
+        .select(
+          "id,order_number,status,confirmation_status,payment_status,payment_method,pickup_name,customer_notes,subtotal,discount_total,voucher_discount,tax_total,total,rejection_reason,cancellation_reason,created_at",
+        )
+        .order("created_at", { ascending: false }),
+      client
+        .from("order_items")
+        .select(
+          "id,order_id,item_name_snapshot,category_name_snapshot,size_name,quantity,unit_price,modifiers_total,total_price,customer_notes",
+        )
+        .order("created_at"),
+      client
+        .from("order_item_modifiers")
+        .select(
+          "order_item_id,modifier_name_snapshot,unit_price,quantity,total_price",
+        )
+        .order("created_at"),
+      client
+        .from("rewards_accounts")
+        .select("points_balance,eligible_purchase_count,free_rewards_available")
+        .maybeSingle(),
+      client
+        .from("vouchers")
+        .select(
+          "id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,status,expires_at",
+        )
+        .order("issued_at", { ascending: false }),
+      client
+        .from("notifications")
+        .select("id,type,title,message,read,related_order_id,created_at")
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
   if (
     orders.error ||
     orderItems.error ||
@@ -445,7 +460,9 @@ export async function loadCustomerDashboard(): Promise<{
   };
 }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<void> {
   const { error } = await getSupabaseClient()
     .from("notifications")
     .update({ read: true })
@@ -466,16 +483,28 @@ export async function placeCustomerOrder(input: {
   const currentMenu = await loadMenu();
   for (const line of input.cart) {
     const currentItem = currentMenu.find((item) => item.id === line.item.id);
-    const currentSize = currentItem?.sizes.find((size) => size.id === line.size.id);
+    const currentSize = currentItem?.sizes.find(
+      (size) => size.id === line.size.id,
+    );
     if (!currentItem?.available || !currentSize) {
-      throw new Error(`${line.item.name} is no longer available. Review your order.`);
+      throw new Error(
+        `${line.item.name} is no longer available. Review your order.`,
+      );
     }
     if (currentSize.price !== line.size.price) {
-      throw new Error(`${line.item.name} has a new price. Review your order before checkout.`);
+      throw new Error(
+        `${line.item.name} has a new price. Review your order before checkout.`,
+      );
     }
-    const currentModifierIds = new Set(currentItem.modifiers.map((modifier) => modifier.id));
-    if (line.modifiers.some((modifier) => !currentModifierIds.has(modifier.id))) {
-      throw new Error(`${line.item.name} has updated options. Review your order.`);
+    const currentModifierIds = new Set(
+      currentItem.modifiers.map((modifier) => modifier.id),
+    );
+    if (
+      line.modifiers.some((modifier) => !currentModifierIds.has(modifier.id))
+    ) {
+      throw new Error(
+        `${line.item.name} has updated options. Review your order.`,
+      );
     }
   }
   const idempotencyKey = crypto.randomUUID();
@@ -515,7 +544,7 @@ export async function createStaffOrder(input: {
     customer_notes: input.customerNotes,
     idempotency_key: crypto.randomUUID(),
     items: input.cart.map((line) => ({
-        modifierIds: line.modifiers.map((modifier) => modifier.id),
+      modifierIds: line.modifiers.map((modifier) => modifier.id),
       notes: line.notes,
       quantity: line.quantity,
       sizeId: line.size.id,
@@ -535,7 +564,6 @@ export function subscribeToCustomerChanges(
   const connectedChannels = new Set<string>();
   const channels: RealtimeChannel[] = [
     "orders",
-    "payments",
     "rewards_accounts",
     "vouchers",
     "notifications",

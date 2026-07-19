@@ -12,6 +12,7 @@ import {
   loadMenu,
   MenuItem,
   QueueOrder,
+  sendStaffMagicLink,
   signInStaff,
   signOutCustomer,
   StaffProfile,
@@ -54,6 +55,7 @@ export function SupabaseStaffPortal() {
 
 function StaffAccess() {
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +66,18 @@ function StaffAccess() {
         String(form.get("email") || ""),
         String(form.get("password") || ""),
       );
+    } catch (error) {
+      setMessage(getMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function sendMagicLink() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await sendStaffMagicLink(email);
+      setMessage("Check your email for a secure Joy Corner sign-in link.");
     } catch (error) {
       setMessage(getMessage(error));
     } finally {
@@ -83,7 +97,13 @@ function StaffAccess() {
         <form className="customer-order-form" onSubmit={submit}>
           <label>
             Email
-            <input name="email" required type="email" />
+            <input
+              name="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
           </label>
           <label>
             Password
@@ -91,6 +111,14 @@ function StaffAccess() {
           </label>
           <button disabled={busy} type="submit">
             {busy ? "Signing in…" : "Sign in"}
+          </button>
+          <button
+            className="button-secondary"
+            disabled={busy || !email.trim()}
+            onClick={sendMagicLink}
+            type="button"
+          >
+            Email me a secure sign-in link
           </button>
         </form>
         {message ? <p role="alert">{message}</p> : null}
@@ -132,10 +160,10 @@ function StaffWorkspace({ user }: { user: User }) {
         nextProfile.role === "owner" || nextProfile.role === "manager"
           ? "overview"
           : nextProfile.role === "barista"
-          ? "kitchen"
-          : nextProfile.role === "waiter"
-            ? "new_order"
-            : "cashier",
+            ? "kitchen"
+            : nextProfile.role === "waiter"
+              ? "new_order"
+              : "cashier",
       );
       setMessage("");
     } catch (error) {
@@ -539,7 +567,9 @@ function Queue({
         ? order.status === "pending_confirmation"
         : order.status === "confirmed";
     if (view === "ready") return order.status === "ready";
-    return !["pending_confirmation", "confirmed", "ready"].includes(order.status);
+    return !["pending_confirmation", "confirmed", "ready"].includes(
+      order.status,
+    );
   });
   return (
     <section className="portal-section">
@@ -582,7 +612,9 @@ function Queue({
                     {statusLabel(order.status)}
                   </span>
                   {variant === "cashier" && order.payment_status ? (
-                    <span className={`payment-badge payment-${order.payment_status}`}>
+                    <span
+                      className={`payment-badge payment-${order.payment_status}`}
+                    >
                       {order.payment_status.replace(/_/g, " ")}
                     </span>
                   ) : null}
@@ -629,21 +661,44 @@ function StaffOverview({
     tab: "overview" | "new_order" | "cashier" | "kitchen" | "customers",
   ) => void;
 }) {
-  const pending = cashier.filter((order) => order.status === "pending_confirmation").length;
-  const unpaid = cashier.filter((order) => order.payment_status !== "paid").length;
+  const pending = cashier.filter(
+    (order) => order.status === "pending_confirmation",
+  ).length;
+  const unpaid = cashier.filter(
+    (order) => order.payment_status !== "paid",
+  ).length;
   const ready = kitchen.filter((order) => order.status === "ready").length;
   return (
     <section className="staff-overview">
       <header>
         <p className="eyebrow">Owner operations</p>
         <h2>Today at Joy Corner</h2>
-        <p>Live operational metrics from the protected cashier and kitchen projections.</p>
+        <p>
+          Live operational metrics from the protected cashier and kitchen
+          projections.
+        </p>
       </header>
       <div className="staff-metric-grid">
-        <button onClick={() => onNavigate("cashier")} type="button"><small>Awaiting confirmation</small><strong>{pending}</strong><span>Open cashier queue</span></button>
-        <button onClick={() => onNavigate("kitchen")} type="button"><small>Kitchen orders</small><strong>{kitchen.length}</strong><span>{ready} ready for pickup</span></button>
-        <button onClick={() => onNavigate("cashier")} type="button"><small>Unpaid current orders</small><strong>{unpaid}</strong><span>Review payments</span></button>
-        <button onClick={() => onNavigate("customers")} type="button"><small>Customer directory</small><strong>{customers}</strong><span>Permission-filtered records</span></button>
+        <button onClick={() => onNavigate("cashier")} type="button">
+          <small>Awaiting confirmation</small>
+          <strong>{pending}</strong>
+          <span>Open cashier queue</span>
+        </button>
+        <button onClick={() => onNavigate("kitchen")} type="button">
+          <small>Kitchen orders</small>
+          <strong>{kitchen.length}</strong>
+          <span>{ready} ready for pickup</span>
+        </button>
+        <button onClick={() => onNavigate("cashier")} type="button">
+          <small>Unpaid current orders</small>
+          <strong>{unpaid}</strong>
+          <span>Review payments</span>
+        </button>
+        <button onClick={() => onNavigate("customers")} type="button">
+          <small>Customer directory</small>
+          <strong>{customers}</strong>
+          <span>Permission-filtered records</span>
+        </button>
       </div>
     </section>
   );
@@ -651,7 +706,10 @@ function StaffOverview({
 
 function elapsedLabel(value: string | undefined, now: number): string {
   if (!value) return "Time unavailable";
-  const elapsedMinutes = Math.max(0, Math.floor((now - new Date(value).getTime()) / 60_000));
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor((now - new Date(value).getTime()) / 60_000),
+  );
   if (elapsedMinutes < 1) return "Just arrived";
   if (elapsedMinutes < 60) return `${elapsedMinutes} min elapsed`;
   const hours = Math.floor(elapsedMinutes / 60);
