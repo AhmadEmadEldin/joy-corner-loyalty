@@ -153,6 +153,69 @@ export function resolveMenuPrice(itemId: string, size: string, itemName = "") {
   };
 }
 
+export function parseLiveMenuSizes(
+  priceText: unknown,
+  menuItemId: string,
+  preferredLabels: string[] = [],
+): MenuSize[] {
+  const prices =
+    cleanValue(priceText)
+      .match(/\d+(?:[.,]\d+)?/g)
+      ?.map((value) => Number(value.replace(",", ".")))
+      .filter((value) => Number.isFinite(value) && value > 0) || [];
+  const fallbackLabels =
+    prices.length === 1
+      ? ["Standard"]
+      : prices.length === 2
+        ? ["Small", "Large"]
+        : prices.length === 3
+          ? ["Small", "Medium", "Large"]
+          : prices.length === 4
+            ? ["Small", "Medium", "Large", "XL"]
+            : prices.map((_, index) => `Size ${index + 1}`);
+  const labels =
+    preferredLabels.length === prices.length ? preferredLabels : fallbackLabels;
+
+  return prices.map((price, index) => {
+    const label = cleanValue(labels[index]) || `Size ${index + 1}`;
+    return {
+      active: true,
+      menuItemId,
+      price,
+      size: label,
+      sizeId: stableId(label) || `size-${index + 1}`,
+      sizeName: label,
+    };
+  });
+}
+
+export function resolveLiveMenuPrice(
+  item: {
+    category: string;
+    itemId: string;
+    itemName?: string;
+    name?: string;
+    sizes: Array<{ price: number; size: string }>;
+    standardSize: string;
+  },
+  requestedSize: string,
+) {
+  const selectedSize = cleanValue(requestedSize);
+  const menuSize =
+    item.sizes.find((entry) => entry.size === selectedSize) ||
+    item.sizes.find((entry) => entry.size === item.standardSize) ||
+    item.sizes[0];
+  if (!menuSize) return null;
+
+  return {
+    category: item.category,
+    itemId: item.itemId,
+    itemName: item.itemName || item.name || "Menu item",
+    price: menuSize.price,
+    size: menuSize.size,
+  };
+}
+
 export function validateNormalizedMenu(
   menu: NormalizedMenuItem[] = normalizedMenu,
 ) {

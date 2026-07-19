@@ -10,7 +10,13 @@ import { google, sheets_v4 } from "googleapis";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { featurePermissions } from "../src/domain";
-import { normalizedMenu, resolveMenuPrice } from "../src/menuRepository";
+import {
+  findNormalizedMenuItem,
+  normalizedMenu,
+  parseLiveMenuSizes,
+  resolveLiveMenuPrice,
+  resolveMenuPrice,
+} from "../src/menuRepository";
 import {
   formatCairoDateTime,
   getCairoBusinessDate,
@@ -576,7 +582,8 @@ function localGoogleCredentialPath_() {
   if (!configuredPath) return "";
 
   const resolvedPath =
-    path.win32.isAbsolute(configuredPath) || path.posix.isAbsolute(configuredPath)
+    path.win32.isAbsolute(configuredPath) ||
+    path.posix.isAbsolute(configuredPath)
       ? configuredPath
       : path.resolve(process.cwd(), configuredPath);
 
@@ -809,10 +816,12 @@ async function writeObjectRow(sheetName: string, record: Payload) {
   }
   const schema = schemaForSheet(sheetName);
   const formulaColumns = new Set(schema?.formulaColumns || []);
-  const editableColumns = new Set([
-    ...(schema?.editableColumns || []),
-    ...(SHEET_HEADERS[sheetName] || []),
-  ].map(normalizeKey_));
+  const editableColumns = new Set(
+    [
+      ...(schema?.editableColumns || []),
+      ...(SHEET_HEADERS[sheetName] || []),
+    ].map(normalizeKey_),
+  );
   await writeDataRow(
     sheetName,
     headers.map((header) => {
@@ -1051,9 +1060,7 @@ async function authorizeAction(
 
   if (
     actor.role === "barista" &&
-    !new Set(["appData", "liveData", "acceptOrder", "pickupOrder"]).has(
-      action,
-    )
+    !new Set(["appData", "liveData", "acceptOrder", "pickupOrder"]).has(action)
   ) {
     throw new ApiError(
       `Barista accounts may only access the dashboard, accept orders, and pick up orders.`,
@@ -1567,16 +1574,36 @@ async function safeSheetObjects_(sheetName: string) {
 }
 
 async function addCustomer(payload: Payload) {
+  const fullName = clean_(payload.fullName);
+  const phone = digits_(payload.phone || payload.phoneWhatsApp);
+  if (fullName.length < 2) {
+    throw new ApiError(
+      "Customer name must contain at least 2 characters.",
+      400,
+    );
+  }
+  if (phone && phone.length < 8) {
+    throw new ApiError("Customer phone number is too short.", 400);
+  }
+
+  const duplicate = await findCustomerByPhoneOrName(phone, "");
+  if (getRowCustomerId_(duplicate)) {
+    throw new ApiError("This customer already exists.", 409, {
+      customerId: getRowCustomerId_(duplicate),
+      customerName: getCustomerName_(duplicate),
+    });
+  }
+
   const customers = await sheetToObjects(SHEETS.customers);
   const nextId = nextIdFromRows_("CUST", customers);
   const now = new Date();
 
   await writeObjectRow(SHEETS.customers, {
     customerId: nextId,
-    fullName: clean_(payload.fullName),
-    customerName: clean_(payload.fullName),
-    phoneWhatsApp: clean_(payload.phone || payload.phoneWhatsApp),
-    phone: clean_(payload.phone || payload.phoneWhatsApp),
+    fullName,
+    customerName: fullName,
+    phoneWhatsApp: phone,
+    phone,
     joinDate: now,
     createdAt: now,
     date: now,
@@ -1773,7 +1800,9 @@ async function addOrder(payload: Payload) {
 
 async function addReceipt(payload: Payload, actor: Actor) {
   await assertReceiptWriteTargets_();
-  const idempotencyKey = clean_(payload.clientRequestId || payload.idempotencyKey);
+  const idempotencyKey = clean_(
+    payload.clientRequestId || payload.idempotencyKey,
+  );
   if (idempotencyKey) {
     const existingReceiptId = await receiptIdForIdempotencyKey_(idempotencyKey);
     if (existingReceiptId) {
@@ -1842,7 +1871,9 @@ async function addReceipt(payload: Payload, actor: Actor) {
     receiptDiscountPercentage,
   );
   const receiptTotal = receiptTotals.receiptTotal;
-  const requestedPaidAmount = number_(payload.amountReceived || payload.paidAmount);
+  const requestedPaidAmount = number_(
+    payload.amountReceived || payload.paidAmount,
+  );
   const paidAmount = deriveReceiptPaidAmount_(
     submittedPaymentStatus,
     requestedPaidAmount,
@@ -2609,16 +2640,28 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     matched.reduce((sum, row) => sum + row.paid, 0),
   );
   const remainingBefore = Math.max(0, total - paidBefore);
-  const paymentMethod = clean_(payload.paymentMethod || payload.method || "Cash");
-  if (paymentMethod.toLowerCase() !== "cash" && amount > remainingBefore) {
-    throw new ApiError("Non-cash payment cannot exceed the remaining total.", 400, {
-      remainingAmount: remainingBefore,
+  if (remainingBefore <= 0) {
+    throw new ApiError("This receipt is already fully paid.", 409, {
+      receiptId: receiptId || orderId,
     });
   }
+  const paymentMethod = clean_(
+    payload.paymentMethod || payload.method || "Cash",
+  );
+  if (paymentMethod.toLowerCase() !== "cash" && amount > remainingBefore) {
+    throw new ApiError(
+      "Non-cash payment cannot exceed the remaining total.",
+      400,
+      {
+        remainingAmount: remainingBefore,
+      },
+    );
+  }
   const amountApplied = Math.min(amount, remainingBefore);
-  const changeAmount = paymentMethod.toLowerCase() === "cash"
-    ? Math.max(0, amount - remainingBefore)
-    : 0;
+  const changeAmount =
+    paymentMethod.toLowerCase() === "cash"
+      ? Math.max(0, amount - remainingBefore)
+      : 0;
 
   let remainingToAllocate = amountApplied;
   for (const [index, row] of matched.entries()) {
@@ -2626,7 +2669,10 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     const allocation =
       index === matched.length - 1
         ? remainingToAllocate
-        : Math.min(rowRemaining, amountApplied * (rowRemaining / remainingBefore));
+        : Math.min(
+            rowRemaining,
+            amountApplied * (rowRemaining / remainingBefore),
+          );
     const paidNow = Math.round(allocation * 100) / 100;
     remainingToAllocate = Math.max(0, remainingToAllocate - paidNow);
     if (paidNow > 0 && notesIndex >= 0) {
@@ -2675,7 +2721,12 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     paidAmount,
     remainingAmount,
     paymentStatus,
-    lastPayment: { amountApplied, amountReceived: amount, changeAmount, paymentMethod },
+    lastPayment: {
+      amountApplied,
+      amountReceived: amount,
+      changeAmount,
+      paymentMethod,
+    },
   });
 
   return success_({
@@ -2749,6 +2800,24 @@ async function generateVoucher(payload: Payload) {
     clean_(payload.favoriteDrink) || getFavoriteDrink_(customer) || "Drink";
   const customerName =
     getCustomerName_(customer) || clean_(payload.customerName);
+  if (!customerId || !customerName) {
+    throw new ApiError(
+      "Choose a valid customer before generating a voucher.",
+      400,
+    );
+  }
+  const existingVouchers = await safeSheetObjects_(SHEETS.generatedVouchers);
+  const existingVoucher = existingVouchers.find(
+    (voucher) =>
+      clean_(voucher.customerId) === customerId &&
+      clean_(voucher.redeemStatus || voucher.status).toLowerCase() !==
+        "redeemed",
+  );
+  if (existingVoucher) {
+    throw new ApiError("This customer already has an active voucher.", 409, {
+      voucherCode: clean_(existingVoucher.voucherCode || existingVoucher.code),
+    });
+  }
   const voucherCode = createVoucherCode_(customerId);
 
   await writeObjectRow(SHEETS.generatedVouchers, {
@@ -2791,6 +2860,11 @@ async function redeemVoucher(payload: Payload) {
 
   for (let row = 1; row < values.length; row += 1) {
     if (clean_(values[row]?.[codeIndex]) === voucherCode) {
+      if (clean_(values[row]?.[statusIndex]).toLowerCase() === "redeemed") {
+        throw new ApiError("This voucher has already been redeemed.", 409, {
+          voucherCode,
+        });
+      }
       await setCell(SHEETS.generatedVouchers, row + 1, statusIndex, "Redeemed");
       await appendRedemption(values[row] || [], header, payload);
       return success_({ data: await buildAppData() });
@@ -2854,7 +2928,8 @@ async function archiveBusinessDay_(options: ArchiveBusinessDayOptions) {
   const data = await buildAppData();
   const businessDate = options.businessDate;
   const orders = (data.orders || []).filter(
-    (order) => orderDateKey_(order) === businessDate && !isArchivedOrder_(order),
+    (order) =>
+      orderDateKey_(order) === businessDate && !isArchivedOrder_(order),
   );
   const payments = (data.payments || []).filter(
     (payment) => paymentDateKey_(payment) === businessDate,
@@ -2881,39 +2956,56 @@ async function archiveBusinessDay_(options: ArchiveBusinessDayOptions) {
   }
 
   const summary = buildDaySummary_(businessDate, orders, payments, redemptions);
-  const archiveBatchId = clean_(existingFile?.archiveBatchId) || stableUniqueId_("archive");
-  const dailyFileId = clean_(existingFile?.dailyFileId) || stableUniqueId_("dailyPdf");
+  const archiveBatchId =
+    clean_(existingFile?.archiveBatchId) || stableUniqueId_("archive");
+  const dailyFileId =
+    clean_(existingFile?.dailyFileId) || stableUniqueId_("dailyPdf");
   const generatedAt = new Date();
-  const pdf = buildDailyReceiptsPdf_(businessDate, orders, summary, options.triggeredBy);
+  const pdf = buildDailyReceiptsPdf_(
+    businessDate,
+    orders,
+    summary,
+    options.triggeredBy,
+  );
   const storage = await uploadDailyReceiptsPdf_(businessDate, pdf);
 
-  await upsertSheetObject_(SHEETS.dailyReceiptFiles, "businessDate", businessDate, {
-    archiveBatchId,
-    archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
+  await upsertSheetObject_(
+    SHEETS.dailyReceiptFiles,
+    "businessDate",
     businessDate,
-    dailyFileId,
-    downloadUrl: storage.downloadUrl,
-    fileName: storage.fileName,
-    generatedAt,
-    generatedByName: options.triggeredBy.displayName || options.triggeredBy.email,
-    generatedByUid: options.triggeredBy.uid,
-    generationType: options.triggerType,
-    notes: "Generated from structured Orders and Order Items records.",
-    orderItemCount: orders.reduce((sum, order) => sum + number_(order.qty), 0),
-    receiptCount: summary.receiptCount,
-    storagePath: storage.path,
-    storageProvider: "Firebase Storage",
-    totalPaid: summary.totalPaid,
-    totalRemaining: summary.totalUnpaid,
-    totalSales: summary.totalSales,
-    version: number_(existingFile?.version) + 1 || 1,
-  });
+    {
+      archiveBatchId,
+      archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
+      businessDate,
+      dailyFileId,
+      downloadUrl: storage.downloadUrl,
+      fileName: storage.fileName,
+      generatedAt,
+      generatedByName:
+        options.triggeredBy.displayName || options.triggeredBy.email,
+      generatedByUid: options.triggeredBy.uid,
+      generationType: options.triggerType,
+      notes: "Generated from structured Orders and Order Items records.",
+      orderItemCount: orders.reduce(
+        (sum, order) => sum + number_(order.qty),
+        0,
+      ),
+      receiptCount: summary.receiptCount,
+      storagePath: storage.path,
+      storageProvider: "Firebase Storage",
+      totalPaid: summary.totalPaid,
+      totalRemaining: summary.totalUnpaid,
+      totalSales: summary.totalSales,
+      version: number_(existingFile?.version) + 1 || 1,
+    },
+  );
   await upsertSheetObject_(SHEETS.dayHistory, "dateKey", businessDate, {
     ...summary,
     archiveBatchId,
     archiveTrigger: options.triggerType,
     archivedAt: generatedAt,
-    archivedByName: options.triggeredBy.displayName || options.triggeredBy.email,
+    archivedByName:
+      options.triggeredBy.displayName || options.triggeredBy.email,
     archivedByUid: options.triggeredBy.uid,
     businessDate,
     dailyPdfId: dailyFileId,
@@ -2978,12 +3070,14 @@ function buildDailyReceiptsPdf_(
     80,
   );
   autoTable(pdf, {
-    body: [[
-      summary.receiptCount,
-      moneyText_(summary.totalSales),
-      moneyText_(summary.totalPaid),
-      moneyText_(summary.totalUnpaid),
-    ]],
+    body: [
+      [
+        summary.receiptCount,
+        moneyText_(summary.totalSales),
+        moneyText_(summary.totalPaid),
+        moneyText_(summary.totalUnpaid),
+      ],
+    ],
     head: [["Receipts", "Total sales", "Total paid", "Remaining"]],
     startY: 94,
     styles: { fontSize: 8 },
@@ -3367,7 +3461,9 @@ async function previewSheetsMigration_() {
         const headers = (values[0] || []).map(clean_).filter(Boolean);
         const normalized = headers.map(normalizeKey_);
         const duplicateHeaders = uniqueStrings_(
-          normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+          normalized.filter(
+            (header, index) => header && normalized.indexOf(header) !== index,
+          ),
         );
         const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
           (header) => !normalized.includes(normalizeKey_(header)),
@@ -3419,9 +3515,19 @@ async function ensureNormalizedWorkbook_() {
 
 async function seedBusinessSettings_() {
   const defaults: Array<[string, string, string, string]> = [
-    ["schemaVersion", "2026-07-normalized", "string", "Normalized workbook schema version"],
+    [
+      "schemaVersion",
+      "2026-07-normalized",
+      "string",
+      "Normalized workbook schema version",
+    ],
     ["business_timezone", "Africa/Cairo", "string", "Business timezone"],
-    ["businessTimeZone", "Africa/Cairo", "string", "Canonical business timezone"],
+    [
+      "businessTimeZone",
+      "Africa/Cairo",
+      "string",
+      "Canonical business timezone",
+    ],
     ["closing_time", "23:59", "time", "Default closing time"],
     ["currency", "EGP", "string", "Receipt currency"],
     ["loyalty_drinks_required", "7", "number", "Paid drinks per reward"],
@@ -3433,7 +3539,12 @@ async function seedBusinessSettings_() {
     ["paymentsTab", SHEETS.payments, "string", "Payments tab name"],
     ["customersTab", SHEETS.customers, "string", "Customers tab name"],
     ["dayHistoryTab", SHEETS.dayHistory, "string", "Day History tab name"],
-    ["dailyReceiptFilesTab", SHEETS.dailyReceiptFiles, "string", "Daily Receipt Files tab name"],
+    [
+      "dailyReceiptFilesTab",
+      SHEETS.dailyReceiptFiles,
+      "string",
+      "Daily Receipt Files tab name",
+    ],
   ];
   for (const [settingKey, settingValue, valueType, description] of defaults) {
     await upsertSheetObject_(
@@ -3871,30 +3982,35 @@ async function mirrorActiveOrder_(order: Row) {
   if (!orderId) return;
   try {
     const safeOrder = JSON.parse(JSON.stringify(order)) as Row;
-    await getFirestore().collection("activeOrders").doc(orderId).set(
-      {
-        ...safeOrder,
-        active:
-          order.active !== false &&
-          !["picked up", "cancelled", "canceled"].includes(
-            clean_(order.orderStatus).toLowerCase(),
-          ),
-        orderId,
-        sheetSyncStatus: "synced",
-        updatedAt: FieldValue.serverTimestamp(),
-        ...(clean_(order.orderStatus) === "Accepted"
-          ? { acceptedAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(clean_(order.orderStatus) === "Picked Up"
-          ? { pickedUpAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(clean_(order.orderStatus) === "Archived"
-          ? { archivedAt: FieldValue.serverTimestamp() }
-          : {}),
-        ...(order.createdAt ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      },
-      { merge: true },
-    );
+    await getFirestore()
+      .collection("activeOrders")
+      .doc(orderId)
+      .set(
+        {
+          ...safeOrder,
+          active:
+            order.active !== false &&
+            !["picked up", "cancelled", "canceled"].includes(
+              clean_(order.orderStatus).toLowerCase(),
+            ),
+          orderId,
+          sheetSyncStatus: "synced",
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(clean_(order.orderStatus) === "Accepted"
+            ? { acceptedAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(clean_(order.orderStatus) === "Picked Up"
+            ? { pickedUpAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(clean_(order.orderStatus) === "Archived"
+            ? { archivedAt: FieldValue.serverTimestamp() }
+            : {}),
+          ...(order.createdAt
+            ? {}
+            : { createdAt: FieldValue.serverTimestamp() }),
+        },
+        { merge: true },
+      );
   } catch (error) {
     await recordSyncFailure_("firestore.activeOrders", orderId, error);
     safeServerError_("Firestore active order mirror failed", error);
@@ -3963,12 +4079,22 @@ async function archiveTodayOrders_(
     if (archivedAtIndex >= 0)
       await setCell(SHEETS.orders, index + 1, archivedAtIndex, resetAt);
     if (archiveBatchIdIndex >= 0)
-      await setCell(SHEETS.orders, index + 1, archiveBatchIdIndex, archiveBatchId);
+      await setCell(
+        SHEETS.orders,
+        index + 1,
+        archiveBatchIdIndex,
+        archiveBatchId,
+      );
     if (dailyPdfIdIndex >= 0)
       await setCell(SHEETS.orders, index + 1, dailyPdfIdIndex, dailyPdfId);
     const orderIdIndex = headers.indexOf("orderId");
     const orderId = orderIdIndex >= 0 ? clean_(row[orderIdIndex]) : "";
-    if (orderId) await mirrorActiveOrder_({ active: false, orderId, orderStatus: "Archived" });
+    if (orderId)
+      await mirrorActiveOrder_({
+        active: false,
+        orderId,
+        orderStatus: "Archived",
+      });
     if (notesIndex >= 0) {
       const currentNotes = clean_(row[notesIndex]);
       const archiveNote = `End day reset archived at ${resetAt} by ${resetBy}`;
@@ -4050,7 +4176,7 @@ async function buildAppData() {
   };
 }
 
-async function menuForApp_() {
+async function menuForApp_(): Promise<Row[]> {
   let sheetMenu: Row[] = [];
   try {
     sheetMenu = (await sheetToObjects(SHEETS.menu)).map(enrichMenuItem_);
@@ -4058,48 +4184,44 @@ async function menuForApp_() {
     sheetMenu = [];
   }
 
-  const byId = new Map(
-    normalizedMenu.map((item) => [item.itemId, { ...item } as Row]),
-  );
+  if (!sheetMenu.length) {
+    return normalizedMenu.filter((item) => item.active) as unknown as Row[];
+  }
+
+  const liveMenu: Row[] = [];
 
   for (const sheetItem of sheetMenu) {
     const itemId = getRowItemId_(sheetItem);
     if (!itemId) continue;
 
-    const existing = byId.get(itemId);
     const active = activeValue_(sheetItem.active);
     const priceText = clean_(sheetItem.priceText || sheetItem.price);
-    if (existing) {
-      byId.set(itemId, {
-        ...existing,
-        active,
-        category: clean_(sheetItem.category) || existing.category,
-        itemName:
-          clean_(sheetItem.itemName || sheetItem.name) || existing.itemName,
-        name: clean_(sheetItem.itemName || sheetItem.name) || existing.name,
-        priceText: priceText || existing.priceText,
-        suggestedPrice: String(
-          parsePrice_(priceText) || existing.suggestedPrice || "",
-        ),
-      });
-      continue;
-    }
-
     const itemName = clean_(sheetItem.itemName || sheetItem.name);
     const category = clean_(sheetItem.category || "Menu");
-    const price = parsePrice_(priceText);
-    if (!itemName || !price) continue;
+    const template = findNormalizedMenuItem("", itemName);
+    const sizes = parseLiveMenuSizes(
+      priceText,
+      itemId,
+      template?.sizes.map((size) => size.size) || [],
+    );
+    if (!itemName || !sizes.length) continue;
+    const standardSize =
+      sizes.find((size) => size.size.toLowerCase() === "medium")?.size ||
+      sizes[0]!.size;
+    const suggestedPrice =
+      sizes.find((size) => size.size === standardSize)?.price ||
+      sizes[0]!.price;
 
-    byId.set(itemId, {
+    liveMenu.push({
       active,
       availability: active ? "available" : "unavailable",
       availableExtras: [],
       category,
       categoryId: category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       currency: "EGP",
-      displayOrder: byId.size + 10000,
-      flavors: [],
-      ingredients: [],
+      displayOrder: liveMenu.length,
+      flavors: template?.flavors || [],
+      ingredients: template?.ingredients || [],
       itemId,
       itemName,
       name: itemName,
@@ -4108,23 +4230,14 @@ async function menuForApp_() {
           ? "kitchen"
           : "barista",
       priceText,
-      sizes: [
-        {
-          active: true,
-          menuItemId: itemId,
-          price,
-          size: "Standard",
-          sizeId: "standard",
-          sizeName: "Standard",
-        },
-      ],
+      sizes,
       soldOut: !active,
-      standardSize: "Standard",
-      suggestedPrice: String(price),
+      standardSize,
+      suggestedPrice: String(suggestedPrice),
     });
   }
 
-  return Array.from(byId.values()).filter((item) => activeValue_(item.active));
+  return liveMenu.filter((item) => activeValue_(item.active));
 }
 
 async function searchCustomers(query: string) {
@@ -4262,10 +4375,18 @@ async function validateSheetSchema() {
     spreadsheetId: SPREADSHEET_ID,
   });
   const existing = new Set(
-    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+    (metadata.data.sheets || []).map((sheet) =>
+      clean_(sheet.properties?.title),
+    ),
   );
   const legacyBySheet: Record<string, string[]> = {
-    [SHEETS.orders]: ["receiptSerial", "item", "qty", "unitPrice", "outstandingAmount"],
+    [SHEETS.orders]: [
+      "receiptSerial",
+      "item",
+      "qty",
+      "unitPrice",
+      "outstandingAmount",
+    ],
     [SHEETS.orderItems]: ["notes"],
     [SHEETS.payments]: ["paymentDate", "method", "amount", "collectedBy"],
   };
@@ -4292,7 +4413,8 @@ async function validateSheetSchema() {
       missingRequiredHeaders,
       duplicateHeaders: uniqueStrings_(duplicateHeaders),
       legacyHeaders,
-      valid: exists && !missingRequiredHeaders.length && !duplicateHeaders.length,
+      valid:
+        exists && !missingRequiredHeaders.length && !duplicateHeaders.length,
     });
   }
   return success_({ spreadsheetId: maskId_(SPREADSHEET_ID), sheets: report });
@@ -4305,7 +4427,9 @@ async function diagnoseGoogleSheet() {
     spreadsheetId: SPREADSHEET_ID,
   });
   const titles = new Set(
-    (metadata.data.sheets || []).map((sheet) => clean_(sheet.properties?.title)),
+    (metadata.data.sheets || []).map((sheet) =>
+      clean_(sheet.properties?.title),
+    ),
   );
   const sheetNames = [
     SHEETS.orders,
@@ -4323,18 +4447,29 @@ async function diagnoseGoogleSheet() {
       const headers = (values[0] || []).map(clean_).filter(Boolean);
       const normalized = headers.map(normalizeKey_);
       const duplicateHeaders = uniqueStrings_(
-        normalized.filter((header, index) => header && normalized.indexOf(header) !== index),
+        normalized.filter(
+          (header, index) => header && normalized.indexOf(header) !== index,
+        ),
       );
       const missingHeaders = (SHEET_HEADERS[sheetName] || []).filter(
         (header) => !normalized.includes(normalizeKey_(header)),
       );
-      return { canRead: exists, duplicateHeaders, exists, headers, missingHeaders, name: sheetName };
+      return {
+        canRead: exists,
+        duplicateHeaders,
+        exists,
+        headers,
+        missingHeaders,
+        name: sheetName,
+      };
     }),
   );
   return success_({
     calculatedBusinessDate: getCairoBusinessDate(),
     runtimeProjectId:
-      process.env.JOY_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "",
+      process.env.JOY_FIREBASE_PROJECT_ID ||
+      process.env.VITE_FIREBASE_PROJECT_ID ||
+      "",
     runtimeCairoNow: formatCairoDateTime(new Date()),
     runtimeUtcNow: new Date().toISOString(),
     spreadsheetFound: true,
@@ -5094,6 +5229,22 @@ function resolveMenuSelection_(payload: Payload, fallbackItem: Row) {
   const requestedSize = clean_(
     payload.size || payload.menuSize || fallbackItem.standardSize,
   );
+  const liveSizes = Array.isArray(fallbackItem.sizes) ? fallbackItem.sizes : [];
+  const liveResolved = liveSizes.length
+    ? resolveLiveMenuPrice(
+        {
+          category: clean_(fallbackItem.category),
+          itemId,
+          itemName,
+          name: itemName,
+          sizes: liveSizes,
+          standardSize: clean_(fallbackItem.standardSize || requestedSize),
+        },
+        requestedSize,
+      )
+    : null;
+  if (liveResolved) return liveResolved;
+
   const resolved = resolveMenuPrice(itemId, requestedSize, itemName);
 
   if (resolved) return resolved;

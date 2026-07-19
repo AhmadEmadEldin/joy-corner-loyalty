@@ -205,6 +205,123 @@ nav {
   margin: -6px 0 18px;
 }
 
+.mobile-menu-trigger,
+.mobile-navigation-layer {
+  display: none;
+}
+
+.mobile-navigation-layer {
+  inset: 0;
+  position: fixed;
+  z-index: 100;
+}
+
+.navigation-overlay {
+  background: rgba(5, 4, 3, 0.72);
+  border-radius: 0;
+  inset: 0;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.mobile-navigation-drawer {
+  background: linear-gradient(180deg, #21170f, #0e0a07 74%);
+  border-right: 1px solid rgba(217, 173, 99, 0.55);
+  box-shadow: 24px 0 70px rgba(0, 0, 0, 0.55);
+  color: var(--cream);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: 100%;
+  left: 0;
+  max-width: min(88vw, 360px);
+  overflow-y: auto;
+  padding: max(18px, env(safe-area-inset-top)) 16px
+    max(18px, env(safe-area-inset-bottom));
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.drawer-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(217, 173, 99, 0.28);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 16px;
+}
+
+.drawer-header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.drawer-header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-header span {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.drawer-close {
+  background: rgba(255, 246, 229, 0.1);
+  color: var(--cream);
+  flex: 0 0 44px;
+  font-size: 28px;
+  padding: 0;
+  width: 44px;
+}
+
+.drawer-nav {
+  align-items: stretch;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  overflow: visible;
+  padding: 0;
+}
+
+.drawer-link {
+  background: rgba(255, 246, 229, 0.06);
+  color: var(--cream);
+  gap: 12px;
+  justify-content: flex-start;
+  min-height: 50px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.drawer-link.active {
+  background: linear-gradient(135deg, var(--gold), #b88336);
+  color: #17100b;
+}
+
+.drawer-link .tab-icon {
+  flex: 0 0 auto;
+}
+
+.drawer-signout {
+  background: rgba(255, 246, 229, 0.1);
+  color: var(--cream);
+  width: 100%;
+}
+
 .account-chip {
   align-items: center;
   backdrop-filter: blur(18px) saturate(1.25);
@@ -1372,7 +1489,8 @@ tbody tr:hover {
 
 .orders-receipt::before,
 .barista-receipt::before {
-  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px auto no-repeat;
+  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px
+    auto no-repeat;
   content: "";
   inset: 0;
   filter: grayscale(1) contrast(3) brightness(0);
@@ -1851,9 +1969,9 @@ tbody tr:hover {
   }
 
   .topbar {
-    align-items: stretch;
+    align-items: center;
     gap: 12px;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .toolbar-actions {
@@ -1864,17 +1982,38 @@ tbody tr:hover {
     flex: 1 1 140px;
   }
 
-  nav {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  nav::-webkit-scrollbar {
+  .section-nav,
+  .topbar > .account-chip {
     display: none;
   }
 
-  .tab-button {
-    min-width: 112px;
+  .mobile-menu-trigger {
+    align-items: center;
+    background: rgba(255, 246, 229, 0.1);
+    border: 1px solid rgba(255, 246, 229, 0.2);
+    color: var(--cream);
+    display: inline-flex;
+    gap: 9px;
+    justify-self: end;
+    min-width: 92px;
+  }
+
+  .mobile-navigation-layer {
+    display: block;
+  }
+
+  .hamburger-lines {
+    display: grid;
+    gap: 4px;
+    width: 20px;
+  }
+
+  .hamburger-lines span {
+    background: currentColor;
+    border-radius: 2px;
+    display: block;
+    height: 2px;
+    width: 100%;
   }
 
   .account-chip {
@@ -2021,7 +2160,7 @@ tbody tr:hover {
     font-size: 17px;
   }
 
-  nav {
+  .section-nav {
     backdrop-filter: blur(18px) saturate(1.35);
     background:
       radial-gradient(
@@ -2037,7 +2176,7 @@ tbody tr:hover {
       0 0 26px rgba(217, 173, 99, 0.18),
       inset 0 1px 0 rgba(255, 255, 255, 0.11);
     bottom: 0;
-    display: flex;
+    display: none;
     gap: 6px;
     left: 0;
     overflow-x: auto;
@@ -2048,7 +2187,7 @@ tbody tr:hover {
     z-index: 30;
   }
 
-  nav::-webkit-scrollbar {
+  .section-nav::-webkit-scrollbar {
     display: none;
   }
 
@@ -2074,7 +2213,7 @@ tbody tr:hover {
   }
 
   main {
-    padding-bottom: 96px;
+    padding-bottom: 20px;
   }
 
   .account-chip {

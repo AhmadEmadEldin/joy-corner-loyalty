@@ -21,7 +21,12 @@ import {
   watchActiveOrders,
   watchStaffAuth,
 } from "./firebase";
-import { normalizedMenu, resolveMenuPrice } from "./menuRepository";
+import {
+  normalizedMenu,
+  resolveLiveMenuPrice,
+  resolveMenuPrice,
+} from "./menuRepository";
+import { MobileNavigation } from "./MobileNavigation";
 import {
   calculateReceipt,
   calculateReceiptLine,
@@ -592,11 +597,9 @@ export function App() {
       return null;
     }
 
-    const resolvedPrice = resolveMenuPrice(
-      itemId,
-      selectedSize,
-      menuName(selectedItem),
-    );
+    const resolvedPrice =
+      resolvePriceForMenuRow(selectedItem, selectedSize) ||
+      resolveMenuPrice(itemId, selectedSize, menuName(selectedItem));
     const unitPrice =
       resolvedPrice?.price ||
       numberValue(form.elements.namedItem("unitPrice")) ||
@@ -1024,6 +1027,15 @@ export function App() {
               Sign out
             </button>
           </div>
+          <MobileNavigation
+            activeTab={activeTab}
+            displayName={staffProfile.displayName || staffProfile.email}
+            onSelect={(id) => setActiveTab(id as TabId)}
+            onSignOut={() => void handleSignOut()}
+            renderIcon={(id) => <TabIcon id={id as TabId} />}
+            role={roleLabel(staffProfile.role)}
+            tabs={visibleTabs.map((tab) => [tab[0]!, tab[1]!] as const)}
+          />
         </div>
       </header>
 
@@ -2581,11 +2593,13 @@ function OrdersView({
         stringValue(selectedItem.standardSize) ||
         sizes[0]?.size ||
         "Standard";
-      const resolvedPrice = resolveMenuPrice(
-        stringValue(selectedItem.itemId),
-        nextSize,
-        menuName(selectedItem),
-      );
+      const resolvedPrice =
+        resolvePriceForMenuRow(selectedItem, nextSize) ||
+        resolveMenuPrice(
+          stringValue(selectedItem.itemId),
+          nextSize,
+          menuName(selectedItem),
+        );
       const price =
         resolvedPrice?.price ||
         sizes.find((size) => size.size === nextSize)?.price ||
@@ -3663,7 +3677,9 @@ export function OrderTicket({
           </div>
           <div className="actions">
             <PreparationStatusBadge status={preparationStatus} />
-            {view !== "barista" && <PaymentStatusBadge status={paymentStatus} />}
+            {view !== "barista" && (
+              <PaymentStatusBadge status={paymentStatus} />
+            )}
           </div>
         </div>
 
@@ -3787,7 +3803,9 @@ export function OrderTicket({
               className="pickup"
               disabled={
                 cancelled ||
-                !["Accepted", "Preparing", "Ready"].includes(preparationStatus) ||
+                !["Accepted", "Preparing", "Ready"].includes(
+                  preparationStatus,
+                ) ||
                 !canPickup ||
                 Boolean(pendingAction)
               }
@@ -3911,7 +3929,6 @@ function nextPreparationAction(status: PreparationStatus) {
   }
   return null;
 }
-
 
 function StockCard({ item }: { item: Row }) {
   const qtySold = numberValue(item.qtySold);
@@ -5283,6 +5300,20 @@ function menuSizesFor(row: Row) {
       size: stringValue(row.standardSize) || "Standard",
     },
   ].filter((size) => size.price > 0);
+}
+
+function resolvePriceForMenuRow(row: Row, requestedSize: string) {
+  return resolveLiveMenuPrice(
+    {
+      category: stringValue(row.category),
+      itemId: stringValue(row.itemId),
+      itemName: menuName(row),
+      name: menuName(row),
+      sizes: menuSizesFor(row),
+      standardSize: stringValue(row.standardSize) || "Standard",
+    },
+    requestedSize,
+  );
 }
 
 function categoryColor(category: string) {
