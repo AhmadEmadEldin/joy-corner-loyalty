@@ -13,6 +13,9 @@ describe("permissions", () => {
   });
 
   it("maps protected actions to feature permissions", () => {
+    expect(actionFeaturePermissions.appData).toBe("orders.view");
+    expect(actionFeaturePermissions.getAppData).toBe("orders.view");
+    expect(actionFeaturePermissions.liveData).toBe("orders.view");
     expect(actionFeaturePermissions.resetDay).toBe("day.reset");
     expect(actionFeaturePermissions.upsertStaff).toBe("staff.create");
     expect(actionFeaturePermissions.setStaffPermissions).toBe(
@@ -66,6 +69,7 @@ describe("permissions", () => {
     expect(permissionsForRole("cashier").has("customers.history")).toBe(true);
     expect(permissionsForRole("cashier").has("customers.delete")).toBe(false);
     expect(permissionsForRole("waiter").has("orders.create")).toBe(true);
+    expect(permissionsForRole("waiter").has("customers.create")).toBe(true);
     expect(permissionsForRole("waiter").has("payments.create")).toBe(false);
     expect(permissionsForRole("barista").has("orders.ready")).toBe(true);
     expect(permissionsForRole("barista").has("orders.accept")).toBe(true);
