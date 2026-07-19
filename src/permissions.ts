@@ -8,7 +8,10 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   addOrder: "orders.create",
   addPayment: "payments.create",
   addReceipt: "orders.create",
-  appData: "dashboard.view",
+  // Every active staff role needs the role-filtered bootstrap payload. Waiters
+  // intentionally have no dashboard permission, but still need Customers,
+  // Orders, and Menu data.
+  appData: "orders.view",
   archiveMenuCategory: "menu.delete",
   archiveMenuItem: "menu.delete",
   archiveMenuSize: "menu.delete",
@@ -24,10 +27,10 @@ export const actionFeaturePermissions: Record<string, FeaturePermission> = {
   diagnoseGoogleSheet: "settings.manage",
   exportData: "reports.export",
   generateVoucher: "vouchers.generate",
-  getAppData: "dashboard.view",
+  getAppData: "orders.view",
   historyDays: "history.view",
   inspectSheetsWorkbook: "settings.manage",
-  liveData: "dashboard.view",
+  liveData: "orders.view",
   markReceiptAccepted: "orders.accept",
   markReceiptDone: "orders.pickedup",
   markReceiptPreparing: "orders.update",
@@ -115,6 +118,7 @@ export const roleFeaturePermissions: Record<StaffRole, Set<FeaturePermission>> =
   waiter: new Set([
     "menu.view",
     "customers.view",
+    "customers.create",
     "customers.search",
     "customers.history",
     "orders.view",

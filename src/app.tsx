@@ -764,8 +764,12 @@ export function App() {
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    await callAndReload("addCustomer", formObject(form), "Customer added.");
-    form.reset();
+    const saved = await callAndReload(
+      "addCustomer",
+      formObject(form),
+      "Customer added.",
+    );
+    if (saved) form.reset();
   }
 
   async function removeCustomer(row: Row) {
