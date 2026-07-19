@@ -101,6 +101,22 @@ const SHEET_ALIASES: Record<string, string[]> = {
   [SHEETS.schemaStatus]: ["Schema Status"],
 };
 
+Object.assign(SHEET_ALIASES, {
+  [SHEETS.businessSettings]: ["Settings"],
+  [SHEETS.customerSummary]: ["Customers"],
+  [SHEETS.generatedVouchers]: ["Loyalty"],
+  [SHEETS.rewardRedemptions]: ["Loyalty"],
+  [SHEETS.loyaltyWinners]: ["Loyalty"],
+  [SHEETS.rewards]: ["Loyalty"],
+  [SHEETS.unpaidTracker]: ["Customers"],
+  [SHEETS.lists]: ["Settings"],
+  [SHEETS.dayHistory]: ["System Log"],
+  [SHEETS.dailyReceiptFiles]: ["System Log"],
+  [SHEETS.auditLog]: ["System Log"],
+  [SHEETS.syncFailures]: ["System Log"],
+  [SHEETS.schemaStatus]: ["Settings"],
+});
+
 const DAY_HISTORY_HEADERS = [
   "businessDate",
   "dateKey",
@@ -376,6 +392,29 @@ const SHEET_HEADERS: Record<string, string[]> = {
   ],
 };
 
+Object.assign(SHEET_HEADERS, {
+  [SHEETS.dashboard]: NORMALIZED_SHEET_HEADERS.Dashboard,
+  [SHEETS.businessSettings]: NORMALIZED_SHEET_HEADERS.Settings,
+  [SHEETS.customerSummary]: NORMALIZED_SHEET_HEADERS.Customers,
+  [SHEETS.customers]: NORMALIZED_SHEET_HEADERS.Customers,
+  [SHEETS.generatedVouchers]: NORMALIZED_SHEET_HEADERS.Loyalty,
+  [SHEETS.loyaltyWinners]: NORMALIZED_SHEET_HEADERS.Loyalty,
+  [SHEETS.rewards]: NORMALIZED_SHEET_HEADERS.Loyalty,
+  [SHEETS.rewardRedemptions]: NORMALIZED_SHEET_HEADERS.Loyalty,
+  [SHEETS.menu]: NORMALIZED_SHEET_HEADERS.Menu,
+  [SHEETS.orders]: NORMALIZED_SHEET_HEADERS.Orders,
+  [SHEETS.orderItems]: NORMALIZED_SHEET_HEADERS["Order Items"],
+  [SHEETS.payments]: NORMALIZED_SHEET_HEADERS.Payments,
+  [SHEETS.staff]: NORMALIZED_SHEET_HEADERS.Staff,
+  [SHEETS.unpaidTracker]: NORMALIZED_SHEET_HEADERS.Customers,
+  [SHEETS.lists]: NORMALIZED_SHEET_HEADERS.Settings,
+  [SHEETS.dayHistory]: NORMALIZED_SHEET_HEADERS["System Log"],
+  [SHEETS.dailyReceiptFiles]: NORMALIZED_SHEET_HEADERS["System Log"],
+  [SHEETS.auditLog]: NORMALIZED_SHEET_HEADERS["System Log"],
+  [SHEETS.syncFailures]: NORMALIZED_SHEET_HEADERS["System Log"],
+  [SHEETS.schemaStatus]: NORMALIZED_SHEET_HEADERS.Settings,
+});
+
 const SHEET_TAB_COLORS: Record<
   string,
   { blue: number; green: number; red: number }
@@ -627,11 +666,13 @@ function columnLetter(index: number) {
 async function getSheetValues(sheetName: string) {
   const sheets = await getSheetsClient();
   const resolvedSheetName = await resolveSheetName(sheetName);
+  const configuredWidth = Math.max(1, SHEET_HEADERS[sheetName]?.length || 26);
+  const lastColumn = columnLetter(configuredWidth - 1);
   let response;
 
   try {
     response = await sheets.spreadsheets.values.get({
-      range: `${quotedSheet(resolvedSheetName)}!A:ZZ`,
+      range: `${quotedSheet(resolvedSheetName)}!A:${lastColumn}`,
       spreadsheetId: SPREADSHEET_ID,
       valueRenderOption: "FORMATTED_VALUE",
     });
@@ -711,7 +752,7 @@ async function appendRow(sheetName: string, rowValues: unknown[]) {
   const resolvedSheetName = await resolveSheetName(sheetName);
   await sheets.spreadsheets.values.append({
     insertDataOption: "INSERT_ROWS",
-    range: `${quotedSheet(resolvedSheetName)}!A:ZZ`,
+    range: `${quotedSheet(resolvedSheetName)}!A:${columnLetter(Math.max(0, rowValues.length - 1))}`,
     requestBody: { values: [rowValues.map(valueForSheet_)] },
     spreadsheetId: SPREADSHEET_ID,
     valueInputOption: "USER_ENTERED",
@@ -1198,14 +1239,23 @@ async function staffProfileFromFirestore(uid: string, email: string) {
 }
 
 async function ownerOverview(actor: Actor) {
+  const systemLog = await safeSheetObjects_(SHEETS.auditLog);
   return success_({
     data: {
-      auditLogs: (await safeSheetObjects_(SHEETS.auditLog))
+      auditLogs: systemLog
+        .filter((row) => clean_(row.eventType) === "Audit")
+        .map((row) => ({
+          ...row,
+          auditId: row.logId,
+          timestamp: row.createdAt,
+        }))
         .reverse()
         .slice(0, 100),
       permissionCatalog: featurePermissions,
       staff: await staffDirectory_(),
-      syncFailures: (await safeSheetObjects_(SHEETS.syncFailures))
+      syncFailures: systemLog
+        .filter((row) => clean_(row.eventType) === "Sync Failure")
+        .map((row) => ({ ...row, syncFailureId: row.logId }))
         .reverse()
         .slice(0, 100),
       systemHealth: {
@@ -1924,14 +1974,21 @@ async function addReceipt(payload: Payload, actor: Actor) {
     orderItemRows.push({
       orderItemId,
       orderId,
+      clientRequestId: idempotencyKey
+        ? `${idempotencyKey}:item:${index + 1}`
+        : "",
       menuItemId: resolvedPrice.itemId || clean_(receiptItem.itemId),
       menuItemName:
         resolvedPrice.itemName || item.itemName || clean_(receiptItem.itemName),
       category:
         resolvedPrice.category || item.category || clean_(receiptItem.category),
       size: resolvedPrice.size,
+      sizeId: resolvedPrice.size,
+      sizeName: resolvedPrice.size,
       quantity: qty,
       unitPrice,
+      trustedUnitPrice: unitPrice,
+      extrasJson: JSON.stringify(receiptItem.extras || []),
       extrasTotal: 0,
       discount: line.discount,
       lineTotal: total,
@@ -1980,6 +2037,11 @@ async function addReceipt(payload: Payload, actor: Actor) {
     archived: false,
     businessDate,
     clientRequestId: idempotencyKey,
+    deviceId: clean_(payload.deviceId),
+    offlineCreated: Boolean(payload.offlineCreated),
+    offlineCreatedAt: clean_(payload.offlineCreatedAt),
+    syncStatus: "Synced",
+    syncedAt: createdAt,
     createdAt,
     createdByEmail: actor.email,
     createdByUid: actor.uid,
@@ -1988,7 +2050,9 @@ async function addReceipt(payload: Payload, actor: Actor) {
     changeAmount: receiptCalculation.changeAmount,
     customerId,
     customerName,
+    customerNameSnapshot: customerName,
     customerPhone,
+    customerPhoneSnapshot: customerPhone,
     discount: receiptDiscountPercentage,
     item: itemSummary || clean_(firstItem.itemName),
     itemCount: itemDetails.length,
@@ -2018,6 +2082,8 @@ async function addReceipt(payload: Payload, actor: Actor) {
     staffName: staff,
     staffRole: actor.role,
     staffUid: actor.uid,
+    createdByName: staff,
+    createdByRole: actor.role,
     subtotal: receiptCalculation.itemSubtotal,
     total: receiptCalculation.grandTotal,
     updatedAt: createdAt,
@@ -2046,6 +2112,7 @@ async function addReceipt(payload: Payload, actor: Actor) {
     await writeObjectRow(SHEETS.payments, {
       paymentId: stableUniqueId_("pay"),
       orderId,
+      clientRequestId: idempotencyKey ? `${idempotencyKey}:payment` : "",
       paymentDate: new Date(),
       businessDate,
       createdAt: new Date(),
@@ -2058,10 +2125,15 @@ async function addReceipt(payload: Payload, actor: Actor) {
       amountReceived: receiptCalculation.amountReceived,
       changeAmount: receiptCalculation.changeAmount,
       paymentType: "Initial",
+      status: "Applied",
       receiptNumber: receiptId,
       collectedBy: staff,
       receivedByName: staff,
       receivedByUid: actor.uid,
+      receivedByRole: actor.role,
+      offlineCreated: Boolean(payload.offlineCreated),
+      syncStatus: "Synced",
+      syncedAt: new Date(),
       paymentMethod,
       relatedOrderNotes: `Receipt: ${receiptId} - ${writtenItems.join(", ")}`,
     });
@@ -2150,17 +2222,37 @@ async function addReceipt(payload: Payload, actor: Actor) {
 async function addPayment(payload: Payload) {
   const customerId = getPayloadCustomerId_(payload);
   const customer = await findCustomer(customerId);
+  const createdAt = new Date();
+  const amount = Number(payload.amount || payload.amountApplied || 0);
 
   await writeObjectRow(SHEETS.payments, {
     paymentId: clean_(payload.paymentId) || stableUniqueId_("pay"),
     orderId: clean_(payload.orderId),
-    paymentDate: new Date(),
+    receiptNumber: clean_(payload.receiptNumber || payload.receiptId),
+    clientRequestId: clean_(payload.clientRequestId),
+    businessDate: dateKey_(createdAt),
+    paymentDate: createdAt,
+    createdAt,
     customerId,
     customerName: customer.fullName || clean_(payload.customerName),
+    customerNameSnapshot: customer.fullName || clean_(payload.customerName),
     method: clean_(payload.method || "Cash"),
-    amount: Number(payload.amount || 0),
+    paymentMethod: clean_(payload.method || payload.paymentMethod || "Cash"),
+    amount,
+    amountReceived: Number(payload.amountReceived || amount),
+    amountApplied: amount,
+    changeAmount: Number(payload.changeAmount || 0),
+    paymentType: clean_(payload.paymentType || "Collection"),
+    status: "Applied",
     collectedBy: clean_(payload.collectedBy || "Cashier 1"),
+    receivedByUid: clean_(payload.receivedByUid),
+    receivedByName: clean_(payload.collectedBy || "Cashier 1"),
+    receivedByRole: clean_(payload.receivedByRole || "cashier"),
+    offlineCreated: Boolean(payload.offlineCreated),
+    syncStatus: "Synced",
+    syncedAt: createdAt,
     relatedOrderNotes: clean_(payload.notes),
+    notes: clean_(payload.notes),
   });
 
   return success_({ data: await buildAppData() });
@@ -2383,9 +2475,17 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
     activeBoard: true,
     archived: false,
     clientRequestId,
+    deviceId: clean_(payload.deviceId),
+    offlineCreated: Boolean(payload.offlineCreated),
+    offlineCreatedAt: clean_(payload.offlineCreatedAt),
+    syncStatus: "Synced",
+    syncedAt: new Date(),
     createdAt: new Date(),
     createdByEmail: actor.email,
     createdByUid: actor.uid,
+    createdByName: customerName,
+    createdByRole: "customer",
+    customerUid: actor.uid,
     orderId,
     receiptNumber: receiptId,
     businessDate: dateKey_(new Date()),
@@ -2433,14 +2533,19 @@ async function submitCustomerOrder(payload: Payload, actor: CustomerActor) {
   await writeObjectRow(SHEETS.orderItems, {
     orderItemId,
     orderId,
+    clientRequestId: clientRequestId ? `${clientRequestId}:item:1` : "",
     menuItemId: resolvedPrice.itemId || clean_(payload.itemId),
     menuItemName:
       resolvedPrice.itemName || item.itemName || clean_(payload.itemName),
     category:
       resolvedPrice.category || item.category || clean_(payload.category),
     size: resolvedPrice.size,
+    sizeId: resolvedPrice.size,
+    sizeName: resolvedPrice.size,
     quantity: qty,
     unitPrice,
+    trustedUnitPrice: unitPrice,
+    extrasJson: JSON.stringify(payload.extras || []),
     extrasTotal: 0,
     lineTotal: total,
     notes,
@@ -2571,12 +2676,29 @@ async function collectUnpaidPayment(payload: Payload, actor: Actor) {
   await writeObjectRow(SHEETS.payments, {
     paymentId: stableUniqueId_("pay"),
     orderId: clean_(payload.orderId),
+    receiptNumber: clean_(payload.receiptNumber || payload.receiptId),
+    clientRequestId: clean_(payload.clientRequestId),
     paymentDate: new Date(),
+    businessDate: dateKey_(new Date()),
+    createdAt: new Date(),
     customerId,
     customerName: customer.fullName || clean_(payload.customerName),
+    customerNameSnapshot: customer.fullName || clean_(payload.customerName),
     method,
+    paymentMethod: method,
     amount,
+    amountReceived: amount,
+    amountApplied: amount,
+    changeAmount: 0,
+    paymentType: "Outstanding Collection",
+    status: "Applied",
     collectedBy,
+    receivedByUid: actor.uid,
+    receivedByName: actor.displayName || collectedBy,
+    receivedByRole: actor.role,
+    offlineCreated: Boolean(payload.offlineCreated),
+    syncStatus: "Synced",
+    syncedAt: new Date(),
     relatedOrderNotes: `Collected unpaid balance. Closed: ${closedOrders.join(", ") || "partial only"}`,
   });
 
@@ -2655,22 +2777,28 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
 
   const headers = (values[0] || []).map(normalizeKey_);
   const customerIdIndex = headers.indexOf("customerId");
-  const customerNameIndex = headers.indexOf("customerName");
-  const dateIndex = headers.indexOf("orderDateTime");
+  const customerNameIndex = headerIndex_(headers, [
+    "customerNameSnapshot",
+    "customerName",
+  ]);
+  const dateIndex = headerIndex_(headers, ["createdAt", "orderDateTime"]);
   const orderIdIndex = headers.indexOf("orderId");
   const receiptNumberIndex = headers.indexOf("receiptNumber");
   const totalIndex = headers.indexOf("total");
   const statusIndex = headers.indexOf("paymentStatus");
   const paidAmountIndex = headers.indexOf("paidAmount");
-  const remainingAmountIndex = headers.indexOf("remainingAmount");
+  const remainingAmountIndex = headerIndex_(headers, [
+    "outstandingAmount",
+    "remainingAmount",
+  ]);
   const outstandingAmountIndex = headers.indexOf("outstandingAmount");
   const amountReceivedIndex = headers.indexOf("amountReceived");
   const amountAppliedIndex = headers.indexOf("amountApplied");
   const changeAmountIndex = headers.indexOf("changeAmount");
   const paymentMethodIndex = headers.indexOf("paymentMethod");
   const updatedAtIndex = headers.indexOf("updatedAt");
-  const notesIndex = headers.indexOf("notes");
-  const itemIndex = headers.indexOf("item");
+  const notesIndex = headerIndex_(headers, ["customerNotes", "notes"]);
+  const itemIndex = headerIndex_(headers, ["itemSummary", "item"]);
   const receiptId = clean_(payload.receiptId);
   const receiptKey = clean_(payload.receiptKey);
   const orderId = clean_(payload.orderId);
@@ -2822,6 +2950,7 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
   await writeObjectRow(SHEETS.payments, {
     paymentId,
     orderId,
+    clientRequestId,
     paymentDate: new Date(),
     customerId,
     customerName,
@@ -2832,6 +2961,7 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     amountReceived: amount,
     changeAmount,
     paymentType: "Collection",
+    status: "Applied",
     receiptNumber: receiptId,
     businessDate: dateKey_(new Date()),
     createdAt: new Date(),
@@ -2840,6 +2970,10 @@ async function collectReceiptPayment(payload: Payload, actor: Actor) {
     ),
     receivedByName: actor.displayName || actor.email,
     receivedByUid: actor.uid,
+    receivedByRole: actor.role,
+    offlineCreated: Boolean(payload.offlineCreated),
+    syncStatus: "Synced",
+    syncedAt: new Date(),
     paymentMethod,
     relatedOrderNotes: `Receipt payment collected: ${matched.map((row) => row.itemName).join(", ")}`,
     notes: [
@@ -3034,9 +3168,13 @@ async function generateVoucher(payload: Payload, actor: Actor) {
   const createdAt = new Date();
 
   await writeObjectRow(SHEETS.generatedVouchers, {
+    loyaltyRecordId: `voucher-${voucherCode}`,
+    recordType: "Voucher",
     voucherCode,
+    relatedVoucherCode: voucherCode,
     customerId,
     customerName,
+    customerNameSnapshot: customerName,
     fullName: customerName,
     phone: customer.phone || customer.phoneWhatsApp || clean_(payload.phone),
     phoneWhatsApp:
@@ -3047,6 +3185,12 @@ async function generateVoucher(payload: Payload, actor: Actor) {
     voucherText: `Congratulations ${customerName}!`,
     voucherReward: `Enjoy 1 Free ${favoriteDrink}`,
     redeemStatus: "Not Redeemed",
+    status: "Not Redeemed",
+    quantity: 1,
+    rewardType: "Free Drink",
+    rewardItemName: favoriteDrink,
+    createdByUid: actor.uid,
+    createdByName: actor.displayName || actor.email,
     generatedAt: createdAt,
     createdAt,
     date: createdAt,
@@ -3086,9 +3230,7 @@ async function redeemVoucher(payload: Payload, actor: Actor) {
   const codeIndex = headerIndex_(header, ["voucherCode", "code", "id"]);
   const statusIndex = headerIndex_(header, ["redeemStatus", "status"]);
   if (codeIndex < 0 || statusIndex < 0) {
-    throw new Error(
-      "Generated Vouchers sheet needs Voucher Code and Redeem Status columns.",
-    );
+    throw new Error("Loyalty sheet needs voucher code and status columns.");
   }
 
   for (let row = 1; row < values.length; row += 1) {
@@ -3167,7 +3309,9 @@ async function archiveBusinessDayUnlocked_(options: ArchiveBusinessDayOptions) {
   const redemptions = (data.redemptions || []).filter(
     (redemption) => paymentDateKey_(redemption) === businessDate,
   );
-  const existingFiles = await safeSheetObjects_(SHEETS.dailyReceiptFiles);
+  const existingFiles = (await safeSheetObjects_(SHEETS.dailyReceiptFiles))
+    .filter((row) => clean_(row.eventType) === "Daily Receipt File")
+    .map(systemLogPayload_);
   const existingFile = existingFiles.find(
     (file) => clean_(file.businessDate) === businessDate,
   );
@@ -3199,37 +3343,46 @@ async function archiveBusinessDayUnlocked_(options: ArchiveBusinessDayOptions) {
   );
   const storage = await uploadDailyReceiptsPdf_(businessDate, pdf);
 
-  await upsertSheetObject_(
-    SHEETS.dailyReceiptFiles,
-    "businessDate",
+  const dailyFileRecord = {
+    archiveBatchId,
+    archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
     businessDate,
-    {
-      archiveBatchId,
-      archiveStatus: options.regeneratePdf ? "Regenerated" : "Generated",
-      businessDate,
-      dailyFileId,
-      downloadUrl: storage.downloadUrl,
-      fileName: storage.fileName,
-      generatedAt,
-      generatedByName:
-        options.triggeredBy.displayName || options.triggeredBy.email,
-      generatedByUid: options.triggeredBy.uid,
-      generationType: options.triggerType,
-      notes: "Generated from structured Orders and Order Items records.",
-      orderItemCount: orders.reduce(
-        (sum, order) => sum + number_(order.qty),
-        0,
-      ),
-      receiptCount: summary.receiptCount,
-      storagePath: storage.path,
-      storageProvider: "Firebase Storage",
-      totalPaid: summary.totalPaid,
-      totalRemaining: summary.totalUnpaid,
-      totalSales: summary.totalSales,
-      version: number_(existingFile?.version) + 1 || 1,
-    },
-  );
-  await upsertSheetObject_(SHEETS.dayHistory, "dateKey", businessDate, {
+    dailyFileId,
+    downloadUrl: storage.downloadUrl,
+    fileName: storage.fileName,
+    generatedAt,
+    generatedByName:
+      options.triggeredBy.displayName || options.triggeredBy.email,
+    generatedByUid: options.triggeredBy.uid,
+    generationType: options.triggerType,
+    notes: "Generated from structured Orders and Order Items records.",
+    orderItemCount: orders.reduce((sum, order) => sum + number_(order.qty), 0),
+    receiptCount: summary.receiptCount,
+    storagePath: storage.path,
+    storageProvider: "Firebase Storage",
+    totalPaid: summary.totalPaid,
+    totalRemaining: summary.totalUnpaid,
+    totalSales: summary.totalSales,
+    version: number_(existingFile?.version) + 1 || 1,
+  };
+  await writeObjectRow(SHEETS.dailyReceiptFiles, {
+    logId: dailyFileId,
+    eventType: "Daily Receipt File",
+    severity: "Info",
+    businessDate,
+    entityType: "Business Day",
+    entityId: businessDate,
+    action: options.regeneratePdf ? "day.pdf.regenerated" : "day.pdf.generated",
+    actorUid: options.triggeredBy.uid,
+    actorName: options.triggeredBy.displayName || options.triggeredBy.email,
+    actorRole: options.triggeredBy.role,
+    success: true,
+    receiptFileId: dailyFileId,
+    archiveBatchId,
+    newValueJson: JSON.stringify(dailyFileRecord),
+    createdAt: generatedAt,
+  });
+  const dayHistoryRecord = {
     ...summary,
     archiveBatchId,
     archiveTrigger: options.triggerType,
@@ -3242,6 +3395,23 @@ async function archiveBusinessDayUnlocked_(options: ArchiveBusinessDayOptions) {
     dailyPdfUrl: storage.downloadUrl,
     dateKey: businessDate,
     resetCompleted: true,
+  };
+  await writeObjectRow(SHEETS.dayHistory, {
+    logId: `day-${archiveBatchId}`,
+    eventType: "End Day Archive",
+    severity: "Info",
+    businessDate,
+    entityType: "Business Day",
+    entityId: businessDate,
+    action: "day.archive.summary",
+    actorUid: options.triggeredBy.uid,
+    actorName: options.triggeredBy.displayName || options.triggeredBy.email,
+    actorRole: options.triggeredBy.role,
+    success: true,
+    receiptFileId: dailyFileId,
+    archiveBatchId,
+    newValueJson: JSON.stringify(dayHistoryRecord),
+    createdAt: generatedAt,
   });
   const archivedRows = await archiveTodayOrders_(
     businessDate,
@@ -3377,18 +3547,34 @@ function moneyText_(value: unknown) {
 }
 
 async function appendDayArchive_(summary: Row) {
-  const headers = [...DAY_HISTORY_HEADERS];
-  await ensureExactSheetHeaders_(SHEETS.dayHistory, headers);
-  await appendRow(
-    SHEETS.dayHistory,
-    headers.map((header) => summary[header] || ""),
+  const businessDate = dateKeyFromValue_(
+    summary.dateKey || summary.businessDate,
   );
+  await writeObjectRow(SHEETS.dayHistory, {
+    logId: stableUniqueId_("day"),
+    eventType: "End Day Archive",
+    severity: "Info",
+    businessDate,
+    entityType: "Business Day",
+    entityId: businessDate,
+    action: "day.archive.summary",
+    actorUid: "system",
+    actorName: "Joy Corner backend",
+    actorRole: "system",
+    success: true,
+    newValueJson: JSON.stringify(summary),
+    createdAt: new Date(),
+  });
 }
 
 async function dayArchiveExists_(dateKey: string) {
   try {
     const rows = await sheetToObjects(SHEETS.dayHistory);
-    return rows.some((row) => dateKeyFromValue_(row.dateKey) === dateKey);
+    return rows.some(
+      (row) =>
+        clean_(row.eventType) === "End Day Archive" &&
+        dateKeyFromValue_(row.businessDate || row.entityId) === dateKey,
+    );
   } catch {
     return false;
   }
@@ -3774,8 +3960,7 @@ async function reconcileSheetsWorkbook(actor: Actor) {
   );
   await ensureSheetHeaders_(
     SHEETS.unpaidTracker,
-    SHEET_HEADERS[SHEETS.unpaidTracker] ||
-      NORMALIZED_SHEET_HEADERS["Unpaid Tracker"],
+    SHEET_HEADERS[SHEETS.unpaidTracker] || NORMALIZED_SHEET_HEADERS.Customers,
   );
   const customers = await sheetToObjects(SHEETS.customers);
   const unpaid = await sheetToObjects(SHEETS.unpaidTracker);
@@ -3982,11 +4167,13 @@ async function sheetIdForTitle_(title: string) {
 }
 
 async function backfillDayHistory_() {
-  await ensureExactSheetHeaders_(SHEETS.dayHistory, [...DAY_HISTORY_HEADERS]);
-
-  const existingRows = await sheetToObjects(SHEETS.dayHistory);
+  const existingRows = (await sheetToObjects(SHEETS.dayHistory)).filter(
+    (row) => clean_(row.eventType) === "End Day Archive",
+  );
   const existingDateKeys = new Set(
-    existingRows.map((row) => dateKeyFromValue_(row.dateKey)).filter(Boolean),
+    existingRows
+      .map((row) => dateKeyFromValue_(row.businessDate || row.entityId))
+      .filter(Boolean),
   );
   const orders = (await sheetToObjects(SHEETS.orders)).map(enrichOrder_);
   const payments = await sheetToObjects(SHEETS.payments);
@@ -4008,10 +4195,7 @@ async function backfillDayHistory_() {
       redemptions.filter((row) => paymentDateKey_(row) === dateKey),
     ) as Row;
 
-    await appendRow(
-      SHEETS.dayHistory,
-      DAY_HISTORY_HEADERS.map((header) => summary[header] || ""),
-    );
+    await appendDayArchive_(summary);
     existingDateKeys.add(dateKey);
     added += 1;
   }
@@ -4042,6 +4226,10 @@ async function recordAuditLog_(
     await writeObjectRow(SHEETS.auditLog, {
       action: event.action,
       auditId,
+      logId: auditId,
+      eventType: "Audit",
+      severity: event.success ? "Info" : "Error",
+      businessDate: dateKey_(new Date(timestamp)),
       entityId: event.entityId || "",
       entityType: event.entityType,
       newValue: event.newValue ? JSON.stringify(event.newValue) : "",
@@ -4051,9 +4239,14 @@ async function recordAuditLog_(
       reason: event.reason || "",
       requestId: event.requestId || "",
       role: actor.role,
+      actorRole: actor.role,
+      actorName: actor.displayName || actor.email,
+      actorUid: actor.uid,
       sessionMetadata: JSON.stringify(sessionMetadata),
+      sessionMetadataJson: JSON.stringify(sessionMetadata),
       success: event.success,
       timestamp,
+      createdAt: timestamp,
       userId: actor.uid,
     });
   } catch (error) {
@@ -4096,13 +4289,25 @@ async function recordSyncFailure_(
   syncJobId = "",
 ) {
   try {
+    const createdAt = new Date().toISOString();
+    const logId = stableUniqueId_("syncfail");
     await writeObjectRow(SHEETS.syncFailures, {
-      createdAt: new Date().toISOString(),
+      logId,
+      eventType: "Sync Failure",
+      severity: "Error",
+      businessDate: dateKey_(new Date(createdAt)),
       entityId,
       entityType,
+      action: "sync.failure",
+      actorUid: "system",
+      actorName: "Joy Corner backend",
+      actorRole: "system",
       errorMessage: safeErrorMessage_(error),
+      errorCode: "SYNC_FAILURE",
       retryCount: 0,
-      syncFailureId: stableUniqueId_("syncfail"),
+      success: false,
+      createdAt,
+      syncFailureId: logId,
       syncJobId,
     });
   } catch (nestedError) {
@@ -4162,6 +4367,7 @@ async function retrySyncFailures(actor: Actor) {
     message:
       "Retry request recorded. Automatic per-failure replay is available after Neon and Sheets reconciliation are configured.",
     syncFailures: (await safeSheetObjects_(SHEETS.syncFailures))
+      .filter((row) => clean_(row.eventType) === "Sync Failure")
       .reverse()
       .slice(0, 100),
   });
@@ -4232,6 +4438,21 @@ async function archiveTodayOrders_(
   return archivedRows;
 }
 
+function loyaltyRecordType_(row: Row) {
+  return clean_(row.recordType || row.loyaltyType).toLowerCase();
+}
+
+function systemLogPayload_(row: Row): Row {
+  const raw = clean_(row.newValueJson || row.newValue);
+  if (!raw) return row;
+  try {
+    const payload = JSON.parse(raw) as Row;
+    return { ...payload, ...row };
+  } catch {
+    return row;
+  }
+}
+
 async function buildAppData() {
   const rawCustomers = await sheetToObjects(SHEETS.customers);
   const realCustomers = rawCustomers.filter(isRealCustomerRow_);
@@ -4239,10 +4460,14 @@ async function buildAppData() {
     .map(enrichOrder_)
     .reverse();
   const payments = await sheetToObjects(SHEETS.payments);
-  const vouchers = (await sheetToObjects(SHEETS.generatedVouchers))
+  const loyaltyRows = await sheetToObjects(SHEETS.generatedVouchers);
+  const vouchers = loyaltyRows
+    .filter((row) => loyaltyRecordType_(row) === "voucher")
     .map(enrichVoucher_)
     .reverse();
-  const redemptions = await sheetToObjects(SHEETS.rewardRedemptions);
+  const redemptions = loyaltyRows.filter((row) =>
+    ["redeemed", "redemption"].includes(loyaltyRecordType_(row)),
+  );
   const menu = await menuForApp_();
   const lists = await listOptions();
   lists.staff = await staffOptions_(lists.staff || []);
@@ -4738,7 +4963,10 @@ function buildDashboard_(
 
 async function archivedHistoryDays_() {
   try {
-    return (await sheetToObjects(SHEETS.dayHistory)).map(normalizeHistoryDay_);
+    return (await sheetToObjects(SHEETS.dayHistory))
+      .filter((row) => clean_(row.eventType) === "End Day Archive")
+      .map(systemLogPayload_)
+      .map(normalizeHistoryDay_);
   } catch {
     return [];
   }
@@ -5819,17 +6047,27 @@ async function appendRedemption(
   };
   const redemptions = await sheetToObjects(SHEETS.rewardRedemptions);
   const redemptionId = nextIdFromRows_("RED", redemptions);
-
-  await writeDataRow(SHEETS.rewardRedemptions, [
-    redemptionId,
-    new Date(),
-    get("customerId", ["customerID", "id"]),
-    get("customerName", ["fullName", "name"]),
-    get("favoriteDrink", ["drink", "rewardDrink"]) || "Free Drink",
-    0,
-    actor.displayName || actor.email,
-    `Redeemed voucher ${get("voucherCode", ["code"])}`,
-  ]);
+  const createdAt = new Date();
+  const voucherCode = get("voucherCode", ["relatedVoucherCode", "code"]);
+  await writeObjectRow(SHEETS.rewardRedemptions, {
+    loyaltyRecordId: redemptionId,
+    recordType: "Redeemed",
+    customerId: get("customerId", ["customerID", "id"]),
+    customerNameSnapshot: get("customerName", ["fullName", "name"]),
+    relatedVoucherCode: voucherCode,
+    quantity: 1,
+    rewardType: "Free Drink",
+    rewardItemName:
+      get("favoriteDrink", ["rewardItemName", "drink", "rewardDrink"]) ||
+      "Free Drink",
+    status: "Redeemed",
+    redeemedAt: createdAt,
+    createdByUid: actor.uid,
+    createdByName: actor.displayName || actor.email,
+    notes: `Redeemed voucher ${voucherCode}`,
+    createdAt,
+    updatedAt: createdAt,
+  });
 }
 
 function serviceOrderPlace_(payload: Payload) {
@@ -6501,31 +6739,96 @@ function valueForHeader_(record: Payload, header: string) {
     return record[header];
   }
 
-  const aliases: Record<string, string> = {
-    customerID: "customerId",
-    id: "customerId",
-    name: "fullName",
-    customerName: "fullName",
-    phone: "phoneWhatsApp",
-    whatsapp: "phoneWhatsApp",
-    whatsApp: "phoneWhatsApp",
-    favouriteDrink: "favoriteDrink",
-    favorite: "favoriteDrink",
-    favourite: "favoriteDrink",
-    preferredDrink: "favoriteDrink",
-    date: "joinDate",
-    createdDate: "createdAt",
-    generatedDate: "generatedAt",
-    code: "voucherCode",
-    status: "redeemStatus",
-    reward: "voucherReward",
-    drink: "favoriteDrink",
+  const aliases: Record<string, string[]> = {
+    actorName: ["actorName", "displayName", "userName"],
+    actorRole: ["actorRole", "role", "userRole"],
+    actorUid: ["actorUid", "userId", "uid"],
+    categoryId: ["categoryId"],
+    categoryName: ["categoryName", "category"],
+    categoryNameSnapshot: ["categoryNameSnapshot", "category"],
+    code: ["voucherCode"],
+    createdByName: ["createdByName", "staffName", "staff"],
+    createdByRole: ["createdByRole", "staffRole"],
+    createdByUid: ["createdByUid", "staffUid"],
+    customerID: ["customerId"],
+    customerName: ["fullName", "customerNameSnapshot"],
+    customerNameSnapshot: ["customerNameSnapshot", "customerName", "fullName"],
+    customerPhoneSnapshot: [
+      "customerPhoneSnapshot",
+      "customerPhone",
+      "phone",
+      "phoneWhatsApp",
+    ],
+    date: ["joinDate", "createdAt"],
+    createdDate: ["createdAt"],
+    generatedDate: ["generatedAt", "createdAt"],
+    displayName: ["displayName", "name"],
+    errorMessage: ["errorMessage", "message"],
+    eventType: ["eventType", "logType"],
+    favorite: ["favoriteDrink"],
+    favourite: ["favoriteDrink"],
+    favouriteDrink: ["favoriteDrink"],
+    itemNotes: ["itemNotes", "notes"],
+    logId: ["logId", "auditId", "syncFailureId", "dailyFileId"],
+    loyaltyRecordId: ["loyaltyRecordId", "redemptionId", "voucherCode"],
+    menuItemNameSnapshot: [
+      "menuItemNameSnapshot",
+      "menuItemName",
+      "itemName",
+      "item",
+    ],
+    name: ["fullName", "displayName"],
+    newValueJson: ["newValueJson", "newValue"],
+    paymentMethod: ["paymentMethod", "method"],
+    permissionsJson: ["permissionsJson", "grant", "permissions"],
+    phone: ["phone", "phoneWhatsApp"],
+    points: ["points", "pointsEarned"],
+    preparationStation: ["preparationStation"],
+    previousValueJson: ["previousValueJson", "previousValue"],
+    recordType: ["recordType", "loyaltyType"],
+    relatedVoucherCode: ["relatedVoucherCode", "voucherCode"],
+    reward: ["voucherReward", "rewardType"],
+    rewardItemName: ["rewardItemName", "freeDrinkItem", "favoriteDrink"],
+    revokedPermissionsJson: [
+      "revokedPermissionsJson",
+      "revoke",
+      "revokedPermissions",
+    ],
+    sessionMetadataJson: ["sessionMetadataJson", "sessionMetadata"],
+    severity: ["severity"],
+    sizeId: ["sizeId", "size"],
+    sizeName: ["sizeName", "size"],
+    status: ["status", "redeemStatus", "paymentStatus"],
+    trustedUnitPrice: ["trustedUnitPrice", "unitPrice"],
+    whatsapp: ["phoneWhatsApp", "phone"],
+    whatsApp: ["phoneWhatsApp", "phone"],
+    preferredDrink: ["favoriteDrink"],
+    drink: ["favoriteDrink"],
   };
 
-  const alias = aliases[header];
-  return alias && Object.prototype.hasOwnProperty.call(record, alias)
-    ? record[alias]
-    : "";
+  const alias = (aliases[header] || []).find((candidate) =>
+    Object.prototype.hasOwnProperty.call(record, candidate),
+  );
+  if (alias) {
+    const value = record[alias];
+    if (
+      [
+        "permissionsJson",
+        "revokedPermissionsJson",
+        "previousValueJson",
+        "newValueJson",
+        "sessionMetadataJson",
+      ].includes(header) &&
+      typeof value !== "string"
+    ) {
+      return JSON.stringify(value ?? null);
+    }
+    return value;
+  }
+  if (header === "eventType")
+    return record.errorMessage ? "Sync Failure" : "Audit";
+  if (header === "severity") return record.success === false ? "Error" : "Info";
+  return "";
 }
 
 function valueForHeaderForSheet_(record: Payload, header: string) {
@@ -6550,6 +6853,7 @@ function isUntrustedTextHeader_(header: string) {
     "notes",
     "orderPlace",
     "reason",
+    "errorMessage",
     "rejectionReason",
     "cancellationReason",
   ]).has(header);

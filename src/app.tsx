@@ -44,6 +44,10 @@ import {
   visibleTabsForPermissions,
 } from "./permissions";
 import { buildReceiptPrintHtml } from "./receiptPrint";
+import { getOfflineMetadata, putOfflineMetadata } from "./offline/db";
+import { enqueueOfflineOperation } from "./offline/queue";
+import { SyncCenter } from "./offline/SyncCenter";
+import type { OfflineOperationType } from "./offline/types";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -314,7 +318,7 @@ export function App() {
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
       ? "Sign in with your staff account."
-      : "Firebase is not configured yet. Use the local owner password to preview the app.",
+      : "Firebase is not configured. Staff sign-in is disabled until the Firebase web settings are supplied.",
   );
   const [authLoading, setAuthLoading] = useState(firebaseReady);
 
@@ -764,8 +768,12 @@ export function App() {
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    await callAndReload("addCustomer", formObject(form), "Customer added.");
-    form.reset();
+    const saved = await callAndReload(
+      "addCustomer",
+      formObject(form),
+      "Customer added.",
+    );
+    if (saved) form.reset();
   }
 
   async function removeCustomer(row: Row) {
@@ -2044,6 +2052,7 @@ function OwnerTools({
               )}
             </div>
           </section>
+          <SyncCenter />
         </div>
       </details>
     </div>
@@ -4395,6 +4404,38 @@ async function callServer(
   action: string,
   payload: Record<string, unknown> = {},
 ): Promise<ApiResponse & AppData> {
+  if (!navigator.onLine) {
+    if (action === "customerMenu") {
+      const cached = await getOfflineMetadata("cachedMenu");
+      if (cached) {
+        return {
+          success: true,
+          menu: JSON.parse(cached),
+        } as ApiResponse & AppData;
+      }
+    }
+    const operationType = offlineOperationType(action);
+    if (operationType && auth?.currentUser) {
+      const queued = await enqueueOfflineOperation({
+        actorRole:
+          stringValue(payload.staffRole || payload.createdByRole) ||
+          (action === "submitCustomerOrder" ? "customer" : "staff"),
+        actorUid: auth.currentUser.uid,
+        clientRequestId: stringValue(payload.clientRequestId) || undefined,
+        operationType,
+        payload: { ...payload, _offlineAction: action },
+      });
+      return {
+        message: "Saved on this device — not yet saved to Google Sheets.",
+        offlineQueued: true,
+        success: true,
+        clientRequestId: queued.clientRequestId,
+      } as ApiResponse & AppData;
+    }
+    throw new Error(
+      "This action requires an internet connection and cannot be queued safely.",
+    );
+  }
   const idToken = auth?.currentUser ? await auth.currentUser.getIdToken() : "";
   const headers = {
     ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
@@ -4430,7 +4471,37 @@ async function callServer(
     throw new Error(json.message || "Action failed.");
   }
 
+  if (
+    action === "customerMenu" &&
+    (json.data?.menu || (json as AppData).menu)
+  ) {
+    await putOfflineMetadata(
+      "cachedMenu",
+      JSON.stringify(json.data?.menu || (json as AppData).menu),
+    );
+  }
   return json;
+}
+
+function offlineOperationType(action: string): OfflineOperationType | null {
+  if (["addReceipt", "submitCustomerOrder"].includes(action))
+    return "CREATE_ORDER";
+  if (["addCustomer", "registerCustomerProfile"].includes(action))
+    return "CREATE_CUSTOMER_DRAFT";
+  if (["collectReceiptPayment", "addPayment"].includes(action))
+    return "RECORD_PAYMENT_DRAFT";
+  if (
+    [
+      "markReceiptAccepted",
+      "markReceiptPreparing",
+      "markReceiptReady",
+      "markReceiptDone",
+      "pickupOrder",
+      "completeOrder",
+    ].includes(action)
+  )
+    return "UPDATE_PREPARATION_STATUS";
+  return null;
 }
 
 function ensureConnectedData(source: AppData | null): AppData {

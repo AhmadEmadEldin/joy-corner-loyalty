@@ -2266,3 +2266,49 @@ tbody tr:hover {
     padding: 16px;
   }
 }
+.offline-status {
+  align-items: center;
+  background: #fff7ed;
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  bottom: 16px;
+  box-shadow: 0 8px 30px rgb(33 19 12 / 18%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  left: 50%;
+  max-width: min(92vw, 720px);
+  padding: 10px 14px;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+
+.offline-status.offline {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+.offline-status span {
+  flex: 1 1 280px;
+}
+
+.sync-center {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sync-center article {
+  align-items: center;
+  background: var(--surface-soft, #f8fafc);
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(10rem, 1fr) auto;
+  padding: 0.75rem;
+}
+
+.sync-center article small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
