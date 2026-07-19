@@ -1,7 +1,9 @@
 import {
   CSSProperties,
   FormEvent,
+  lazy,
   ReactNode,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -49,6 +51,18 @@ import {
   visibleTabsForPermissions,
 } from "./permissions";
 import { buildReceiptPrintHtml } from "./receiptPrint";
+import { supabaseModeEnabled } from "./dataProvider";
+
+const SupabaseCustomerPortal = lazy(() =>
+  import("./supabase/CustomerPortal").then((module) => ({
+    default: module.SupabaseCustomerPortal,
+  })),
+);
+const SupabaseStaffPortal = lazy(() =>
+  import("./supabase/StaffPortal").then((module) => ({
+    default: module.SupabaseStaffPortal,
+  })),
+);
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -300,9 +314,27 @@ export function buildReceiptSubmissionPayload(
 
 export function App() {
   if (window.location.pathname.startsWith("/order")) {
-    return <CustomerOrderPage />;
+    return supabaseModeEnabled ? (
+      <Suspense fallback={<PortalLoadingState />}>
+        <SupabaseCustomerPortal />
+      </Suspense>
+    ) : (
+      <CustomerOrderPage />
+    );
   }
 
+  if (supabaseModeEnabled) {
+    return (
+      <Suspense fallback={<PortalLoadingState />}>
+        <SupabaseStaffPortal />
+      </Suspense>
+    );
+  }
+
+  return <LegacyStaffApp />;
+}
+
+function LegacyStaffApp() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [data, setData] = useState<AppData | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
@@ -1286,6 +1318,14 @@ export function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+function PortalLoadingState() {
+  return (
+    <main className="supabase-portal center-state" role="status">
+      Loading Joy Corner…
+    </main>
   );
 }
 

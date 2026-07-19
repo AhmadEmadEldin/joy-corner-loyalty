@@ -18,6 +18,17 @@ const firebaseConfig = {
   storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
 };
 
+const supabaseConfig = {
+  url: process.env.VITE_SUPABASE_URL || "",
+  publishableKey:
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    "",
+};
+
+const dataProvider =
+  process.env.VITE_DATA_PROVIDER === "supabase" ? "supabase" : "legacy";
+
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
   entry: path.resolve(__dirname, "src", "index.tsx"),
@@ -50,6 +61,8 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   plugins: [
     new webpack.DefinePlugin({
       __FIREBASE_CONFIG__: JSON.stringify(firebaseConfig),
+      __SUPABASE_CONFIG__: JSON.stringify(supabaseConfig),
+      __DATA_PROVIDER__: JSON.stringify(dataProvider),
     }),
   ],
   devServer: {

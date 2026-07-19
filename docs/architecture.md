@@ -10,4 +10,18 @@ Joy Corner is a standalone staff POS and loyalty web app.
 - Google Sheets remains the operational reporting layer.
 - Neon PostgreSQL is implemented as the normalized historical/reporting backup when `NEON_DATABASE_URL` and `NEON_BACKUP_ENABLED=true` are configured.
 
+Supabase mode is the migration target selected by
+`VITE_DATA_PROVIDER=supabase`. It uses one canonical browser client in
+`src/supabase/client.ts`, one typed data boundary in
+`src/supabase/repository.ts`, PostgreSQL RLS, transactional RPCs, and Realtime.
+Customer menu, checkout, receipts, tracking, and staff queues query only this
+boundary. Cashier and barista screens use separate safe projection tables.
+
+Firebase/Google Sheets remains the production fallback until project-backed
+Supabase database tests and authenticated role acceptance pass. The two
+providers are routed at the app entry and are not mixed within an operational
+order flow.
+
 Browser code must never receive Google service account keys, Firebase Admin keys, Neon connection strings, or Canva secrets.
+It must also never receive the Supabase service-role key; only the public
+publishable key may be compiled into the frontend.

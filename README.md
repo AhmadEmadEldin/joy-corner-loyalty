@@ -2,7 +2,7 @@
 
 Joy Corner Loyalty is a React staff web app for cafe orders, customers, unpaid balances, rewards, vouchers, and daily dashboard work.
 
-## Final Architecture
+## Current Production Architecture
 
 ```text
 Laptop / VS Code
@@ -20,6 +20,22 @@ Laptop / VS Code
 -> React renders the role-specific dashboard
 ```
 
+The repository also contains the tested Supabase operational replacement behind
+`VITE_DATA_PROVIDER=supabase`. Firebase/Sheets remains the default until the
+cutover checklist passes. See `docs/supabase-migration-plan.md` and
+`docs/supabase-setup.md` before linking or applying migrations.
+
+Supabase mode uses Auth, PostgreSQL with RLS, Realtime-safe cashier/kitchen
+projections, Storage policies, transactional RPCs, and an owner-only Edge
+Function. It is part of the same React application, not a second app.
+
+The Supabase customer experience is a responsive restaurant ordering shell with
+database categories and modifiers, product customization, a persistent cart,
+guided checkout, live order tracking, stored-snapshot receipts, rewards,
+vouchers, notifications, profile management, and a focus-managed mobile drawer.
+The staff portal provides role-specific cashier, kitchen, order-entry, customer,
+and owner/manager operational views. These screens never fall back to mock data.
+
 ## Important Files
 
 - React app: `src/app.tsx`
@@ -35,6 +51,31 @@ Laptop / VS Code
 - Required environment variables: `.env.example`
 - Staff role sync helper: `scripts/sync_firestore_staff.ts`
 - Code map and ownership notes: `docs/CODE_ORGANIZATION.md`
+- Supabase client and portals: `src/supabase/`
+- Customer menu, checkout, navigation, and receipt components:
+  `src/supabase/CustomerMenu.tsx`, `CustomerCheckout.tsx`,
+  `CustomerNavigation.tsx`, and `CustomerOrders.tsx`
+- Supabase migrations and database tests: `supabase/`
+- Google Sheets/XLSX importer: `scripts/migrate_to_supabase.ts`
+- Supabase setup and acceptance checklist: `docs/supabase-setup.md`
+
+## Supabase UI verification
+
+The authenticated Supabase workflow requires the selected project migrations,
+publishable key, and test accounts. Keep secrets only in ignored local env
+files. Before production cutover, run:
+
+```powershell
+npm run check
+npm run e2e
+npm run e2e:supabase
+npm run supabase:test
+```
+
+`npm run e2e:supabase` intentionally uses a non-production placeholder endpoint
+to verify lazy routing and responsive sign-in shells. It does not claim to test
+authenticated database writes; follow `docs/supabase-setup.md` for that final
+project-backed acceptance pass.
 
 ## Google Sheet
 
