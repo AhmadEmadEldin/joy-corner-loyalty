@@ -1,7 +1,8 @@
 # Joy Corner Supabase setup and verification
 
-The selected project reference is `ruurfhrjqfcydxbzpuqi`. Production remains on
-the legacy provider until every verification item below passes.
+The selected project reference is `ruurfhrjqfcydxbzpuqi`. Supabase is the
+default application provider. Local migrations must still pass this checklist
+before they are pushed to the linked project.
 
 ## 1. Authenticate and verify the selected project
 
@@ -67,12 +68,17 @@ Copy `.env.example` values into `.env.local` for local testing:
 ```text
 VITE_SUPABASE_URL=https://ruurfhrjqfcydxbzpuqi.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<project publishable or anon key>
-VITE_DATA_PROVIDER=legacy
+VITE_DATA_PROVIDER=supabase
 SUPABASE_SERVICE_ROLE_KEY=<server and migration scripts only>
 ```
 
-First build and test with `legacy`. Use `supabase` only in a pilot build. The
-webpack bundle receives only URL, publishable key, and provider flag.
+The webpack bundle receives only the URL, publishable key, and provider flag.
+Use `legacy` only for a deliberate rollback exercise.
+
+Configure `SUPABASE_SERVICE_ROLE_KEY` and one documented Google credential
+method only in the reporting-worker runtime. Run `npm run sync:reporting` from a
+scheduled server process. It claims at most `REPORTING_SYNC_BATCH_SIZE` outbox
+events and batch-upserts the affected spreadsheet rows.
 
 ## 5. Seed and migrate data
 
@@ -128,5 +134,6 @@ relationship are recorded in `migration_failures`.
 - `npm run check` passes, remote `supabase db lint` has no security errors, and
   Supabase Security/Performance advisors have been reviewed.
 
-Only after this checklist passes should `VITE_DATA_PROVIDER` change from
-`legacy` to `supabase`. Keep Firebase/Sheets intact during the fallback window.
+Keep the legacy Firebase code intact during the fallback window, but do not run
+it beside the Supabase order path. Never copy Supabase order or receipt rows to
+Firestore; the spreadsheet outbox is the supported reporting integration.

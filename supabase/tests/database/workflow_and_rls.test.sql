@@ -1,5 +1,5 @@
 begin;
-select plan(21);
+select plan(27);
 
 select has_function(
   'public',
@@ -63,6 +63,36 @@ select ok(
       and tablename = 'payments'
   ),
   'raw payment rows are not published to Realtime'
+);
+
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.integration_outbox'::regclass),
+  'reporting outbox has RLS enabled'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.integration_outbox', 'SELECT'),
+  'authenticated clients cannot inspect reporting events'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.claim_integration_outbox(integer,text)', 'EXECUTE'),
+  'authenticated clients cannot claim reporting events'
+);
+select ok(
+  has_function_privilege('service_role', 'public.claim_integration_outbox(integer,text)', 'EXECUTE'),
+  'the server-only reporting worker can claim events'
+);
+select ok(
+  to_regclass('public.integration_outbox_claim_idx') is not null,
+  'reporting claims have a partial queue index'
+);
+select ok(
+  exists (
+    select 1 from pg_trigger
+    where tgrelid = 'public.orders'::regclass
+      and tgname = 'enqueue_reporting_change'
+      and not tgisinternal
+  ),
+  'order changes enqueue asynchronous reporting work'
 );
 
 select * from finish();

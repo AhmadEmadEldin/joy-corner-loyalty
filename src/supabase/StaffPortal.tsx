@@ -173,7 +173,15 @@ function StaffWorkspace({ user }: { user: User }) {
 
   useEffect(() => {
     void refresh();
-    return subscribeToStaffQueues(() => void refresh());
+    let refreshTimer: number | undefined;
+    const unsubscribe = subscribeToStaffQueues(() => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void refresh(), 150);
+    });
+    return () => {
+      window.clearTimeout(refreshTimer);
+      unsubscribe();
+    };
   }, [user.id]);
 
   async function move(

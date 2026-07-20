@@ -1,4 +1,4 @@
-import { canTransitionOrder, statusProgress } from "./workflow";
+import { canTransitionOrder, statusLabel, statusProgress } from "./workflow";
 
 describe("Supabase operational order workflow", () => {
   it("allows only the documented customer-to-kitchen sequence", () => {
@@ -20,5 +20,13 @@ describe("Supabase operational order workflow", () => {
     expect(statusProgress("pending_confirmation")).toBe(0);
     expect(statusProgress("preparing")).toBe(60);
     expect(statusProgress("closed")).toBe(100);
+  });
+
+  it("uses explicit cashier and barista labels", () => {
+    expect(statusLabel("pending_confirmation")).toBe(
+      "Pending cashier confirmation",
+    );
+    expect(statusLabel("accepted")).toBe("Accepted by barista");
+    expect(statusLabel("closed")).toBe("Completed");
   });
 });

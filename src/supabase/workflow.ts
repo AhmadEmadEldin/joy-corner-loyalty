@@ -39,10 +39,18 @@ export function canTransitionOrder(
 }
 
 export function statusLabel(status: OperationalOrderStatus): string {
-  return status
-    .split("_")
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ");
+  const operationalLabels: Record<OperationalOrderStatus, string> = {
+    accepted: "Accepted by barista",
+    cancelled: "Cancelled",
+    closed: "Completed",
+    confirmed: "Confirmed by cashier",
+    pending_confirmation: "Pending cashier confirmation",
+    picked_up: "Picked up",
+    preparing: "Preparing",
+    ready: "Ready",
+    rejected: "Rejected",
+  };
+  return operationalLabels[status];
 }
 
 export function statusProgress(status: OperationalOrderStatus): number {

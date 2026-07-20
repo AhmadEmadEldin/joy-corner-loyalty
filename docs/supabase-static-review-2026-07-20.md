@@ -3,7 +3,8 @@
 Scope: migrations, RLS, indexes, functions, triggers, Realtime, Storage, RPC
 authorization, query paths, customer isolation, and cashier/barista projections.
 The review used the installed `supabase-postgres-best-practices` skill v1.1.1.
-No linked database command, migration push, or production mutation was run.
+A linked, read-only `supabase db lint` was run. No migration push, SQL mutation,
+or production data write was run.
 
 ## Priority summary
 
@@ -96,12 +97,13 @@ Remaining RPC concerns:
   Refactor to validate all item/modifier IDs set-wise and refresh projections
   once at the end; this is not an automatic safe fix because it changes core
   transactional logic.
-- The customer dashboard reloads all historical orders, items, and modifiers
-  on every relevant Realtime event. Add bounded cursor pagination and fetch
-  child rows only for the visible order IDs.
-- Five independent customer Realtime channels have no row filters. RLS still
-  enforces isolation, but server fan-out and repeated whole-dashboard refreshes
-  will grow with traffic. Add per-user filters after testing reconnect behavior.
+- The customer dashboard originally reloaded all historical orders, items, and
+  modifiers on every relevant Realtime event. The local app now bounds the
+  initial order page, fetches children only for visible order IDs, and debounces
+  event-driven refreshes. Cursor pagination remains a later enhancement.
+- Customer Realtime channels originally had no row filters. Local subscriptions
+  are now filtered by customer ID and debounced; database RLS remains the
+  security boundary.
 - `loadMenu` performs five parallel set queries rather than an N+1 loop; this is
   acceptable for the current menu size.
 
@@ -141,9 +143,9 @@ found among the five existing migrations.
 - `REPLICA IDENTITY FULL` remains on customer-owned orders, rewards, vouchers,
   and notifications plus redacted queue tables. Confirm delete/update payload
   behavior under RLS with two customer sessions before production approval.
-- The customer subscriptions are not filtered by owner ID. This is a scaling
-  concern rather than a demonstrated isolation bypass because database RLS is
-  enabled on every published relation.
+- Local customer subscriptions are filtered by owner ID. Database RLS remains
+  enabled on every published relation and must still be verified with two live
+  customer sessions before production approval.
 
 ### P1 — Storage policy risks
 
@@ -179,6 +181,19 @@ found among the five existing migrations.
   of raw payment Realtime publication.
 - Removed the unused client payment subscription.
 - Expanded pgTAP assertions for the privilege, index, and publication changes.
+- Bounded customer order reads, filtered Realtime subscriptions by customer,
+  and debounced customer/staff projection refreshes.
 
-`VITE_DATA_PROVIDER` remains `legacy` through the existing default and
-`.env.example`; no provider setting was changed.
+## Follow-up implementation — 2026-07-21
+
+After explicit approval to make Supabase the frontend/backend, provider
+selection moved to `src/RootApp.tsx` and now defaults to `supabase`. The legacy
+Firebase application is lazy-loaded only when `VITE_DATA_PROVIDER=legacy`.
+Normal development no longer starts the Firebase/Sheets backend.
+
+A later local-only migration adds a protected, indexed reporting outbox plus
+server-only claim/complete/fail functions. The Google Sheets worker batch-upserts
+stable record IDs into the eight existing operational tabs, changes only mapped
+columns on existing rows, and retries independently of order transactions. It
+will not create tabs or rewrite formula/manual columns. No Firebase order/receipt
+mirror was added. Neither local-only migration has been pushed.

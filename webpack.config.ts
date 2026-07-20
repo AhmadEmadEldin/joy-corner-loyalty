@@ -27,7 +27,7 @@ const supabaseConfig = {
 };
 
 const dataProvider =
-  process.env.VITE_DATA_PROVIDER === "supabase" ? "supabase" : "legacy";
+  process.env.VITE_DATA_PROVIDER === "legacy" ? "legacy" : "supabase";
 
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
@@ -74,12 +74,15 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
     hot: true,
     open: true,
     port,
-    proxy: [
-      {
-        context: ["/api", "/health"],
-        target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
-      },
-    ],
+    proxy:
+      dataProvider === "legacy"
+        ? [
+            {
+              context: ["/api", "/health"],
+              target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
+            },
+          ]
+        : undefined,
     static: {
       directory: path.resolve(__dirname, "public"),
     },

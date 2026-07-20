@@ -2,28 +2,22 @@
 
 Joy Corner Loyalty is a React staff web app for cafe orders, customers, unpaid balances, rewards, vouchers, and daily dashboard work.
 
-## Current Production Architecture
+## Current Architecture
 
 ```text
-Laptop / VS Code
--> GitHub
--> Firebase Hosting deploy
--> Firebase Auth email/password login
--> React gets Firebase ID token
--> React calls /api
--> Firebase Hosting rewrites /api to the api HTTPS Function
--> Backend verifies Firebase ID token
--> Backend reads Firestore users/{uid}
--> Backend enforces role permissions
--> Backend reads/writes Google Sheets
--> Optional Canva voucher metadata stays backend-controlled
--> React renders the role-specific dashboard
+React static build
+-> Supabase Auth
+-> Supabase PostgreSQL protected by RLS
+-> Transactional order/payment/status RPCs
+-> Realtime customer, cashier, and barista updates
+-> Durable reporting outbox
+-> Asynchronous Google Sheets export worker
 ```
 
-The repository also contains the tested Supabase operational replacement behind
-`VITE_DATA_PROVIDER=supabase`. Firebase/Sheets remains the default until the
-cutover checklist passes. See `docs/supabase-migration-plan.md` and
-`docs/supabase-setup.md` before linking or applying migrations.
+Supabase is the default frontend and backend provider. Google Sheets is a
+reporting/export mirror and never blocks ordering. Firebase remains available
+only through explicit legacy commands for rollback; normal builds do not load
+or initialize it. See `docs/supabase-setup.md` before applying migrations.
 
 Supabase mode uses Auth, PostgreSQL with RLS, Realtime-safe cashier/kitchen
 projections, Storage policies, transactional RPCs, and an owner-only Edge
@@ -38,10 +32,14 @@ and owner/manager operational views. These screens never fall back to mock data.
 
 ## Important Files
 
-- React app: `src/app.tsx`
-- Firebase browser auth and staff profile read: `src/firebase.ts`
-- Firebase Function entry: `firebase-functions.cjs`
-- Backend auth, role checks, and Google Sheets access: `server/googleSheetsBackend.ts`
+- Provider entry: `src/RootApp.tsx`
+- Supabase customer/staff app: `src/supabase/`
+- Supabase data boundary: `src/supabase/repository.ts`
+- Database schema and authorization: `supabase/migrations/`
+- Google Sheets reporting worker: `scripts/sync_supabase_reporting.ts`
+- Reporting tab mappings: `server/reporting/sheetMappings.ts`
+- Legacy Firebase fallback: `src/app.tsx`, `src/firebase.ts`,
+  `firebase-functions.cjs`, and `server/googleSheetsBackend.ts`
 - Sheet write schema: `server/sheetSchema.ts`
 - Normalized menu source and price resolver: `src/menuRepository.ts`
 - Shared receipt money/payment calculation: `src/receiptCalculator.ts`
@@ -68,11 +66,10 @@ files. Before production cutover, run:
 ```powershell
 npm run check
 npm run e2e
-npm run e2e:supabase
 npm run supabase:test
 ```
 
-`npm run e2e:supabase` intentionally uses a non-production placeholder endpoint
+`npm run e2e` intentionally uses a non-production placeholder endpoint
 to verify lazy routing and responsive sign-in shells. It does not claim to test
 authenticated database writes; follow `docs/supabase-setup.md` for that final
 project-backed acceptance pass.
@@ -108,13 +105,21 @@ Expected tabs:
 
 The backend also supports existing helper tabs used by the app, such as `Generated Vouchers`, `Staff`/`Staff Users`, and `History`/`Day History`.
 
-The staff and customer ordering interfaces use `src/joy_corner_menu_with_sizes.json` through `src/menuRepository.ts` as the menu price source of truth. Waiters select a menu item and size; visible unit-price editing is disabled, and the backend resolves the submitted item/size price again before writing the order.
+The active interfaces load menu items, sizes, and modifiers from Supabase. The
+database RPC re-reads availability and prices before atomically writing each
+order. `src/joy_corner_menu_with_sizes.json` remains a version-controlled seed
+and legacy fallback, not the live Supabase price authority.
 
-Receipt line totals and paid amounts are recalculated with `src/receiptCalculator.ts` on both the frontend and backend. The waiter UI blocks concurrent submissions, sends an idempotency key with each receipt, and the backend returns the existing receipt when the same idempotency key is seen again.
+Supabase order RPCs revalidate line totals, payment state, and idempotency keys in
+one database transaction. The customer cart keeps its draft and submission key
+together across refreshes, so retrying cannot create a second order.
 
 End Day reset is owner-only and writes an immutable Day History row before marking same-day order rows as archived. If the current `YYYY-MM-DD` business date already exists in Day History, the backend rejects the reset with HTTP `409` to prevent duplicate closure. Customer rows, loyalty history, generated vouchers, payments, and unpaid balances are not deleted by the reset flow.
 
-## Firestore Staff Users
+## Legacy Firebase rollback reference
+
+The following Firebase details apply only when `VITE_DATA_PROVIDER=legacy` is
+set intentionally. They are not required for the normal Supabase app.
 
 Every staff member must have a Firebase Auth email/password account and a matching Firestore document:
 
@@ -222,12 +227,9 @@ npm install
 npm run dev
 ```
 
-This starts:
-
-- Frontend: `http://localhost:8081`
-- Backend: `http://localhost:3001`
-
-Local development still uses real Firebase Auth, Firestore staff roles, and Google Sheets credentials from `.env.local`. Keep the project root free of `.env` before deploying Firebase Functions because Firebase CLI treats root `.env` as Functions runtime env.
+This starts the Supabase application at `http://localhost:8081`. The browser
+connects directly to Supabase using its publishable key; no Firebase backend is
+started. Use `npm run dev:legacy` only for an intentional rollback exercise.
 
 ## Checks
 
@@ -244,44 +246,32 @@ Run the full local verification chain:
 npm run check
 ```
 
-## Firebase Deploy Commands
+## Deployment and reporting
 
 ```powershell
-npm run deploy
-npm run deploy:firebase
-npm run deploy:firebase:hosting
-npm run deploy:firebase:functions
-npm run deploy:firebase:rules
+npm run build
+npm run sync:reporting
+npm run supabase:lint
+npx supabase migration list --linked
 ```
 
 ## Security
 
 - Never commit `.env.local`, `.env`, or service account secrets.
 - Do not call Google Sheets directly from the browser.
-- Production Google Sheets access uses the Firebase Functions runtime service account. Share the Sheet with that service account as Editor.
+- The scheduled reporting worker uses server-only Supabase and Google
+  credentials. Share the Sheet with that Google service account as Editor.
 - Keep Canva credentials server-side only. If Canva secrets are not configured, voucher link/update workflows should fail clearly without breaking loyalty tracking.
 - Rotate service account keys if they were ever pasted into public code, GitHub, old integrations, or frontend variables.
 
-## Firebase Function Secrets
+## Legacy Firebase fallback
 
-Set backend-only values with Firebase secrets:
-
-```powershell
-firebase functions:secrets:set GOOGLE_SHEET_ID
-```
-
-For `joycornerapp-c784d`, share the Google Sheet with this runtime service account:
-
-```text
-606859361107-compute@developer.gserviceaccount.com
-```
-
-Optional Canva secrets, only when backend voucher generation is connected:
+Firebase deployment commands remain available only for rollback:
 
 ```powershell
-firebase functions:secrets:set CANVA_CLIENT_ID
-firebase functions:secrets:set CANVA_CLIENT_SECRET
-firebase functions:secrets:set CANVA_REFRESH_TOKEN
+npm run dev:legacy
+npm run e2e:legacy
+npm run deploy:firebase
 ```
 
 ## Optional Neon Reporting Database
@@ -293,4 +283,5 @@ NEON_DATABASE_URL
 NEON_BACKUP_ENABLED=true
 ```
 
-Apply `docs/neon-schema.sql` to the Neon database before enabling backup writes. The current production source of truth remains Firebase Functions + Google Sheets until a live Neon connection and reconciliation job are configured.
+Apply `docs/neon-schema.sql` only if the additional Neon backup is intentionally
+enabled. Supabase remains the operational source of truth.

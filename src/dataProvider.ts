@@ -2,11 +2,13 @@ const supabaseConfig =
   typeof __SUPABASE_CONFIG__ === "undefined"
     ? { publishableKey: "", url: "" }
     : __SUPABASE_CONFIG__;
-const configuredProvider =
-  typeof __DATA_PROVIDER__ === "undefined" ? "legacy" : __DATA_PROVIDER__;
+export const configuredDataProvider =
+  typeof __DATA_PROVIDER__ === "undefined" ? "supabase" : __DATA_PROVIDER__;
+
+export const supabaseConfigPresent = Boolean(
+  supabaseConfig.url && supabaseConfig.publishableKey,
+);
 
 export const supabaseModeEnabled = Boolean(
-  configuredProvider === "supabase" &&
-    supabaseConfig.url &&
-    supabaseConfig.publishableKey,
+  configuredDataProvider === "supabase" && supabaseConfigPresent,
 );

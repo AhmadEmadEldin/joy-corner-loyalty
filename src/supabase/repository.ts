@@ -392,42 +392,50 @@ export async function loadCustomerDashboard(): Promise<{
   vouchers: CustomerVoucher[];
 }> {
   const client = getSupabaseClient();
-  const [orders, orderItems, orderModifiers, rewards, vouchers, notifications] =
-    await Promise.all([
-      client
-        .from("orders")
-        .select(
-          "id,order_number,status,confirmation_status,payment_status,payment_method,pickup_name,customer_notes,subtotal,discount_total,voucher_discount,tax_total,total,rejection_reason,cancellation_reason,created_at",
-        )
-        .order("created_at", { ascending: false }),
-      client
+  const [orders, rewards, vouchers, notifications] = await Promise.all([
+    client
+      .from("orders")
+      .select(
+        "id,order_number,status,confirmation_status,payment_status,payment_method,pickup_name,customer_notes,subtotal,discount_total,voucher_discount,tax_total,total,rejection_reason,cancellation_reason,created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(100),
+    client
+      .from("rewards_accounts")
+      .select("points_balance,eligible_purchase_count,free_rewards_available")
+      .maybeSingle(),
+    client
+      .from("vouchers")
+      .select(
+        "id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,status,expires_at",
+      )
+      .order("issued_at", { ascending: false }),
+    client
+      .from("notifications")
+      .select("id,type,title,message,read,related_order_id,created_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+  const orderIds = (orders.data || []).map((order) => String(order.id));
+  const orderItems = orderIds.length
+    ? await client
         .from("order_items")
         .select(
           "id,order_id,item_name_snapshot,category_name_snapshot,size_name,quantity,unit_price,modifiers_total,total_price,customer_notes",
         )
-        .order("created_at"),
-      client
+        .in("order_id", orderIds)
+        .order("created_at")
+    : { data: [], error: null };
+  const orderItemIds = (orderItems.data || []).map((item) => String(item.id));
+  const orderModifiers = orderItemIds.length
+    ? await client
         .from("order_item_modifiers")
         .select(
           "order_item_id,modifier_name_snapshot,unit_price,quantity,total_price",
         )
-        .order("created_at"),
-      client
-        .from("rewards_accounts")
-        .select("points_balance,eligible_purchase_count,free_rewards_available")
-        .maybeSingle(),
-      client
-        .from("vouchers")
-        .select(
-          "id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,status,expires_at",
-        )
-        .order("issued_at", { ascending: false }),
-      client
-        .from("notifications")
-        .select("id,type,title,message,read,related_order_id,created_at")
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
+        .in("order_item_id", orderItemIds)
+        .order("created_at")
+    : { data: [], error: null };
   if (
     orders.error ||
     orderItems.error ||
@@ -473,6 +481,7 @@ export async function markNotificationRead(
 export async function placeCustomerOrder(input: {
   cart: CartLine[];
   customerNotes: string;
+  idempotencyKey: string;
   paymentMethod:
     | "cash_at_cashier"
     | "card_at_branch"
@@ -507,12 +516,11 @@ export async function placeCustomerOrder(input: {
       );
     }
   }
-  const idempotencyKey = crypto.randomUUID();
   const { data, error } = await getSupabaseClient().rpc(
     "place_customer_order",
     {
       customer_notes: input.customerNotes,
-      idempotency_key: idempotencyKey,
+      idempotency_key: input.idempotencyKey,
       items: input.cart.map((line) => ({
         modifierIds: line.modifiers.map((modifier) => modifier.id),
         notes: line.notes,
@@ -557,21 +565,32 @@ export async function createStaffOrder(input: {
 }
 
 export function subscribeToCustomerChanges(
+  customerId: string,
   onChange: () => void,
   onConnectionChange?: (connected: boolean) => void,
 ): () => void {
   const client = getSupabaseClient();
   const connectedChannels = new Set<string>();
-  const channels: RealtimeChannel[] = [
-    "orders",
-    "rewards_accounts",
-    "vouchers",
-    "notifications",
-  ].map((table) => {
+  const subscriptions = [
+    { column: "customer_id", table: "orders" },
+    { column: "customer_id", table: "rewards_accounts" },
+    { column: "customer_id", table: "vouchers" },
+    { column: "user_id", table: "notifications" },
+  ];
+  const channels: RealtimeChannel[] = subscriptions.map(({ column, table }) => {
     const channelName = `customer:${table}:${crypto.randomUUID()}`;
     return client
       .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table }, onChange)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          filter: `${column}=eq.${customerId}`,
+          schema: "public",
+          table,
+        },
+        onChange,
+      )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") connectedChannels.add(channelName);
         else connectedChannels.delete(channelName);
