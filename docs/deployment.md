@@ -20,6 +20,10 @@ Review every local-only migration before requesting approval for
 `npm run supabase:push`. A build or frontend deployment does not authorize a
 database push.
 
+Production currently includes migrations through
+`20260720211217_reporting_outbox.sql`, applied after explicit approval on
+2026-07-21.
+
 The frontend runtime requires only:
 
 ```text

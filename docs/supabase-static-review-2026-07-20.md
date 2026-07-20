@@ -176,7 +176,7 @@ found among the five existing migrations.
 ## Safe local fixes applied
 
 - Guarded the optional `rls_auto_enable()` hardening statement.
-- Added a new, unapplied hardening migration for internal function privileges,
+- Added a hardening migration for internal function privileges,
   audited profile updates, RLS init-plan caching, targeted indexes, and removal
   of raw payment Realtime publication.
 - Removed the unused client payment subscription.
@@ -191,14 +191,18 @@ selection moved to `src/RootApp.tsx` and now defaults to `supabase`. The legacy
 Firebase application is lazy-loaded only when `VITE_DATA_PROVIDER=legacy`.
 Normal development no longer starts the Firebase/Sheets backend.
 
-A later local-only migration adds a protected, indexed reporting outbox plus
+A later migration adds a protected, indexed reporting outbox plus
 server-only claim/complete/fail functions. The Google Sheets worker batch-upserts
 stable record IDs into the eight existing operational tabs, changes only mapped
 columns on existing rows, and retries independently of order transactions. It
 will not create tabs or rewrite formula/manual columns. No Firebase order/receipt
 mirror was added. The migration seeds current operational records into the queue
 for a first-run backfill, while deliberately excluding historical audit logs.
-Neither local-only migration has been pushed.
+After explicit production approval, both migrations were applied to the linked
+Supabase project on 2026-07-21. Migration history, anonymous API isolation, RPC
+authorization, Edge Function authentication, and linked database lint were
+verified after deployment. The reporting queue remains non-blocking while its
+Google service-account credential is configured.
 
 The policies were subsequently compared directly with Supabase's current RLS
 guide. Regression coverage now fails if any public table/partition lacks RLS or
