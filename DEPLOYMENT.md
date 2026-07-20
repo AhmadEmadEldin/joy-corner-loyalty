@@ -1,116 +1,71 @@
-# Joy Corner Firebase Deployment
+# Joy Corner Supabase Deployment
 
-## Deployment Flow
-
-```text
-VS Code -> GitHub -> Firebase Hosting -> Firebase HTTPS Function -> Firestore users/{uid} or customers/{uid} -> Google Sheets
-```
-
-Firebase Hosting serves the React build from `dist`. Requests to `/api/**` are rewritten to the Firebase Function named `api`.
-
-## Firebase Project
-
-The repo is configured in `.firebaserc` for:
+## Runtime architecture
 
 ```text
-joycornerapp-c784d
+React static build
+-> Supabase Auth
+-> Supabase PostgreSQL + RLS + transactional RPCs
+-> Supabase Realtime role-safe projections
+-> integration_outbox
+-> scheduled Google Sheets reporting worker
 ```
 
-Change `.firebaserc` if you deploy to a different Firebase project.
+Firebase Hosting, Functions, Auth, and Firestore are retained only as an
+explicit rollback system. They are not started by `npm run dev`, and Supabase
+orders or receipts are never mirrored to Firestore.
 
-## Required Environment Variables
-
-Frontend Firebase config is needed at build time:
+## Frontend variables
 
 ```text
-VITE_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID
-VITE_FIREBASE_APP_ID
-VITE_FIREBASE_STORAGE_BUCKET
-VITE_FIREBASE_MESSAGING_SENDER_ID
-VITE_FIREBASE_MEASUREMENT_ID
+VITE_DATA_PROVIDER=supabase
+VITE_SUPABASE_URL=https://ruurfhrjqfcydxbzpuqi.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 ```
 
-Google Sheets backend access is needed by the Firebase Function:
+Only these public values belong in the browser build. Never expose the
+service-role key or Google credentials through a `VITE_` variable.
 
-```text
-GOOGLE_SHEET_ID
-```
-
-For local `.env.local`, these variables are read directly. For deployed Firebase Functions, use Firebase Secret Manager:
+## Verify before deployment
 
 ```powershell
-firebase functions:secrets:set GOOGLE_SHEET_ID
+npm ci
+npm run check
+npm run e2e
+npm run supabase:lint
+npx supabase migration list --linked
 ```
 
-Use this value for `GOOGLE_SHEET_ID`:
-
-```text
-1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8
-```
-
-The backend also accepts the full Google Sheets URL, but the raw ID is cleaner.
-
-Compatibility Google Sheets variable still accepted by local code:
-
-```text
-GOOGLE_SHEETS_SPREADSHEET_ID
-```
-
-Do not keep a root `.env` file before deploying Firebase Functions. Firebase CLI loads root `.env` as Functions runtime env and rejects reserved `FIREBASE_*` keys. Use `.env.local` for local builds and scripts.
-
-## Firebase Setup
-
-1. Enable Firebase Authentication Email/Password.
-2. Enable Firestore.
-3. Create staff Auth users, or keep them in the Google Sheet tab named `Staff`.
-4. Create Firestore documents at `users/{uid}` with `email`, `displayName`, `type: "staff"`, `role`, and `active`.
-5. Run `npm run sync:staff` to sync the `Staff` sheet into Firebase Auth/Firestore when network credentials are working.
-
-Allowed staff roles are `owner`, `manager`, `cashier`, `waiter`, and `barista`.
-
-Customer signup creates `customers/{uid}` with `email`, `displayName`, `phone`, `type: "customer"`, `active`, and `loyaltyPoints`.
-
-## Google Sheets Setup
-
-1. Enable Google Sheets API in Google Cloud.
-2. Share `Joy_Corner_Integrated_WITH_Loyalty_Winners` with the Firebase Functions runtime service account as Editor.
-3. Set `GOOGLE_SHEET_ID` to the spreadsheet ID only.
-
-For project `joycornerapp-c784d`, the default runtime service account shown by Firebase dry-run is:
-
-```text
-606859361107-compute@developer.gserviceaccount.com
-```
-
-If you later change the Functions service account, share the Sheet with that new service account instead.
-
-## Deploy
+Local-only migrations must be reviewed and explicitly approved before:
 
 ```powershell
-npm install
-npm run lint:types
-npm run build
+npm run supabase:push
+```
+
+The React build is generated in `dist/` and requires an SPA rewrite to
+`index.html`. Supabase provides the application backend; select a static
+frontend host separately.
+
+## Google Sheets reporting worker
+
+Run this on a trusted scheduled server process:
+
+```powershell
+npm run sync:reporting
+```
+
+It requires `SUPABASE_SERVICE_ROLE_KEY`, the workbook ID, and one Google
+service-account credential method from `.env.example`. It claims bounded outbox
+batches, upserts by stable record ID, and retries failures with exponential
+backoff. Sheet downtime does not delay or cancel customer orders.
+
+## Legacy rollback only
+
+```powershell
+npm run dev:legacy
+npm run e2e:legacy
 npm run deploy:firebase
 ```
 
-Deploy only Hosting:
-
-```powershell
-npm run deploy:firebase:hosting
-```
-
-Deploy only Functions:
-
-```powershell
-npm run deploy:firebase:functions
-```
-
-Deploy only Firestore rules:
-
-```powershell
-npm run deploy:firebase:rules
-```
-
-Do not upload `.env.local`, `.env`, service account JSON files, or private keys to GitHub.
+Do not run legacy and Supabase as simultaneous operational writers. Never
+upload `.env`, `.env.local`, service-account JSON, or private keys.

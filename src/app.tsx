@@ -1,4 +1,12 @@
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  CSSProperties,
+  FormEvent,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { User } from "firebase/auth";
 import {
   StaffProfile,
@@ -10,8 +18,37 @@ import {
   signUpCustomer,
   signOutStaff,
   watchFirebaseUser,
+  watchActiveOrders,
   watchStaffAuth,
 } from "./firebase";
+import {
+  normalizedMenu,
+  resolveLiveMenuPrice,
+  resolveMenuPrice,
+} from "./menuRepository";
+import { MobileNavigation } from "./MobileNavigation";
+import {
+  calculateReceipt,
+  calculateReceiptLine,
+  calculateReceiptTotals,
+  normalizePaymentStatus,
+} from "./receiptCalculator";
+import {
+  getPaymentStatusClass,
+  getPreparationStatusClass,
+  isFinishedPreparationStatus,
+  isPickedUpStatus,
+  normalizePaymentStatusForDisplay,
+  normalizePreparationStatus,
+  PreparationStatus,
+} from "./receiptVisualState";
+import {
+  actionFeaturePermissions,
+  hasPermission,
+  resolveEffectivePermissions,
+  visibleTabsForPermissions,
+} from "./permissions";
+import { buildReceiptPrintHtml } from "./receiptPrint";
 
 const coffeeBeanFieldUrl = "/assets/coffee-bean-field.jpg";
 const joyCultureStripUrl = "/assets/joy-reference-hero.png";
@@ -53,26 +90,40 @@ type AppData = {
   staffProfile?: StaffProfile;
 };
 
+type OwnerData = {
+  auditLogs?: Row[];
+  permissionCatalog?: string[];
+  staff?: Row[];
+  syncFailures?: Row[];
+  systemHealth?: Row;
+};
+
 type ApiResponse = {
   success?: boolean;
   data?: AppData;
+  receipt?: Row;
   staff?: StaffProfile;
   message?: string;
 };
 
 type ReceiptItem = {
+  category: string;
+  discount?: number;
+  extrasTotal?: number;
   itemId: string;
   itemName: string;
-  category: string;
+  notes?: string;
   qty: number;
-  unitPrice: number;
-  discount: number;
+  size: string;
   total: number;
+  unitPrice: number;
 };
 
 type ReceiptPayload = {
   receiptId: string;
   receiptKey: string;
+  orderId?: string;
+  receiptNumber?: string;
   customerId: string;
   customerName: string;
   orderDateTime: string;
@@ -87,7 +138,8 @@ type TabId =
   | "vouchers"
   | "unpaid"
   | "history"
-  | "menu";
+  | "menu"
+  | "owner";
 
 const tabs: Array<[TabId, string]> = [
   ["dashboard", "Dashboard"],
@@ -98,32 +150,176 @@ const tabs: Array<[TabId, string]> = [
   ["unpaid", "Unpaid"],
   ["history", "History"],
   ["menu", "Menu"],
+  ["owner", "Owner"],
 ];
 
-const tabIcons: Record<TabId, string> = {
-  customers: "CUS",
-  dashboard: "DASH",
-  history: "HIST",
-  menu: "MENU",
-  orders: "ORD",
-  rewards: "REW",
-  unpaid: "DUE",
-  vouchers: "VCH",
-};
+function TabIcon({ id }: { id: TabId }) {
+  const paths: Record<TabId, ReactNode> = {
+    customers: (
+      <>
+        <path d="M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+        <circle cx="9.5" cy="7" r="3.5" />
+        <path d="M20.5 20v-2a3.5 3.5 0 0 0-2.8-3.4" />
+        <path d="M16.5 3.4a3.5 3.5 0 0 1 0 6.8" />
+      </>
+    ),
+    dashboard: (
+      <>
+        <path d="M4 13a8 8 0 1 1 16 0" />
+        <path d="M5 17h14" />
+        <path d="m12 13 4-4" />
+        <path d="M8 21h8" />
+      </>
+    ),
+    history: (
+      <>
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <path d="M3 4v5h5" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    menu: (
+      <>
+        <path d="M5 8h11a4 4 0 0 1 0 8H5z" />
+        <path d="M16 10h1a2 2 0 0 1 0 4h-1" />
+        <path d="M7 3v2" />
+        <path d="M11 3v2" />
+        <path d="M5 19h12" />
+      </>
+    ),
+    orders: (
+      <>
+        <path d="M7 3h10l2 3v15H5V6z" />
+        <path d="M7 8h10" />
+        <path d="M8 12h8" />
+        <path d="M8 16h5" />
+      </>
+    ),
+    owner: (
+      <>
+        <path d="M12 3 20 7v5c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V7z" />
+        <path d="M9 12l2 2 4-5" />
+      </>
+    ),
+    rewards: (
+      <>
+        <path d="M12 3 14.7 8l5.6.8-4.1 4 1 5.6L12 15.8l-5.2 2.7 1-5.6-4.1-4L9.3 8z" />
+        <path d="M9 21h6" />
+      </>
+    ),
+    unpaid: (
+      <>
+        <rect height="13" rx="2" width="18" x="3" y="6" />
+        <path d="M3 10h18" />
+        <path d="M7 15h4" />
+        <path d="M16 14v3" />
+      </>
+    ),
+    vouchers: (
+      <>
+        <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z" />
+        <path d="M9 9h.01" />
+        <path d="M15 15h.01" />
+        <path d="m9 15 6-6" />
+      </>
+    ),
+  };
+
+  return (
+    <span className="tab-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {paths[id]}
+      </svg>
+    </span>
+  );
+}
+
+export function buildReceiptSubmissionPayload(
+  form: HTMLFormElement,
+  items: ReceiptItem[],
+  customers: Row[],
+) {
+  const customerId = stringValue(form.elements.namedItem("customerId"));
+  const customer = customers.find((row) => customerIdOf(row) === customerId);
+  const payload = formObject(form) as Record<string, unknown>;
+  const discount = stringValue(
+    form.elements.namedItem("receiptDiscountPercentage"),
+  );
+  const receiptTotals = calculateReceiptTotals(items, discount);
+  const paidAmountText = stringValue(
+    form.elements.namedItem("paidAmount"),
+  ).trim();
+  const requestedPaidAmount = paidAmountText
+    ? numberValue(form.elements.namedItem("paidAmount"))
+    : 0;
+  const requestedPaymentStatus = stringValue(
+    form.elements.namedItem("paymentStatus"),
+  );
+  const normalizedPaymentStatus = normalizePaymentStatus(
+    requestedPaymentStatus,
+  );
+  const amountPaid =
+    normalizedPaymentStatus === "Unpaid"
+      ? 0
+      : normalizedPaymentStatus === "Paid" && !paidAmountText
+        ? receiptTotals.receiptTotal
+        : requestedPaidAmount;
+  const receiptCalculation = calculateReceipt({
+    amountPaid,
+    items,
+    orderDiscount: receiptTotals.receiptDiscountAmount,
+  });
+
+  payload.customerName =
+    customerName(customer) || stringValue(payload.customerName);
+  payload.phone =
+    phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
+  payload.items = items;
+  payload.receiptDiscountPercentage = discount;
+  payload.paidAmount = receiptCalculation.amountPaid;
+  payload.amountApplied = receiptCalculation.amountApplied;
+  payload.amountReceived = receiptCalculation.amountReceived;
+  payload.remainingAmount = receiptCalculation.remainingAmount;
+  payload.changeAmount = receiptCalculation.changeAmount;
+  payload.paymentStatus = receiptCalculation.paymentStatus;
+  payload.receiptSubtotal = receiptTotals.receiptSubtotal;
+  payload.receiptDiscountAmount = receiptTotals.receiptDiscountAmount;
+  payload.receiptTotal = receiptCalculation.grandTotal;
+  payload.idempotencyKey =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  payload.clientRequestId = payload.idempotencyKey;
+  payload.orderPlace = composeServicePlace(payload);
+  delete payload.customerSearch;
+  delete payload.serviceType;
+  delete payload.carName;
+  delete payload.carColor;
+  return payload;
+}
 
 export function App() {
   if (window.location.pathname.startsWith("/order")) {
     return <CustomerOrderPage />;
   }
 
+  return <LegacyStaffApp />;
+}
+
+function LegacyStaffApp() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [data, setData] = useState<AppData | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
   const [status, setStatus] = useState("Loading sheet data...");
   const [loading, setLoading] = useState(false);
+  const [savingAction, setSavingAction] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [autoScroll, setAutoScroll] = useState(false);
   const [staffProfile, setStaffProfile] = useState<StaffProfile | null>(null);
+  const [ownerData, setOwnerData] = useState<OwnerData>({});
+  const receiptSubmittingRef = useRef(false);
+  const syncRequestRef = useRef(0);
+  const syncInFlightRef = useRef(false);
   const [authStatus, setAuthStatus] = useState(
     firebaseReady
       ? "Sign in with your staff account."
@@ -132,20 +328,30 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(firebaseReady);
 
   const currentRole = staffProfile?.role || "barista";
-  const visibleTabs = useMemo(() => tabsForRole(currentRole), [currentRole]);
+  const visibleTabs = useMemo(
+    () =>
+      visibleTabsForPermissions(
+        currentRole,
+        staffProfile?.effectivePermissions || [],
+      ),
+    [currentRole, staffProfile?.effectivePermissions],
+  );
   const connectedData = useMemo(() => ensureConnectedData(data), [data]);
   const customers = connectedData.customers || [];
-  const menu = connectedData.menu || [];
+  const menu = connectedData.menu?.length ? connectedData.menu : normalizedMenu;
   const lists = connectedData.lists || {};
   const dashboardOrders = (connectedData.dashboardOrders || [])
     .map((order) => enrichOrderCustomerPhone(order, customers))
     .slice()
     .sort((left, right) => {
       return (
-        Number(isPickedUp(left.orderStatus)) - Number(isPickedUp(right.orderStatus)) ||
+        Number(isPickedUpStatus(left.orderStatus)) -
+          Number(isPickedUpStatus(right.orderStatus)) ||
         compareRecentOrders(left, right)
       );
     });
+  const canRunCurrentAction = (action: string) =>
+    canRunActionForProfile(staffProfile, currentRole, action);
 
   useEffect(() => {
     if (!firebaseReady) return undefined;
@@ -155,7 +361,9 @@ export function App() {
         setStaffProfile(session?.profile || null);
         setAuthLoading(false);
         if (session?.profile) {
-          setAuthStatus(`Signed in as ${session.profile.displayName || session.profile.email}.`);
+          setAuthStatus(
+            `Signed in as ${session.profile.displayName || session.profile.email}.`,
+          );
         }
       },
       (message) => {
@@ -171,8 +379,30 @@ export function App() {
   }, [staffProfile?.uid]);
 
   useEffect(() => {
-    if (!visibleTabs.some(([id]) => id === activeTab)) {
-      setActiveTab(visibleTabs[0]?.[0] || "dashboard");
+    if (!staffProfile || !firebaseReady) return undefined;
+    return watchActiveOrders(
+      (orders) => {
+        const live = orders as Row[];
+        setData((current) =>
+          ensureConnectedData({
+            ...(current || {}),
+            dashboardOrders: mergeRowsByKey(
+              live,
+              current?.dashboardOrders || [],
+              receiptKeyOf,
+            ),
+            orders: mergeRowsByKey(live, current?.orders || [], receiptKeyOf),
+          }),
+        );
+      },
+      (message) => setStatus(`Live order warning: ${message}`),
+    );
+  }, [staffProfile?.uid]);
+
+  useEffect(() => {
+    const visibleTabIds = visibleTabs.map(([id]) => id as TabId);
+    if (!visibleTabIds.some((id) => id === activeTab)) {
+      setActiveTab((visibleTabs[0]?.[0] as TabId) || "dashboard");
     }
   }, [activeTab, visibleTabs]);
 
@@ -180,7 +410,8 @@ export function App() {
     if (!autoScroll || activeTab !== "dashboard") return undefined;
 
     const timer = window.setInterval(() => {
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
       const nextScroll = window.scrollY + Math.round(window.innerHeight * 0.7);
       window.scrollTo({
         behavior: "smooth",
@@ -190,6 +421,42 @@ export function App() {
 
     return () => window.clearInterval(timer);
   }, [activeTab, autoScroll]);
+
+  useEffect(() => {
+    if (activeTab === "owner" && currentRole === "owner") {
+      void loadOwnerOverview();
+    }
+  }, [activeTab, currentRole]);
+
+  useEffect(() => {
+    if (!staffProfile) return undefined;
+
+    let stopped = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const run = async (immediate = false) => {
+      if (stopped) return;
+      if (document.hidden && !immediate) {
+        timeoutId = setTimeout(run, 7000);
+        return;
+      }
+      await refreshLiveData({ silent: true });
+      if (!stopped) timeoutId = setTimeout(run, 5000);
+    };
+
+    const onVisible = () => {
+      if (!document.hidden) void refreshLiveData({ silent: true });
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    timeoutId = setTimeout(run, 1500);
+
+    return () => {
+      stopped = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [staffProfile?.uid, currentRole]);
 
   async function loadData(options: { silent?: boolean } = {}) {
     if (!options.silent) setStatus("Loading sheet data...");
@@ -213,7 +480,9 @@ export function App() {
         );
       }
       if (!options.silent) {
-        setStatus(`Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`);
+        setStatus(
+          `Loaded ${new Date().toLocaleString()} | ${dataSummary(connected)}`,
+        );
       }
     } catch (error) {
       console.error("Failed to load app data", error);
@@ -232,24 +501,53 @@ export function App() {
     payload: Record<string, unknown>,
     message: string,
   ) {
-    if (!canRunAction(currentRole, action)) {
+    if (!canRunActionForProfile(staffProfile, currentRole, action)) {
       setStatus("This account does not have permission for that action.");
-      return;
+      return false;
     }
 
     try {
-      setLoading(true);
+      setSavingAction(action);
       setStatus("Saving...");
       const response = await callServer(action, payload);
       const nextData = ensureConnectedData(response.data || response);
-      setData(nextData);
+      mergeAppData(nextData);
       setStatus(`${message} ${dataSummary(nextData)}`);
+      return true;
     } catch (error) {
       console.error(`Action ${action} failed`, error);
-      setStatus(errorMessage(error));
+      setStatus(
+        action === "addReceipt"
+          ? `${errorMessage(error)} Order was not saved.`
+          : errorMessage(error),
+      );
+      return false;
     } finally {
-      setLoading(false);
+      setSavingAction(null);
     }
+  }
+
+  async function refreshLiveData(
+    options: { force?: boolean; silent?: boolean } = {},
+  ) {
+    if (syncInFlightRef.current && !options.force) return;
+    const requestId = ++syncRequestRef.current;
+
+    try {
+      syncInFlightRef.current = true;
+      const response = await callServer("liveData");
+      if (requestId !== syncRequestRef.current) return;
+      mergeAppData(ensureConnectedData(response.data || response));
+      if (!options.silent) setStatus("Live orders refreshed.");
+    } catch (error) {
+      if (!options.silent) setStatus(errorMessage(error));
+    } finally {
+      if (requestId === syncRequestRef.current) syncInFlightRef.current = false;
+    }
+  }
+
+  function mergeAppData(nextData: AppData) {
+    setData((current) => mergeConnectedData(current, nextData));
   }
 
   function setFilter(id: string, value: string) {
@@ -260,81 +558,225 @@ export function App() {
     const query = (filters[id] || "").trim().toLowerCase();
     if (!query) return rows;
     if (query === "__unpaid") {
-      return rows.filter((row) => numberValue(row.outstandingAmount) > 0 || stringValue(row.paymentStatus).toLowerCase() === "unpaid");
+      return rows.filter(
+        (row) =>
+          numberValue(row.outstandingAmount) > 0 ||
+          stringValue(row.paymentStatus).toLowerCase() === "unpaid",
+      );
     }
     if (query === "__paid") {
-      return rows.filter((row) => numberValue(row.outstandingAmount) <= 0 && stringValue(row.paymentStatus).toLowerCase() === "paid");
+      return rows.filter(
+        (row) =>
+          numberValue(row.outstandingAmount) <= 0 &&
+          stringValue(row.paymentStatus).toLowerCase() === "paid",
+      );
     }
     return rows.filter((row) => rowSearchText(row).includes(query));
   }
 
-  function addReceiptItemFromForm(form: HTMLFormElement) {
+  function receiptItemFromForm(form: HTMLFormElement): ReceiptItem | null {
     const itemId = stringValue(form.elements.namedItem("itemId"));
-    const selectedItem = menu.find((item) => stringValue(item.itemId) === itemId);
+    const selectedItem = menu.find(
+      (item) => stringValue(item.itemId) === itemId,
+    );
+    const selectedSize =
+      stringValue(form.elements.namedItem("size")) ||
+      stringValue(selectedItem?.standardSize) ||
+      "Standard";
 
     if (!selectedItem) {
-      setStatus("Choose a menu item first.");
-      return;
+      setStatus("Choose a menu item.");
+      return null;
     }
 
-    const qty = numberValue(form.elements.namedItem("qty")) || 1;
+    const qty = numberValue(form.elements.namedItem("qty"));
+    if (!qty || qty < 1) {
+      setStatus("Quantity must be at least 1.");
+      return null;
+    }
+
+    const staff = stringValue(form.elements.namedItem("staff"));
+    if (!staff) {
+      setStatus("Choose a staff member.");
+      return null;
+    }
+
+    const resolvedPrice =
+      resolvePriceForMenuRow(selectedItem, selectedSize) ||
+      resolveMenuPrice(itemId, selectedSize, menuName(selectedItem));
     const unitPrice =
+      resolvedPrice?.price ||
       numberValue(form.elements.namedItem("unitPrice")) ||
       numberValue(selectedItem.suggestedPrice) ||
       firstPrice(menuPrice(selectedItem));
-    const discount = numberValue(form.elements.namedItem("discount"));
-    const total = Math.max(0, qty * unitPrice - discount);
+    if (!unitPrice || unitPrice < 0) {
+      setStatus("Selected menu item does not have a valid price.");
+      return null;
+    }
 
-    setReceiptItems((items) => [
-      {
-        itemId,
-        itemName: menuName(selectedItem),
-        category: stringValue(selectedItem.category),
-        qty,
-        unitPrice,
-        discount,
-        total,
-      },
-      ...items,
-    ]);
-    setStatus(`${menuName(selectedItem)} added to receipt.`);
+    const line = calculateReceiptLine({
+      qty,
+      unitPrice,
+    });
+    return {
+      category: resolvedPrice?.category || stringValue(selectedItem.category),
+      discount: line.discount,
+      extrasTotal: line.extrasTotal,
+      itemId: resolvedPrice?.itemId || itemId,
+      itemName: resolvedPrice?.itemName || menuName(selectedItem),
+      notes: stringValue(form.elements.namedItem("itemNotes")),
+      qty: line.qty,
+      size: resolvedPrice?.size || selectedSize,
+      total: line.total,
+      unitPrice: line.unitPrice,
+    };
+  }
+
+  function addReceiptItemFromForm(form: HTMLFormElement) {
+    const nextItem = receiptItemFromForm(form);
+    if (!nextItem) return null;
+
+    setReceiptItems((items) => [nextItem, ...items]);
+    setStatus(`${nextItem.itemName} added to receipt.`);
+    return nextItem;
+  }
+
+  function mergeReceiptResponseIntoAppData(response: ApiResponse & AppData) {
+    const receipt = response.receipt;
+    const nextData = ensureConnectedData(response.data || response);
+    const fallbackReceipt =
+      nextData.dashboardOrders?.[0] || nextData.orders?.[0];
+    const normalizedReceipt = receipt
+      ? ({
+          ...receipt,
+          receiptId: stringValue(receipt.receiptId || receipt.receiptNumber),
+          receiptNumber: stringValue(
+            receipt.receiptNumber || receipt.receiptId,
+          ),
+          receiptKey: stringValue(
+            receipt.receiptKey || receipt.receiptId || receipt.receiptNumber,
+          ),
+          orderId: stringValue(
+            receipt.orderId || receipt.receiptId || receipt.receiptNumber,
+          ),
+          customerId: stringValue(receipt.customerId),
+          customerName: stringValue(receipt.customerName),
+          staff: stringValue(receipt.staff),
+          orderPlace: stringValue(receipt.orderPlace),
+          total: stringValue(receipt.total),
+          paidAmount: stringValue(receipt.paidAmount),
+          outstandingAmount: stringValue(
+            receipt.outstandingAmount || receipt.remainingAmount,
+          ),
+          remainingAmount: stringValue(
+            receipt.remainingAmount || receipt.outstandingAmount,
+          ),
+          changeAmount: stringValue(receipt.changeAmount),
+          paymentStatus: stringValue(receipt.paymentStatus),
+          orderStatus: stringValue(receipt.orderStatus || "Submitted"),
+          orderDescription:
+            stringValue(receipt.orderDescription) ||
+            (Array.isArray(receipt.orderItems)
+              ? receipt.orderItems.map((item) => stringValue(item)).join(" + ")
+              : ""),
+          notes: stringValue(receipt.notes || receipt.customerNotes),
+          orderItems: Array.isArray(receipt.orderItems)
+            ? receipt.orderItems.map((item) => stringValue(item))
+            : [],
+        } as Row)
+      : fallbackReceipt;
+
+    if (!normalizedReceipt) {
+      mergeAppData(nextData);
+      return;
+    }
+
+    setData((current) => {
+      const base = ensureConnectedData(current);
+      const incomingOrders = nextData.orders?.length
+        ? nextData.orders
+        : [normalizedReceipt];
+      const incomingDashboardOrders = nextData.dashboardOrders?.length
+        ? nextData.dashboardOrders
+        : [normalizedReceipt];
+      const mergedOrders = mergeRowsByKey(
+        [normalizedReceipt, ...(base.orders || [])],
+        incomingOrders,
+        receiptKeyOf,
+      );
+      const mergedDashboardOrders = mergeRowsByKey(
+        [normalizedReceipt, ...(base.dashboardOrders || [])],
+        incomingDashboardOrders,
+        receiptKeyOf,
+      );
+
+      return ensureConnectedData({
+        ...base,
+        ...nextData,
+        dashboard: nextData.dashboard || base.dashboard,
+        dashboardOrders: mergedDashboardOrders,
+        orders: mergedOrders,
+        unpaid: nextData.unpaid || base.unpaid,
+      });
+    });
   }
 
   async function submitReceipt(form: HTMLFormElement) {
-    let items = receiptItems;
-    if (!items.length) {
-      addReceiptItemFromForm(form);
-      items = receiptItems;
+    if (receiptSubmittingRef.current) {
+      setStatus("Receipt is already being submitted.");
+      return false;
     }
 
-    if (!items.length) return;
+    const items = receiptItems.length
+      ? receiptItems
+      : (() => {
+          const pendingItem = receiptItemFromForm(form);
+          return pendingItem ? [pendingItem] : [];
+        })();
 
-    const customerId = stringValue(form.elements.namedItem("customerId"));
-    const customer = customers.find(
-      (row) => customerIdOf(row) === customerId,
-    );
-    const payload = formObject(form);
-    payload.customerName =
-      customerName(customer) ||
-      stringValue(payload.customerName);
-    payload.phone = phoneOf(customer) || stringValue(payload.customerPhone || payload.phone);
-    payload.items = items;
-    payload.orderPlace = composeServicePlace(payload);
-    delete payload.customerSearch;
-    delete payload.serviceType;
-    delete payload.carName;
-    delete payload.carColor;
+    if (!items.length) return false;
 
-    await callAndReload("addReceipt", payload, "Receipt submitted.");
-    setReceiptItems([]);
-    form.reset();
+    let payload: Record<string, unknown>;
+    try {
+      payload = buildReceiptSubmissionPayload(form, items, customers);
+    } catch (error) {
+      setStatus(errorMessage(error));
+      return false;
+    }
+
+    try {
+      receiptSubmittingRef.current = true;
+      setSavingAction("addReceipt");
+      setStatus("Saving...");
+      const response = await callServer("addReceipt", payload);
+      mergeReceiptResponseIntoAppData(response);
+      setStatus(
+        `Receipt submitted. ${dataSummary(ensureConnectedData(response.data || response))}`,
+      );
+      setReceiptItems([]);
+      form.reset();
+      return true;
+    } catch (error) {
+      console.error("Receipt submission failed", error);
+      setStatus(
+        `${errorMessage(error)} Receipt was not saved. Your entered data has been kept.`,
+      );
+      return false;
+    } finally {
+      receiptSubmittingRef.current = false;
+      setSavingAction(null);
+    }
   }
 
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    await callAndReload("addCustomer", formObject(form), "Customer added.");
-    form.reset();
+    const saved = await callAndReload(
+      "addCustomer",
+      formObject(form),
+      "Customer added.",
+    );
+    if (saved) form.reset();
   }
 
   async function removeCustomer(row: Row) {
@@ -394,7 +836,10 @@ export function App() {
     );
   }
 
-  async function setReceiptPayment(encodedPayload: string, paymentStatus: string) {
+  async function setReceiptPayment(
+    encodedPayload: string,
+    paymentStatus: string,
+  ) {
     const payload = receiptPayloadFrom(encodedPayload);
     await callAndReload(
       "updateReceiptPayment",
@@ -403,16 +848,107 @@ export function App() {
     );
   }
 
-  async function markReceiptDone(encodedPayload: string) {
+  async function collectReceiptPayment(encodedPayload: string) {
+    const amount = window.prompt("Amount collected now", "");
+    if (amount === null) return;
+    const numericAmount = numberValue(amount);
+    if (numericAmount <= 0) {
+      setStatus("Paid amount must be greater than 0.");
+      return;
+    }
     await callAndReload(
-      "markReceiptDone",
+      "collectReceiptPayment",
+      {
+        ...receiptPayloadFrom(encodedPayload),
+        amount: numericAmount,
+        paymentMethod: "Cash",
+      },
+      "Receipt payment collected.",
+    );
+  }
+
+  async function markReceiptDone(encodedPayload: string) {
+    return await callAndReload(
+      "pickupOrder",
       receiptPayloadFrom(encodedPayload),
       "Receipt marked picked up.",
     );
   }
 
+  async function markReceiptStatus(
+    encodedPayload: string,
+    action: string,
+    message: string,
+  ) {
+    return await callAndReload(
+      action,
+      receiptPayloadFrom(encodedPayload),
+      message,
+    );
+  }
+
   async function resetDay() {
     await callAndReload("resetDay", {}, "Day archived and dashboard reset.");
+  }
+
+  async function runOwnerAction(action: string, message: string) {
+    if (!canRunActionForProfile(staffProfile, currentRole, action)) {
+      setStatus("This account does not have permission for that action.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setStatus("Checking system...");
+      const response = await callServer(action, {});
+      const detail = response.message ? ` ${response.message}` : "";
+      setStatus(`${message}${detail}`);
+    } catch (error) {
+      console.error(`Owner action ${action} failed`, error);
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadOwnerOverview() {
+    try {
+      setLoading(true);
+      const response = await callServer("ownerOverview");
+      setOwnerData((response.data || response) as OwnerData);
+      setStatus("Owner controls refreshed.");
+    } catch (error) {
+      console.error("Owner overview failed", error);
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runOwnerMutation(
+    action: string,
+    payload: Record<string, unknown>,
+    message: string,
+  ) {
+    try {
+      setLoading(true);
+      const response = await callServer(action, payload);
+      if (response.data) setData(ensureConnectedData(response.data));
+      if ((response as unknown as { staff?: Row[] }).staff) {
+        setOwnerData((current) => ({
+          ...current,
+          staff: (response as unknown as { staff?: Row[] }).staff,
+        }));
+      }
+      setStatus(message);
+      await loadOwnerOverview();
+      await refreshLiveData({ force: true, silent: true });
+    } catch (error) {
+      console.error(`Owner mutation ${action} failed`, error);
+      setStatus(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submitAuthForm(event: FormEvent<HTMLFormElement>) {
@@ -428,7 +964,9 @@ export function App() {
       setAuthStatus("Signing in...");
 
       if (!firebaseReady) {
-        throw new Error("Firebase web config is missing. Add the VITE_FIREBASE_* variables.");
+        throw new Error(
+          "Firebase web config is missing. Add the VITE_FIREBASE_* variables.",
+        );
       }
 
       const profile = await signInStaff(email, password);
@@ -480,7 +1018,9 @@ export function App() {
             </div>
             <div>
               <h1>Joy Corner Loyalty</h1>
-              <p className="muted">Standalone staff web app connected to Google Sheets</p>
+              <p className="muted">
+                Standalone staff web app connected to Google Sheets
+              </p>
             </div>
           </div>
           <img className="joy-time-signature" alt="" src={joyYourTimeUrl} />
@@ -491,6 +1031,15 @@ export function App() {
               Sign out
             </button>
           </div>
+          <MobileNavigation
+            activeTab={activeTab}
+            displayName={staffProfile.displayName || staffProfile.email}
+            onSelect={(id) => setActiveTab(id as TabId)}
+            onSignOut={() => void handleSignOut()}
+            renderIcon={(id) => <TabIcon id={id as TabId} />}
+            role={roleLabel(staffProfile.role)}
+            tabs={visibleTabs.map((tab) => [tab[0]!, tab[1]!] as const)}
+          />
         </div>
       </header>
 
@@ -521,11 +1070,11 @@ export function App() {
           {visibleTabs.map(([id, label]) => (
             <button
               className={`tab-button ${activeTab === id ? "active" : ""}`}
-              data-icon={tabIcons[id]}
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => setActiveTab(id as TabId)}
               type="button"
             >
+              <TabIcon id={id as TabId} />
               {label}
             </button>
           ))}
@@ -534,15 +1083,27 @@ export function App() {
         {activeTab === "dashboard" && (
           <DashboardView
             dashboard={connectedData.dashboard || {}}
-            orders={filteredRows(dashboardOrders, "dashboardOrders").slice(0, 12)}
-            topItems={filteredRows(connectedData.dashboardTopItems || [], "topItems")}
+            orders={filteredRows(dashboardOrders, "dashboardOrders").slice(
+              0,
+              12,
+            )}
+            topItems={filteredRows(
+              connectedData.dashboardTopItems || [],
+              "topItems",
+            )}
             role={currentRole}
+            canAccept={canRunCurrentAction("acceptOrder")}
+            canPrepare={canRunCurrentAction("markReceiptPreparing")}
+            canReady={canRunCurrentAction("markReceiptReady")}
+            canPickup={canRunCurrentAction("pickupOrder")}
+            canSetPayment={canRunCurrentAction("updateReceiptPayment")}
+            canCancel={canRunCurrentAction("cancelReceipt")}
             onFilter={setFilter}
             filters={filters}
-            onSetPayment={(payload, paymentStatus) =>
-              void setReceiptPayment(payload, paymentStatus)
-            }
-            onDone={(payload) => void markReceiptDone(payload)}
+            onSetPayment={setReceiptPayment}
+            onCollectPayment={collectReceiptPayment}
+            onDone={markReceiptDone}
+            onStatus={markReceiptStatus}
           />
         )}
 
@@ -569,13 +1130,26 @@ export function App() {
             onFilter={setFilter}
             filters={filters}
             onRemoveItem={(index) =>
-              setReceiptItems((items) => items.filter((_, itemIndex) => itemIndex !== index))
+              setReceiptItems((items) =>
+                items.filter((_, itemIndex) => itemIndex !== index),
+              )
             }
             onSetPayment={(payload, paymentStatus) =>
               void setReceiptPayment(payload, paymentStatus)
             }
+            onCollectPayment={(payload) => void collectReceiptPayment(payload)}
             onDone={(payload) => void markReceiptDone(payload)}
+            onStatus={(payload, action, message) =>
+              void markReceiptStatus(payload, action, message)
+            }
             role={currentRole}
+            canAccept={canRunCurrentAction("markReceiptAccepted")}
+            canPrepare={canRunCurrentAction("markReceiptPreparing")}
+            canReady={canRunCurrentAction("markReceiptReady")}
+            canPickup={canRunCurrentAction("markReceiptDone")}
+            canSetPayment={canRunCurrentAction("updateReceiptPayment")}
+            canCancel={canRunCurrentAction("cancelReceipt")}
+            savingAction={savingAction}
             onSubmitReceipt={submitReceipt}
           />
         )}
@@ -624,7 +1198,74 @@ export function App() {
           />
         )}
 
-        {currentRole === "owner" && <OwnerTools onResetDay={() => void resetDay()} />}
+        {activeTab === "owner" && currentRole === "owner" && (
+          <OwnerTools
+            loading={loading}
+            menu={menu}
+            onCheckHealth={() =>
+              void runOwnerAction(
+                "debugSheets",
+                "Google Sheets health checked.",
+              )
+            }
+            onOrganizeSheets={() =>
+              void runOwnerAction(
+                "organizeSpreadsheet",
+                "Google Sheets hierarchy synchronized.",
+              )
+            }
+            onRefresh={() => void loadOwnerOverview()}
+            onRetrySync={() =>
+              void runOwnerMutation(
+                "retrySyncFailures",
+                {},
+                "Sync retry request recorded.",
+              )
+            }
+            onResetDay={() => void resetDay()}
+            onSetStaffActive={(payload) =>
+              void runOwnerMutation(
+                "setStaffActive",
+                payload,
+                "Staff access updated.",
+              )
+            }
+            onSetStaffPermissions={(payload) =>
+              void runOwnerMutation(
+                "setStaffPermissions",
+                payload,
+                "Staff permissions updated.",
+              )
+            }
+            onSetStaffRole={(payload) =>
+              void runOwnerMutation(
+                "setStaffRole",
+                payload,
+                "Staff role updated.",
+              )
+            }
+            onSyncMenu={() =>
+              void runOwnerMutation(
+                "syncMenuToSheets",
+                {},
+                "Menu synchronized to Google Sheets.",
+              )
+            }
+            onUpdateMenuItem={(payload) =>
+              void runOwnerMutation(
+                "updateMenuItem",
+                payload,
+                "Menu item updated.",
+              )
+            }
+            onUpsertStaff={(payload) =>
+              void runOwnerMutation("upsertStaff", payload, "Staff saved.")
+            }
+            ownerData={ownerData}
+            staffProfile={staffProfile}
+            status={status}
+          />
+        )}
 
         <div className="scroll-dock">
           <button
@@ -684,8 +1325,20 @@ function AuthScreen({
         </div>
         <img className="auth-signature" alt="" src={joyYourTimeUrl} />
         <form className="auth-form" onSubmit={onSubmit}>
-          <Field label="Staff Email" name="email" placeholder="staff@joycorner.com" required type="email" />
-          <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
+          <Field
+            label="Staff Email"
+            name="email"
+            placeholder="staff@joycorner.com"
+            required
+            type="email"
+          />
+          <Field
+            label="Password"
+            name="password"
+            placeholder="At least 6 characters"
+            required
+            type="password"
+          />
           <button className="primary" disabled={authLoading} type="submit">
             Sign In
           </button>
@@ -700,7 +1353,10 @@ function AuthScreen({
           </div>
         ) : (
           <div className="muted auth-note">
-            <p>Firebase web config is missing. Add the required Firebase environment variables.</p>
+            <p>
+              Firebase web config is missing. Add the required Firebase
+              environment variables.
+            </p>
           </div>
         )}
       </section>
@@ -755,7 +1411,9 @@ function CustomerOrderPage() {
 
     try {
       setLoading(true);
-      setStatus(authMode === "signup" ? "Creating account..." : "Signing in...");
+      setStatus(
+        authMode === "signup" ? "Creating account..." : "Signing in...",
+      );
       if (authMode === "signup") {
         await signUpCustomer(email, password, displayName, phone);
         await callServer("registerCustomerProfile", {
@@ -779,12 +1437,15 @@ function CustomerOrderPage() {
     event.preventDefault();
     const form = event.currentTarget;
     const payload = formObject(form);
-    const item = menu.find((row) => stringValue(row.itemId) === stringValue(payload.itemId));
+    const item = menu.find(
+      (row) => stringValue(row.itemId) === stringValue(payload.itemId),
+    );
 
     if (item) {
       payload.itemName = menuName(item);
       payload.category = stringValue(item.category);
-      payload.unitPrice = numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
+      payload.unitPrice =
+        numberValue(item.suggestedPrice) || firstPrice(menuPrice(item));
     }
 
     try {
@@ -835,11 +1496,18 @@ function CustomerOrderPage() {
         <section className="panel customer-order-panel">
           <PanelHead
             title={customerUser ? "Request an Order" : "Customer Access"}
-            note={customerUser ? "Your request goes to the cafe staff dashboard" : "Sign up or sign in"}
+            note={
+              customerUser
+                ? "Your request goes to the cafe staff dashboard"
+                : "Sign up or sign in"
+            }
           />
           <div className="panel-body">
             {!customerUser ? (
-              <form className="auth-form customer-order-form" onSubmit={submitCustomerAuth}>
+              <form
+                className="auth-form customer-order-form"
+                onSubmit={submitCustomerAuth}
+              >
                 <div className="segmented">
                   <button
                     className={authMode === "signup" ? "primary" : "secondary"}
@@ -858,41 +1526,105 @@ function CustomerOrderPage() {
                 </div>
                 {authMode === "signup" && (
                   <>
-                    <Field label="Name" name="displayName" placeholder="Your name" required />
-                    <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+                    <Field
+                      label="Name"
+                      name="displayName"
+                      placeholder="Your name"
+                      required
+                    />
+                    <Field
+                      label="Phone / WhatsApp"
+                      name="phone"
+                      placeholder="01xxxxxxxxx"
+                      required
+                    />
                   </>
                 )}
-                <Field label="Email" name="email" placeholder="you@example.com" required type="email" />
-                <Field label="Password" name="password" placeholder="At least 6 characters" required type="password" />
-                <button className="primary" disabled={loading || !firebaseReady} type="submit">
+                <Field
+                  label="Email"
+                  name="email"
+                  placeholder="you@example.com"
+                  required
+                  type="email"
+                />
+                <Field
+                  label="Password"
+                  name="password"
+                  placeholder="At least 6 characters"
+                  required
+                  type="password"
+                />
+                <button
+                  className="primary"
+                  disabled={loading || !firebaseReady}
+                  type="submit"
+                >
                   Continue
                 </button>
               </form>
             ) : (
-              <form className="customer-order-form" onSubmit={submitCustomerOrder}>
-                <Field label="Your Name" name="customerName" placeholder="Name for the order" required />
-                <Field label="Phone / WhatsApp" name="phone" placeholder="01xxxxxxxxx" required />
+              <form
+                className="customer-order-form"
+                onSubmit={submitCustomerOrder}
+              >
+                <Field
+                  label="Your Name"
+                  name="customerName"
+                  placeholder="Name for the order"
+                  required
+                />
+                <Field
+                  label="Phone / WhatsApp"
+                  name="phone"
+                  placeholder="01xxxxxxxxx"
+                  required
+                />
                 <label>
                   Item
                   <select name="itemId" required>
                     <option value="">Choose from menu</option>
                     {menu.map((item) => (
-                      <option key={stringValue(item.itemId)} value={stringValue(item.itemId)}>
-                        {menuName(item)} - {money(numberValue(item.suggestedPrice) || firstPrice(menuPrice(item)))} EGP
+                      <option
+                        key={stringValue(item.itemId)}
+                        value={stringValue(item.itemId)}
+                      >
+                        {menuName(item)} -{" "}
+                        {money(
+                          numberValue(item.suggestedPrice) ||
+                            firstPrice(menuPrice(item)),
+                        )}{" "}
+                        EGP
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
                   Quantity
-                  <input defaultValue="1" min="1" name="qty" required type="number" />
+                  <input
+                    defaultValue="1"
+                    min="1"
+                    name="qty"
+                    required
+                    type="number"
+                  />
                 </label>
-                <Field label="Pickup / Table / Notes" name="orderPlace" placeholder="Pickup, table, car, or note" />
+                <Field
+                  label="Pickup / Table / Notes"
+                  name="orderPlace"
+                  placeholder="Pickup, table, car, or note"
+                />
                 <label>
                   Extra Notes
-                  <textarea name="notes" placeholder="Sugar, ice, timing, or anything helpful" />
+                  <textarea
+                    name="notes"
+                    placeholder="Sugar, ice, timing, or anything helpful"
+                  />
                 </label>
-                <button className="primary" disabled={loading || !menu.length} type="submit">
+                <button
+                  className="primary"
+                  disabled={loading || !menu.length}
+                  type="submit"
+                >
                   Send Request
                 </button>
               </form>
@@ -905,68 +1637,646 @@ function CustomerOrderPage() {
   );
 }
 
-function OwnerTools({ onResetDay }: { onResetDay: () => void }) {
+function OwnerTools({
+  loading,
+  menu,
+  onCheckHealth,
+  onOrganizeSheets,
+  onRefresh,
+  onRetrySync,
+  onResetDay,
+  onSetStaffActive,
+  onSetStaffPermissions,
+  onSetStaffRole,
+  onSyncMenu,
+  onUpdateMenuItem,
+  onUpsertStaff,
+  ownerData,
+  staffProfile,
+  status,
+}: {
+  loading: boolean;
+  menu: Row[];
+  onCheckHealth: () => void;
+  onOrganizeSheets: () => void;
+  onRefresh: () => void;
+  onRetrySync: () => void;
+  onResetDay: () => void;
+  onSetStaffActive: (payload: Record<string, unknown>) => void;
+  onSetStaffPermissions: (payload: Record<string, unknown>) => void;
+  onSetStaffRole: (payload: Record<string, unknown>) => void;
+  onSyncMenu: () => void;
+  onUpdateMenuItem: (payload: Record<string, unknown>) => void;
+  onUpsertStaff: (payload: Record<string, unknown>) => void;
+  ownerData: OwnerData;
+  staffProfile: StaffProfile;
+  status: string;
+}) {
   const [confirmation, setConfirmation] = useState("");
+  const firstMenuItem = menu[0];
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState(
+    stringValue(firstMenuItem?.itemId),
+  );
   const canReset = confirmation === "RESET JOY CORNER DAY";
+  const selectedMenuItem =
+    menu.find((item) => stringValue(item.itemId) === selectedMenuItemId) ||
+    firstMenuItem;
+
+  useEffect(() => {
+    if (!selectedMenuItemId && firstMenuItem) {
+      setSelectedMenuItemId(stringValue(firstMenuItem.itemId));
+    }
+  }, [firstMenuItem, selectedMenuItemId]);
 
   return (
-    <section className="panel owner-tools">
-      <PanelHead title="Owner Controls" note="Danger zone" />
-      <div className="panel-body owner-tools-body">
-        <div>
-          <h3>End Day / Reset</h3>
-          <p className="muted">
-            Only owner accounts can see this area. Before connecting a destructive
-            backend reset, archive the day first so customer history and reward
-            counts stay safe.
-          </p>
+    <div className="owner-grid">
+      <section className="panel owner-tools">
+        <PanelHead title="Owner" note={staffProfile.email} />
+        <div className="panel-body owner-simple-grid">
+          <div className="owner-reset-card">
+            <h3>End Day Reset</h3>
+            <p className="muted">
+              Archives today&apos;s sales and clears the live dashboard while
+              keeping customers, rewards, and unpaid balances.
+            </p>
+            <label>
+              Confirmation
+              <input
+                onChange={(event) => setConfirmation(event.target.value)}
+                placeholder="Type RESET JOY CORNER DAY"
+                value={confirmation}
+              />
+            </label>
+            <button
+              className="danger"
+              disabled={!canReset || loading}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  "Archive today's sales and reset the live dashboard? Customer history, rewards, and unpaid balances stay available.",
+                );
+                if (confirmed) onResetDay();
+              }}
+              type="button"
+            >
+              Reset Done
+            </button>
+          </div>
+          <div className="owner-status">
+            <span className="muted">Latest system message</span>
+            <strong>{status}</strong>
+          </div>
+          <button
+            className="secondary"
+            disabled={loading}
+            onClick={onRefresh}
+            type="button"
+          >
+            Refresh
+          </button>
+          <button
+            className="primary"
+            disabled={loading}
+            onClick={onOrganizeSheets}
+            type="button"
+          >
+            Fix Excel Sheet
+          </button>
+          <button className="secondary" onClick={onCheckHealth} type="button">
+            Check Sheet
+          </button>
         </div>
-        <label>
-          Confirmation
-          <input
-            onChange={(event) => setConfirmation(event.target.value)}
-            placeholder="Type RESET JOY CORNER DAY"
-            value={confirmation}
-          />
-        </label>
-        <button
-          className="danger"
-          disabled={!canReset}
-          onClick={() => {
-            const confirmed = window.confirm(
-              "Archive today's sales and reset the live dashboard? Customer history and rewards stay in the sheet.",
-            );
-            if (confirmed) onResetDay();
-          }}
-          type="button"
+      </section>
+
+      <details className="panel owner-tools owner-advanced">
+        <summary>Staff, menu, and sync tools</summary>
+        <div className="panel-body owner-admin-stack">
+          <div className="owner-action-grid">
+            <button
+              className="secondary"
+              disabled={loading}
+              onClick={onSyncMenu}
+              type="button"
+            >
+              Seed Menu Sheet
+            </button>
+            <button
+              className="secondary"
+              disabled={loading}
+              onClick={onRetrySync}
+              type="button"
+            >
+              Retry Sync Failures
+            </button>
+          </div>
+
+          <section>
+            <h3>Staff Management</h3>
+            <StaffUpsertForm loading={loading} onSave={onUpsertStaff} />
+            <div className="table-like compact">
+              {(ownerData.staff || []).map((staff) => {
+                const uid = stringValue(staff.uid);
+                return (
+                  <div
+                    className="data-row"
+                    key={uid || stringValue(staff.email)}
+                  >
+                    <div>
+                      <strong>
+                        {stringValue(staff.displayName || staff.email)}
+                      </strong>
+                      <small>{stringValue(staff.email)}</small>
+                    </div>
+                    <select
+                      aria-label="Staff role"
+                      defaultValue={stringValue(staff.role || "waiter")}
+                      onChange={(event) =>
+                        onSetStaffRole({ role: event.target.value, uid })
+                      }
+                    >
+                      {["owner", "manager", "cashier", "waiter", "barista"].map(
+                        (role) => (
+                          <option key={role} value={role}>
+                            {roleLabel(role as StaffRole)}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <button
+                      className={
+                        activeValue(staff.active) ? "danger" : "secondary"
+                      }
+                      disabled={loading || uid === staffProfile.uid}
+                      onClick={() =>
+                        onSetStaffActive({
+                          active: !activeValue(staff.active),
+                          uid,
+                        })
+                      }
+                      type="button"
+                    >
+                      {activeValue(staff.active) ? "Deactivate" : "Activate"}
+                    </button>
+                    <PermissionEditor
+                      catalog={ownerData.permissionCatalog || []}
+                      revokedPermissions={stringArrayValue(
+                        staff.revoke || staff.revokedPermissions,
+                      )}
+                      permissions={stringArrayValue(
+                        staff.grant || staff.permissions,
+                      )}
+                      role={stringValue(staff.role || "waiter") as StaffRole}
+                      uid={uid}
+                      onSave={onSetStaffPermissions}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section>
+            <h3>Menu Management</h3>
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onUpdateMenuItem(formObject(event.currentTarget));
+              }}
+            >
+              <label className="wide">
+                Menu Item
+                <select
+                  name="itemId"
+                  onChange={(event) =>
+                    setSelectedMenuItemId(event.target.value)
+                  }
+                  value={selectedMenuItemId}
+                >
+                  {menu.map((item) => (
+                    <option
+                      key={stringValue(item.itemId)}
+                      value={stringValue(item.itemId)}
+                    >
+                      {menuName(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Item Name"
+                name="itemName"
+                required
+                value={menuName(selectedMenuItem || {})}
+              />
+              <Field
+                label="Category"
+                name="category"
+                required
+                value={stringValue(selectedMenuItem?.category)}
+              />
+              <Field
+                label="Price Text"
+                name="price"
+                required
+                value={menuPrice(selectedMenuItem || {})}
+              />
+              <label>
+                Active
+                <select
+                  name="active"
+                  defaultValue={
+                    activeValue(selectedMenuItem?.active) ? "true" : "false"
+                  }
+                >
+                  <option value="true">Active</option>
+                  <option value="false">Archived / Sold Out</option>
+                </select>
+              </label>
+              <button className="primary" disabled={loading} type="submit">
+                Update Menu Item
+              </button>
+            </form>
+          </section>
+
+          <section className="owner-tools-body">
+            <div>
+              <h3>Recent Audit Events</h3>
+              {(ownerData.auditLogs || []).slice(0, 6).map((event, index) => (
+                <p
+                  className="muted"
+                  key={`${stringValue(event.auditId)}-${index}`}
+                >
+                  {stringValue(event.timestamp)} | {stringValue(event.action)} |{" "}
+                  {stringValue(event.entityType)}
+                </p>
+              ))}
+              {!(ownerData.auditLogs || []).length && (
+                <p className="muted">No audit events loaded.</p>
+              )}
+            </div>
+            <div>
+              <h3>Sync Failures</h3>
+              {(ownerData.syncFailures || [])
+                .slice(0, 6)
+                .map((failure, index) => (
+                  <p
+                    className="muted"
+                    key={`${stringValue(failure.syncFailureId)}-${index}`}
+                  >
+                    {stringValue(failure.entityType)} |{" "}
+                    {stringValue(failure.errorMessage)}
+                  </p>
+                ))}
+              {!(ownerData.syncFailures || []).length && (
+                <p className="muted">No sync failures loaded.</p>
+              )}
+            </div>
+          </section>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function StaffUpsertForm({
+  loading,
+  onSave,
+}: {
+  loading: boolean;
+  onSave: (payload: Record<string, unknown>) => void;
+}) {
+  const [active, setActive] = useState("true");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [grant, setGrant] = useState("");
+  const [password, setPassword] = useState("");
+  const [revoke, setRevoke] = useState("");
+  const [role, setRole] = useState<StaffRole>("waiter");
+  const resolution = resolveEffectivePermissions({ grant, revoke, role });
+  const warnings = staffPermissionWarnings({
+    displayName,
+    email,
+    grant,
+    password,
+    resolution,
+    revoke,
+  });
+
+  function resetOverrides() {
+    setGrant("");
+    setRevoke("");
+  }
+
+  function resetForm() {
+    setActive("true");
+    setDisplayName("");
+    setEmail("");
+    setGrant("");
+    setPassword("");
+    setRevoke("");
+    setRole("waiter");
+  }
+
+  return (
+    <form
+      className="form-grid"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({
+          active: active === "true",
+          displayName,
+          email,
+          grant,
+          password,
+          revoke,
+          role,
+        });
+        resetForm();
+      }}
+    >
+      <Field
+        label="Email"
+        name="email"
+        onChange={setEmail}
+        required
+        type="email"
+        value={email}
+      />
+      <Field
+        label="Display Name"
+        name="displayName"
+        onChange={setDisplayName}
+        required
+        value={displayName}
+      />
+      <label>
+        Role
+        <select
+          name="role"
+          onChange={(event) => setRole(event.target.value as StaffRole)}
+          value={role}
         >
-          End Day Reset
+          {["owner", "manager", "cashier", "waiter", "barista"].map(
+            (staffRole) => (
+              <option key={staffRole} value={staffRole}>
+                {roleLabel(staffRole as StaffRole)}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+      <Field
+        label="Temporary Password"
+        name="password"
+        onChange={setPassword}
+        type="password"
+        value={password}
+      />
+      <label>
+        Active
+        <select
+          name="active"
+          onChange={(event) => setActive(event.target.value)}
+          value={active}
+        >
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+      </label>
+      <label className="wide">
+        Grant Overrides
+        <textarea
+          name="grant"
+          onChange={(event) => setGrant(event.target.value)}
+          placeholder="receipts.print, staff.view"
+          value={grant}
+        />
+      </label>
+      <label className="wide">
+        Revoke Overrides
+        <textarea
+          name="revoke"
+          onChange={(event) => setRevoke(event.target.value)}
+          placeholder="customers.delete, day.reset"
+          value={revoke}
+        />
+      </label>
+      <PermissionPreview
+        effective={resolution.effectivePermissions}
+        grant={resolution.grant}
+        revoke={resolution.revoke}
+        role={role}
+        roleDefaults={resolution.roleDefaults}
+        warnings={warnings}
+      />
+      <div className="actions wide">
+        <button className="secondary" onClick={resetOverrides} type="button">
+          Reset Overrides
+        </button>
+        <button
+          className="primary"
+          disabled={loading || warnings.blocking.length > 0}
+          type="submit"
+        >
+          Save Staff
         </button>
       </div>
-    </section>
+    </form>
+  );
+}
+
+function PermissionPreview({
+  effective,
+  grant,
+  revoke,
+  role,
+  roleDefaults,
+  warnings,
+}: {
+  effective: string[];
+  grant: string[];
+  revoke: string[];
+  role: StaffRole;
+  roleDefaults: string[];
+  warnings: { blocking: string[]; notices: string[] };
+}) {
+  return (
+    <div className="wide permission-preview">
+      <strong>Role: {roleLabel(role)}</strong>
+      <PermissionList title="Role Default Permissions" values={roleDefaults} />
+      <PermissionList title="Grant Overrides" values={grant} />
+      <PermissionList title="Revoke Overrides" values={revoke} />
+      <PermissionList title="Final Effective Permissions" values={effective} />
+      {[...warnings.blocking, ...warnings.notices].map((warning) => (
+        <p className="muted" key={warning}>
+          {warning}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function PermissionList({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
+  return (
+    <div className="permission-preview-section">
+      <span className="muted">{title}</span>
+      <p>{values.length ? values.join(", ") : "None"}</p>
+    </div>
+  );
+}
+
+function staffPermissionWarnings({
+  displayName,
+  email,
+  grant,
+  password,
+  resolution,
+}: {
+  displayName: string;
+  email: string;
+  grant: string;
+  password: string;
+  resolution: ReturnType<typeof resolveEffectivePermissions>;
+  revoke: string;
+}) {
+  const blocking: string[] = [];
+  const notices: string[] = [];
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    blocking.push("Enter a valid email.");
+  if (!displayName.trim()) blocking.push("Display name is required.");
+  if (password && password.length < 6)
+    blocking.push("Temporary password must be at least 6 characters.");
+  if (!password)
+    notices.push(
+      "Temporary password is required when creating a brand new Auth user.",
+    );
+  if (resolution.unknown.length)
+    notices.push(`Unknown permission: ${resolution.unknown.join(", ")}`);
+  if (resolution.duplicates.length)
+    notices.push(`Duplicate permission: ${resolution.duplicates.join(", ")}`);
+  if (resolution.overlaps.length)
+    notices.push(
+      `Revoke wins over Grant for: ${resolution.overlaps.join(", ")}`,
+    );
+  if (grant && !resolution.grant.length)
+    notices.push("Grant overrides contain no valid permission names.");
+  return { blocking, notices };
+}
+
+function PermissionEditor({
+  catalog,
+  onSave,
+  permissions,
+  revokedPermissions,
+  role,
+  uid,
+}: {
+  catalog: string[];
+  onSave: (payload: Record<string, unknown>) => void;
+  permissions: string[];
+  revokedPermissions: string[];
+  role: StaffRole;
+  uid: string;
+}) {
+  const [grantList, setGrantList] = useState(permissions.join(", "));
+  const [revokeList, setRevokeList] = useState(revokedPermissions.join(", "));
+  const resolution = resolveEffectivePermissions({
+    grant: grantList,
+    revoke: revokeList,
+    role,
+  });
+
+  useEffect(() => {
+    setGrantList(permissions.join(", "));
+    setRevokeList(revokedPermissions.join(", "));
+  }, [permissions.join("|"), revokedPermissions.join("|")]);
+
+  return (
+    <details className="permission-editor">
+      <summary>Permissions</summary>
+      <label>
+        Grant
+        <textarea
+          onChange={(event) => setGrantList(event.target.value)}
+          placeholder={catalog.slice(0, 4).join(", ")}
+          value={grantList}
+        />
+      </label>
+      <label>
+        Revoke
+        <textarea
+          onChange={(event) => setRevokeList(event.target.value)}
+          placeholder="customers.delete, day.reset"
+          value={revokeList}
+        />
+      </label>
+      <button
+        className="secondary"
+        onClick={() =>
+          onSave({
+            grant: grantList,
+            revoke: revokeList,
+            uid,
+          })
+        }
+        type="button"
+      >
+        Save Permissions
+      </button>
+      <PermissionList
+        title="Effective Permissions"
+        values={resolution.effectivePermissions}
+      />
+    </details>
   );
 }
 
 function DashboardView({
+  canAccept,
+  canCancel,
+  canPickup,
+  canPrepare,
+  canReady,
+  canSetPayment,
   dashboard,
   orders,
   topItems,
   filters,
   role,
   onFilter,
+  onCollectPayment,
   onSetPayment,
+  onStatus,
   onDone,
 }: {
+  canAccept: boolean;
+  canCancel: boolean;
+  canPickup: boolean;
+  canPrepare: boolean;
+  canReady: boolean;
+  canSetPayment: boolean;
   dashboard: Dashboard;
   orders: Row[];
   topItems: Row[];
   filters: Record<string, string>;
   role: StaffRole;
   onFilter: (id: string, value: string) => void;
+  onCollectPayment: (payload: string) => void;
   onSetPayment: (payload: string, paymentStatus: string) => void;
+  onStatus: (payload: string, action: string, message: string) => void;
   onDone: (payload: string) => void;
 }) {
   const isBarista = role === "barista";
+  const displayedOrders = orders.filter((order) => {
+    const status = normalizePreparationStatus(order.orderStatus);
+    return status !== "Picked Up" && status !== "Cancelled";
+  });
 
   return (
     <>
@@ -985,7 +2295,10 @@ function DashboardView({
 
       <div className={isBarista ? "dashboard-grid single" : "dashboard-grid"}>
         <section className="panel">
-          <PanelHead title="Barista Pickup Board" note={`${orders.length} receipt(s)`} />
+          <PanelHead
+            title="Barista Pickup Board"
+            note={`${displayedOrders.length} active receipt(s)`}
+          />
           <FilterBar
             id="dashboardOrders"
             placeholder="Filter order board"
@@ -1005,17 +2318,25 @@ function DashboardView({
                   ]
             }
           />
-          {orders.length ? (
+          {displayedOrders.length ? (
             <div className="receipt-board">
-              {orders.map((order, index) => (
+              {displayedOrders.map((order, index) => (
                 <OrderTicket
                   key={`${stringValue(order.receiptId)}-${index}`}
                   order={order}
                   onDone={onDone}
+                  onCollectPayment={onCollectPayment}
                   onSetPayment={onSetPayment}
+                  onStatus={onStatus}
+                  canAccept={canAccept}
+                  canCancel={false}
+                  canPickup={canPickup}
+                  canPrepare={false}
+                  canReady={false}
+                  canSetPayment={false}
                   showPaymentActions={false}
                   showPickupAction
-                  showPickupStrike
+                  view="barista"
                 />
               ))}
             </div>
@@ -1036,7 +2357,10 @@ function DashboardView({
             {topItems.length ? (
               <div className="stock-list">
                 {topItems.map((item, index) => (
-                  <StockCard item={item} key={`${stringValue(item.itemName)}-${index}`} />
+                  <StockCard
+                    item={item}
+                    key={`${stringValue(item.itemName)}-${index}`}
+                  />
                 ))}
               </div>
             ) : (
@@ -1131,6 +2455,12 @@ function CustomersView({
 }
 
 function OrdersView({
+  canAccept,
+  canCancel,
+  canPickup,
+  canPrepare,
+  canReady,
+  canSetPayment,
   customers,
   dashboardOrders,
   filters,
@@ -1141,11 +2471,20 @@ function OrdersView({
   onClearReceipt,
   onDone,
   onFilter,
+  onCollectPayment,
   onRemoveItem,
   onSetPayment,
+  onStatus,
   onSubmitReceipt,
   role,
+  savingAction,
 }: {
+  canAccept: boolean;
+  canCancel: boolean;
+  canPickup: boolean;
+  canPrepare: boolean;
+  canReady: boolean;
+  canSetPayment: boolean;
   customers: Row[];
   dashboardOrders: Row[];
   filters: Record<string, string>;
@@ -1156,13 +2495,17 @@ function OrdersView({
   onClearReceipt: () => void;
   onDone: (payload: string) => void;
   onFilter: (id: string, value: string) => void;
+  onCollectPayment: (payload: string) => void;
   onRemoveItem: (index: number) => void;
   onSetPayment: (payload: string, paymentStatus: string) => void;
-  onSubmitReceipt: (form: HTMLFormElement) => Promise<void>;
+  onStatus: (payload: string, action: string, message: string) => void;
+  onSubmitReceipt: (form: HTMLFormElement) => Promise<boolean>;
   role: StaffRole;
+  savingAction: string | null;
 }) {
   const [category, setCategory] = useState("All");
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [selectedSize, setSelectedSize] = useState("");
   const [qty, setQty] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
   const [discount, setDiscount] = useState("0");
@@ -1172,10 +2515,34 @@ function OrdersView({
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerNameInput, setCustomerNameInput] = useState("");
   const [customerPhoneInput, setCustomerPhoneInput] = useState("");
-  const categories = ["All", ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean))];
-  const placeOptions = buildPlaceOptions(lists, dashboardOrders);
-  const serviceOptions = lists.serviceType || ["Hall", "Outside", "Car", "Takeaway"];
-  const carColorOptions = lists.carColor || ["Black", "White", "Silver", "Gray", "Red", "Blue"];
+  const categories = useMemo(
+    () => [
+      "All",
+      ...new Set(
+        menu.map((item) => stringValue(item.category)).filter(Boolean),
+      ),
+    ],
+    [menu],
+  );
+  const placeOptions = useMemo(
+    () => buildPlaceOptions(lists, dashboardOrders),
+    [dashboardOrders, lists],
+  );
+  const serviceOptions = lists.serviceType || [
+    "Hall",
+    "Outside",
+    "Car",
+    "Takeaway",
+  ];
+  const staffOptions = lists.staff || [];
+  const carColorOptions = lists.carColor || [
+    "Black",
+    "White",
+    "Silver",
+    "Gray",
+    "Red",
+    "Blue",
+  ];
   const visibleCustomers = useMemo(
     () => filterCustomersByNameOrPhone(customers, customerQuery),
     [customers, customerQuery],
@@ -1183,17 +2550,40 @@ function OrdersView({
   const customerMatches = customerQuery.trim()
     ? visibleCustomers.slice(0, 5)
     : [];
-  const visibleMenu =
-    category === "All"
-      ? menu
-      : menu.filter((item) => stringValue(item.category) === category);
+  const visibleMenu = useMemo(
+    () =>
+      category === "All"
+        ? menu
+        : menu.filter((item) => stringValue(item.category) === category),
+    [category, menu],
+  );
   const selectedItem =
     menu.find((item) => stringValue(item.itemId) === selectedItemId) ||
     visibleMenu[0];
-  const receiptTotal = receiptItems.reduce((total, item) => total + item.total, 0);
-  const singleTotal = Math.max(0, numberValue(qty) * numberValue(unitPrice) - numberValue(discount));
-  const total = receiptItems.length ? receiptTotal : singleTotal;
-  const remaining = Math.max(0, total - numberValue(paidAmount));
+  const selectedSizes = selectedItem ? menuSizesFor(selectedItem) : [];
+  const previewItems = receiptItems.length
+    ? receiptItems
+    : [{ qty: numberValue(qty) || 1, unitPrice: numberValue(unitPrice) }];
+  const receiptTotals = safeReceiptTotals(previewItems, discount);
+  const receiptCalculation = useMemo(
+    () =>
+      calculateReceipt({
+        amountPaid: paymentStatus === "Unpaid" ? 0 : numberValue(paidAmount),
+        items: previewItems,
+        orderDiscount: receiptTotals.receiptDiscountAmount,
+      }),
+    [
+      paidAmount,
+      paymentStatus,
+      previewItems,
+      receiptTotals.receiptDiscountAmount,
+    ],
+  );
+  const receiptSubtotal = receiptTotals.receiptSubtotal;
+  const total = receiptCalculation.grandTotal;
+  const remaining = receiptCalculation.remainingAmount;
+  const change = receiptCalculation.changeAmount;
+  const previewPaymentStatus = receiptCalculation.paymentStatus;
 
   useEffect(() => {
     if (!selectedItem && visibleMenu[0]) {
@@ -1201,11 +2591,29 @@ function OrdersView({
       return;
     }
     if (selectedItem) {
-      const price = stringValue(selectedItem.suggestedPrice) || String(firstPrice(menuPrice(selectedItem)) || "");
-      setUnitPrice(price);
+      const sizes = menuSizesFor(selectedItem);
+      const nextSize =
+        sizes.find((size) => size.size === selectedSize)?.size ||
+        stringValue(selectedItem.standardSize) ||
+        sizes[0]?.size ||
+        "Standard";
+      const resolvedPrice =
+        resolvePriceForMenuRow(selectedItem, nextSize) ||
+        resolveMenuPrice(
+          stringValue(selectedItem.itemId),
+          nextSize,
+          menuName(selectedItem),
+        );
+      const price =
+        resolvedPrice?.price ||
+        sizes.find((size) => size.size === nextSize)?.price ||
+        numberValue(selectedItem.suggestedPrice) ||
+        firstPrice(menuPrice(selectedItem));
+      setUnitPrice(price ? String(price) : "");
+      setSelectedSize(nextSize);
       setSelectedItemId(stringValue(selectedItem.itemId));
     }
-  }, [category, selectedItemId, menu.length]);
+  }, [category, selectedItemId, selectedSize, menu.length]);
 
   useEffect(() => {
     if (paymentStatus === "Paid") setPaidAmount(total ? String(total) : "");
@@ -1221,7 +2629,9 @@ function OrdersView({
       const phoneDigits = digitsOnly(phoneOf(customer));
       const name = customerName(customer).toLowerCase();
       return (
-        (queryDigits.length >= 7 && phoneDigits && phoneDigits.endsWith(queryDigits)) ||
+        (queryDigits.length >= 7 &&
+          phoneDigits &&
+          phoneDigits.endsWith(queryDigits)) ||
         (normalizedQuery.length >= 2 && name === normalizedQuery)
       );
     });
@@ -1232,7 +2642,11 @@ function OrdersView({
     }
 
     const onlyVisibleCustomer = visibleCustomers[0];
-    if (onlyVisibleCustomer && visibleCustomers.length === 1 && normalizedQuery.length >= 3) {
+    if (
+      onlyVisibleCustomer &&
+      visibleCustomers.length === 1 &&
+      normalizedQuery.length >= 3
+    ) {
       fillCustomer(onlyVisibleCustomer);
       return;
     }
@@ -1264,18 +2678,23 @@ function OrdersView({
   return (
     <>
       <section className="panel">
-        <PanelHead title="Waiter New Receipt" note={`${receiptItems.length} item(s)`} />
+        <PanelHead
+          title="Waiter New Receipt"
+          note={`${receiptItems.length} item(s)`}
+        />
         <div className="panel-body">
           <form
             className="form-grid"
             onSubmit={(event) => {
               event.preventDefault();
               const form = event.currentTarget;
-              void onSubmitReceipt(form).then(() => {
-                setSelectedCustomerId("");
-                setCustomerQuery("");
-                setCustomerNameInput("");
-                setCustomerPhoneInput("");
+              void onSubmitReceipt(form).then((saved) => {
+                if (saved) {
+                  setSelectedCustomerId("");
+                  setCustomerQuery("");
+                  setCustomerNameInput("");
+                  setCustomerPhoneInput("");
+                }
               });
             }}
           >
@@ -1295,8 +2714,12 @@ function OrdersView({
               >
                 <option value="">New customer / walk-in</option>
                 {visibleCustomers.map((customer) => (
-                  <option key={customerIdOf(customer)} value={customerIdOf(customer)}>
-                    {customerName(customer)}{phoneOf(customer) ? ` - ${phoneOf(customer)}` : ""}
+                  <option
+                    key={customerIdOf(customer)}
+                    value={customerIdOf(customer)}
+                  >
+                    {customerName(customer)}
+                    {phoneOf(customer) ? ` - ${phoneOf(customer)}` : ""}
                   </option>
                 ))}
               </select>
@@ -1317,7 +2740,10 @@ function OrdersView({
               value={customerPhoneInput}
             />
             {customerMatches.length > 0 && (
-              <div className="customer-match-list wide" aria-label="Customer matches">
+              <div
+                className="customer-match-list wide"
+                aria-label="Customer matches"
+              >
                 {customerMatches.map((customer) => (
                   <button
                     className={`customer-match ${selectedCustomerId === customerIdOf(customer) ? "active" : ""}`}
@@ -1349,20 +2775,59 @@ function OrdersView({
               Menu Item
               <select
                 name="itemId"
-                onChange={(event) => setSelectedItemId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedItemId(event.target.value);
+                  setSelectedSize("");
+                }}
                 required
                 value={selectedItemId}
               >
                 {visibleMenu.map((item) => (
-                  <option key={stringValue(item.itemId)} value={stringValue(item.itemId)}>
-                    {menuName(item)}{menuPrice(item) ? ` - ${menuPrice(item)}` : ""}
+                  <option
+                    key={stringValue(item.itemId)}
+                    value={stringValue(item.itemId)}
+                  >
+                    {menuName(item)}
+                    {menuPrice(item) ? ` - ${menuPrice(item)}` : ""}
                   </option>
                 ))}
               </select>
             </label>
-            <Field label="Qty" name="qty" onChange={setQty} required type="number" value={qty} />
-            <Field label="Unit Price" name="unitPrice" onChange={setUnitPrice} type="number" value={unitPrice} />
-            <Field label="Discount" name="discount" onChange={setDiscount} type="number" value={discount} />
+            <label>
+              Size
+              <select
+                name="size"
+                onChange={(event) => setSelectedSize(event.target.value)}
+                required
+                value={selectedSize}
+              >
+                {selectedSizes.map((size) => (
+                  <option key={size.size} value={size.size}>
+                    {size.size} - {money(size.price)} EGP
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Field
+              label="Qty"
+              name="qty"
+              onChange={setQty}
+              required
+              type="number"
+              value={qty}
+            />
+            <input name="unitPrice" type="hidden" value={unitPrice} />
+            <p className="price-lock">
+              Price locked from menu: <strong>{money(unitPrice)} EGP</strong>
+            </p>
+            <Field
+              label="Discount (%)"
+              name="receiptDiscountPercentage"
+              onChange={setDiscount}
+              placeholder="0"
+              type="number"
+              value={discount}
+            />
             <Field
               label="Place Detail"
               list="orderPlaceOptions"
@@ -1384,13 +2849,31 @@ function OrdersView({
                 ))}
               </select>
             </label>
-            <Field label="Car Name" list="carNameOptions" name="carName" placeholder="Toyota, BMW, Hyundai" />
+            <Field
+              label="Car Name"
+              list="carNameOptions"
+              name="carName"
+              placeholder="Toyota, BMW, Hyundai"
+            />
             <datalist id="carNameOptions">
-              {["Toyota", "Hyundai", "Kia", "Mercedes", "BMW", "Nissan", "Chevrolet"].map((name) => (
+              {[
+                "Toyota",
+                "Hyundai",
+                "Kia",
+                "Mercedes",
+                "BMW",
+                "Nissan",
+                "Chevrolet",
+              ].map((name) => (
                 <option key={name} value={name} />
               ))}
             </datalist>
-            <Field label="Car Color" list="carColorOptions" name="carColor" placeholder="Black, White, Silver" />
+            <Field
+              label="Car Color"
+              list="carColorOptions"
+              name="carColor"
+              placeholder="Black, White, Silver"
+            />
             <datalist id="carColorOptions">
               {carColorOptions.map((color) => (
                 <option key={color} value={color} />
@@ -1403,28 +2886,41 @@ function OrdersView({
                 onChange={(event) => setPaymentStatus(event.target.value)}
                 value={paymentStatus}
               >
-                {(lists.paymentStatus || ["Paid", "Unpaid", "Partial"]).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {(lists.paymentStatus || ["Paid", "Unpaid", "Partial"]).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
-            <Field label="Paid Amount" name="paidAmount" onChange={setPaidAmount} type="number" value={paidAmount} />
+            <Field
+              label="Paid Amount"
+              name="paidAmount"
+              onChange={setPaidAmount}
+              type="number"
+              value={paidAmount}
+            />
             <label>
               Payment Method
               <select name="paymentMethod">
-                {(lists.paymentMethod || ["Cash", "Visa", "Wallet"]).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {(lists.paymentMethod || ["Cash", "Visa", "Wallet"]).map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
             <label>
               Staff
               <select name="staff">
-                {(lists.staff || ["Cashier 1"]).map((option) => (
+                {!staffOptions.length && (
+                  <option value="">No active staff found</option>
+                )}
+                {staffOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -1437,20 +2933,46 @@ function OrdersView({
                 : "No menu item selected."}
             </p>
             <p className="wide total-hint">
-              Receipt total: {money(total)} EGP | Paid now: {money(paidAmount)} EGP | Remaining: {money(remaining)} EGP
+              Subtotal: {money(receiptSubtotal)} EGP | Discount:{" "}
+              {money(receiptTotals.receiptDiscountPercentage)}% | Discount
+              Amount: -{money(receiptTotals.receiptDiscountAmount)} EGP | Total:{" "}
+              {money(total)} EGP | Paid now: {money(paidAmount)} EGP |
+              Remaining: {money(remaining)} EGP | Change: {money(change)} EGP |
+              Status: {previewPaymentStatus}
             </p>
             <label className="wide">
-              Notes
+              Item Notes
+              <textarea
+                name="itemNotes"
+                placeholder="No sugar, less ice, prep note for this item"
+              />
+            </label>
+            <label className="wide">
+              Order Notes
               <textarea name="notes" />
             </label>
             <div className="actions wide">
-              <button className="secondary" onClick={(event) => onAddItem(event.currentTarget.form!)} type="button">
-                Add Item
+              <button
+                className="secondary"
+                onClick={(event) => onAddItem(event.currentTarget.form!)}
+                type="button"
+              >
+                {savingAction === "addReceipt" ? "Adding..." : "Add Item"}
               </button>
-              <button className="primary" type="submit">
-                Submit Receipt
+              <button
+                className="primary"
+                disabled={savingAction === "addReceipt"}
+                type="submit"
+              >
+                {savingAction === "addReceipt"
+                  ? "Submitting..."
+                  : "Submit Receipt"}
               </button>
-              <button className="secondary" onClick={onClearReceipt} type="button">
+              <button
+                className="secondary"
+                onClick={onClearReceipt}
+                type="button"
+              >
                 Clear Receipt
               </button>
             </div>
@@ -1458,22 +2980,45 @@ function OrdersView({
               {receiptItems.length ? (
                 <>
                   {receiptItems.map((item, index) => (
-                    <div className="receipt-row" key={`${item.itemId}-${index}`}>
+                    <div
+                      className="receipt-row"
+                      key={`${item.itemId}-${index}`}
+                    >
                       <div>
                         <strong>{item.itemName}</strong>
                         <br />
-                        <span className="muted">{item.category}</span>
+                        <span className="muted">
+                          {item.category}
+                          {item.size ? ` | ${item.size}` : ""}
+                        </span>
                       </div>
                       <div>x{item.qty}</div>
                       <div>{money(item.unitPrice)} EGP</div>
-                      <button className="danger" onClick={() => onRemoveItem(index)} type="button">
+                      <button
+                        className="danger"
+                        onClick={() => onRemoveItem(index)}
+                        type="button"
+                      >
                         Remove
                       </button>
                     </div>
                   ))}
                   <div className="receipt-total">
-                    <span>Receipt total</span>
-                    <span>{money(receiptTotal)} EGP</span>
+                    <span>Subtotal</span>
+                    <span>{money(receiptTotals.receiptSubtotal)} EGP</span>
+                  </div>
+                  <div className="receipt-total">
+                    <span>
+                      Discount: {money(receiptTotals.receiptDiscountPercentage)}
+                      %
+                    </span>
+                    <span>
+                      -{money(receiptTotals.receiptDiscountAmount)} EGP
+                    </span>
+                  </div>
+                  <div className="receipt-total">
+                    <span>Total</span>
+                    <span>{money(receiptTotals.receiptTotal)} EGP</span>
                   </div>
                 </>
               ) : (
@@ -1504,10 +3049,18 @@ function OrdersView({
                 key={`${stringValue(order.receiptId)}-${index}`}
                 order={order}
                 onDone={onDone}
+                onCollectPayment={onCollectPayment}
                 onSetPayment={onSetPayment}
+                onStatus={onStatus}
+                canAccept={canAccept}
+                canCancel={canCancel}
+                canPickup={canPickup}
+                canPrepare={canPrepare}
+                canReady={canReady}
+                canSetPayment={canSetPayment}
                 showPickupAction={false}
-                showPickupStrike={false}
-                showPaymentActions={role !== "waiter"}
+                view="orders"
+                showPaymentActions={role !== "waiter" && canSetPayment}
               />
             ))}
           </div>
@@ -1539,7 +3092,11 @@ function RewardsView({
     <section className="panel">
       <PanelHead
         title={isRewards ? "Rewards" : "Free Drink Winners"}
-        note={isRewards ? `${rewards.length} customer(s)` : `${winners.length} winner(s)`}
+        note={
+          isRewards
+            ? `${rewards.length} customer(s)`
+            : `${winners.length} winner(s)`
+        }
       />
       <div className="view-switch" aria-label="Rewards view">
         <button
@@ -1559,60 +3116,64 @@ function RewardsView({
       </div>
       {isRewards ? (
         <>
-        <FilterBar
-          id="rewards"
-          placeholder="Filter rewards"
-          value={filters.rewards}
-          onChange={onFilter}
-        />
-        <DataTable
-          columns={[
-            ["customerId", "ID"],
-            ["customerName", "Customer"],
-            ["phone", "Phone"],
-            ["favoriteDrink", "Favorite"],
-            ["paidDrinks", "Paid Drinks"],
-            ["earnedFreeDrinks", "Earned"],
-            ["generatedVouchers", "Generated"],
-            ["pendingVouchers", "Pending"],
-            ["redeemedVouchers", "Redeemed"],
-            ["freeDrinksReady", "Free Drinks"],
-            ["nextRewardProgress", "Progress"],
-            ["winner", "Winner"],
-            ["winnerMessage", "Message"],
-          ]}
-          rows={rewards}
-        />
+          <FilterBar
+            id="rewards"
+            placeholder="Filter rewards"
+            value={filters.rewards}
+            onChange={onFilter}
+          />
+          <DataTable
+            columns={[
+              ["customerId", "ID"],
+              ["customerName", "Customer"],
+              ["phone", "Phone"],
+              ["favoriteDrink", "Favorite"],
+              ["paidDrinks", "Paid Drinks"],
+              ["earnedFreeDrinks", "Earned"],
+              ["generatedVouchers", "Generated"],
+              ["pendingVouchers", "Pending"],
+              ["redeemedVouchers", "Redeemed"],
+              ["freeDrinksReady", "Free Drinks"],
+              ["nextRewardProgress", "Progress"],
+              ["winner", "Winner"],
+              ["winnerMessage", "Message"],
+            ]}
+            rows={rewards}
+          />
         </>
       ) : (
         <>
-        <FilterBar
-          id="winners"
-          placeholder="Filter winners"
-          value={filters.winners}
-          onChange={onFilter}
-        />
-        <DataTable
-          action={(row) =>
-            numberValue(row.freeDrinksReady) > 0 ? (
-              <button className="secondary" onClick={() => onGenerateVoucher(row)} type="button">
-                Generate Voucher
-              </button>
-            ) : (
-              <Pill value="Not ready" />
-            )
-          }
-          columns={[
-            ["customerId", "ID"],
-            ["customerName", "Customer"],
-            ["phone", "Phone"],
-            ["favoriteDrink", "Favorite"],
-            ["paidDrinks", "Paid Drinks"],
-            ["freeDrinksReady", "Free Drinks"],
-            ["winnerMessage", "Message"],
-          ]}
-          rows={winners}
-        />
+          <FilterBar
+            id="winners"
+            placeholder="Filter winners"
+            value={filters.winners}
+            onChange={onFilter}
+          />
+          <DataTable
+            action={(row) =>
+              numberValue(row.freeDrinksReady) > 0 ? (
+                <button
+                  className="secondary"
+                  onClick={() => onGenerateVoucher(row)}
+                  type="button"
+                >
+                  Generate Voucher
+                </button>
+              ) : (
+                <Pill value="Not ready" />
+              )
+            }
+            columns={[
+              ["customerId", "ID"],
+              ["customerName", "Customer"],
+              ["phone", "Phone"],
+              ["favoriteDrink", "Favorite"],
+              ["paidDrinks", "Paid Drinks"],
+              ["freeDrinksReady", "Free Drinks"],
+              ["winnerMessage", "Message"],
+            ]}
+            rows={winners}
+          />
         </>
       )}
     </section>
@@ -1642,19 +3203,32 @@ function VouchersView({
       <DataTable
         action={(row) => {
           const code = stringValue(row.voucherCode || row.code);
-          const redeemed = stringValue(row.redeemStatus).toLowerCase() === "redeemed";
+          const redeemed =
+            stringValue(row.redeemStatus).toLowerCase() === "redeemed";
           return (
             <div className="actions">
-              <button className="secondary" onClick={() => printVoucher(row)} type="button">
+              <button
+                className="secondary"
+                onClick={() => printVoucher(row)}
+                type="button"
+              >
                 Print
               </button>
-              <button className="secondary" onClick={() => void sendVoucherWhatsApp(row)} type="button">
+              <button
+                className="secondary"
+                onClick={() => void sendVoucherWhatsApp(row)}
+                type="button"
+              >
                 WhatsApp
               </button>
               {redeemed ? (
                 <Pill value="Redeemed" />
               ) : (
-                <button className="danger" onClick={() => onRedeem(code)} type="button">
+                <button
+                  className="danger"
+                  onClick={() => onRedeem(code)}
+                  type="button"
+                >
                   Redeem
                 </button>
               )}
@@ -1707,7 +3281,10 @@ function UnpaidView({
         title="Unpaid Tracker"
         note={`${visibleUnpaid.length} shown${paidCount ? `, ${paidCount} paid hidden/optional` : ""}`}
       />
-      <div className="view-switch unpaid-switch" aria-label="Unpaid receipt visibility">
+      <div
+        className="view-switch unpaid-switch"
+        aria-label="Unpaid receipt visibility"
+      >
         <button
           className={!showPaidReceipts ? "active" : ""}
           onClick={() => setShowPaidReceipts(false)}
@@ -1732,18 +3309,26 @@ function UnpaidView({
       {visibleUnpaid.length ? (
         <div className="unpaid-card-list">
           {visibleUnpaid.map((row, index) => {
-            const paid = stringValue(row.paymentStatus).toLowerCase() === "paid";
+            const paid =
+              stringValue(row.paymentStatus).toLowerCase() === "paid";
             const descriptionParts = unpaidDescriptionParts(row);
             const paidTotal = numberValue(row.totalPaid);
             const totalAmount = numberValue(row.totalAmount);
             const key = customerIdOf(row) || customerName(row);
             return (
-              <article className="unpaid-card" key={`${rowSearchText(row)}-${index}`}>
+              <article
+                className="unpaid-card"
+                key={`${rowSearchText(row)}-${index}`}
+              >
                 <div className="unpaid-card-head">
                   <div>
-                    <span className="mobile-card-label">{customerIdOf(row) || "Customer"}</span>
+                    <span className="mobile-card-label">
+                      {customerIdOf(row) || "Customer"}
+                    </span>
                     <strong>{customerName(row)}</strong>
-                    <span className="mobile-card-subtitle">{phoneOf(row) || "No phone"}</span>
+                    <span className="mobile-card-subtitle">
+                      {phoneOf(row) || "No phone"}
+                    </span>
                   </div>
                   <Pill value={paid ? "Paid" : "Unpaid"} />
                 </div>
@@ -1795,7 +3380,9 @@ function UnpaidView({
                     <button
                       className="secondary"
                       onClick={() =>
-                        setHiddenPaidCustomers((current) => new Set(current).add(key))
+                        setHiddenPaidCustomers((current) =>
+                          new Set(current).add(key),
+                        )
                       }
                       type="button"
                     >
@@ -1803,7 +3390,11 @@ function UnpaidView({
                     </button>
                   </div>
                 ) : (
-                  <button className="primary" onClick={() => onCollect(row)} type="button">
+                  <button
+                    className="primary"
+                    onClick={() => onCollect(row)}
+                    type="button"
+                  >
                     Collect Payment
                   </button>
                 )}
@@ -1863,10 +3454,16 @@ function HistoryView({
                 </div>
               </div>
               <div className="history-meta">
-                <span>Top: {stringValue(day.bestSellingItem) || "No drinks yet"}</span>
+                <span>
+                  Top: {stringValue(day.bestSellingItem) || "No drinks yet"}
+                </span>
                 <span>Qty: {stringValue(day.bestSellingQty || 0)}</span>
-                <span>Free drinks: {stringValue(day.redemptionCount || 0)}</span>
-                <span>Latest: {stringValue(day.latestReceiptSerial) || "None"}</span>
+                <span>
+                  Free drinks: {stringValue(day.redemptionCount || 0)}
+                </span>
+                <span>
+                  Latest: {stringValue(day.latestReceiptSerial) || "None"}
+                </span>
               </div>
             </article>
           ))}
@@ -1888,7 +3485,10 @@ function MenuView({
   onFilter: (id: string, value: string) => void;
 }) {
   const [category, setCategory] = useState("All");
-  const categories = ["All", ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean))];
+  const categories = [
+    "All",
+    ...new Set(menu.map((item) => stringValue(item.category)).filter(Boolean)),
+  ];
   const visibleMenu =
     category === "All"
       ? menu
@@ -1921,7 +3521,11 @@ function MenuView({
           <article
             className="menu-circle"
             key={`${stringValue(item.itemId)}-${index}`}
-            style={{ "--section-color": categoryColor(stringValue(item.category)) } as CSSProperties}
+            style={
+              {
+                "--section-color": categoryColor(stringValue(item.category)),
+              } as CSSProperties
+            }
           >
             <span>{stringValue(item.category) || "Menu"}</span>
             <strong>{menuName(item)}</strong>
@@ -1933,100 +3537,401 @@ function MenuView({
   );
 }
 
-function OrderTicket({
+export function OrderTicket({
+  canAccept = true,
+  canCancel = true,
+  canPickup = true,
+  canPrepare = true,
+  canReady = true,
+  canSetPayment = true,
   order,
   onDone,
+  onCollectPayment = () => undefined,
   onSetPayment,
+  onStatus,
   showPaymentActions = true,
   showPickupAction = true,
-  showPickupStrike = true,
+  view = "orders",
 }: {
+  canAccept?: boolean;
+  canCancel?: boolean;
+  canPickup?: boolean;
+  canPrepare?: boolean;
+  canReady?: boolean;
+  canSetPayment?: boolean;
   order: Row;
-  onDone: (payload: string) => void;
-  onSetPayment: (payload: string, paymentStatus: string) => void;
+  onDone: (payload: string) => Promise<boolean | void> | boolean | void;
+  onCollectPayment?: (payload: string) => Promise<void> | void;
+  onSetPayment: (
+    payload: string,
+    paymentStatus: string,
+  ) => Promise<boolean | void> | boolean | void;
+  onStatus: (
+    payload: string,
+    action: string,
+    message: string,
+  ) => Promise<void> | void;
   showPaymentActions?: boolean;
   showPickupAction?: boolean;
-  showPickupStrike?: boolean;
+  view?: "barista" | "orders";
 }) {
   const due = numberValue(order.outstandingAmount);
-  const pickedUp = isPickedUp(order.orderStatus);
+  const changeAmount = numberValue(order.changeAmount);
+  const sourcePreparationStatus = normalizePreparationStatus(order.orderStatus);
+  const [optimisticPreparationStatus, setOptimisticPreparationStatus] =
+    useState<PreparationStatus | null>(null);
+  const preparationStatus =
+    optimisticPreparationStatus || sourcePreparationStatus;
+  const paymentStatus = normalizePaymentStatusForDisplay(order.paymentStatus);
+  const preparationClass = getPreparationStatusClass(preparationStatus);
+  const paymentClass = getPaymentStatusClass(paymentStatus);
+  const pickedUp = isPickedUpStatus(preparationStatus);
+  const cancelled = preparationStatus === "Cancelled";
+  const finished = isFinishedPreparationStatus(preparationStatus);
+  const receiptDiscountPercentage = numberValue(
+    order.receiptDiscountPercentage,
+  );
+  const receiptNotes = stringValue(order.receiptNotes || order.customerNotes);
+  const phone = phoneOf(order);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingActionRef = useRef<string | null>(null);
   const payload = receiptActionPayload(order);
   const place = orderPlaceOf(order);
+  const receiptNumber = stringValue(order.receiptNumber || order.receiptId);
   const title = [place, stringValue(order.customerName) || "Walk-in customer"]
     .filter(Boolean)
     .join(" - ");
-  const items =
-    Array.isArray(order.orderItems)
-      ? order.orderItems
-      : stringValue(order.orderDescription)
-          .split("+")
-          .map((item) => item.trim())
-          .filter(Boolean);
+  const items = Array.isArray(order.orderItems)
+    ? order.orderItems
+    : stringValue(order.orderDescription)
+        .split("+")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  const prepAction = nextPreparationAction(preparationStatus);
+  const canRunPrepAction = prepAction
+    ? {
+        markReceiptAccepted: canAccept,
+        markReceiptPreparing: canPrepare,
+        markReceiptReady: canReady,
+      }[prepAction.action] !== false
+    : false;
+
+  async function runTicketAction(
+    actionKey: string,
+    callback: () => Promise<boolean | void> | boolean | void,
+  ) {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = actionKey;
+    setPendingAction(actionKey);
+    try {
+      await callback();
+    } finally {
+      pendingActionRef.current = null;
+      setPendingAction(null);
+    }
+  }
+
+  async function runBaristaStatusAction(
+    actionKey: "acceptOrder" | "pickupOrder",
+    nextStatus: PreparationStatus,
+    callback: () => Promise<boolean | void> | boolean | void,
+  ) {
+    const previousStatus = preparationStatus;
+    setOptimisticPreparationStatus(nextStatus);
+    await runTicketAction(actionKey, async () => {
+      const succeeded = await callback();
+      if (succeeded === false) setOptimisticPreparationStatus(previousStatus);
+      return succeeded;
+    });
+  }
 
   return (
-    <article className={`order-ticket ${pickedUp && showPickupStrike ? "picked-up" : ""}`}>
-      <div className="ticket-head">
-        <div className="ticket-title">
-          <strong>{title}</strong>
-          <span className="muted">
-            {stringValue(order.orderDateTime)} {order.staff ? `| ${stringValue(order.staff)}` : ""}
-          </span>
-          {place && <span className="ticket-place">{place}</span>}
+    <article
+      className={[
+        "order-ticket",
+        view === "barista" ? "barista-receipt" : "orders-receipt",
+        preparationClass,
+        paymentClass,
+        finished && view === "barista" ? "is-finished" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-payment-status={paymentStatus}
+      data-preparation-status={preparationStatus}
+    >
+      <div
+        className={
+          view === "barista"
+            ? "barista-receipt-content"
+            : "orders-receipt-content"
+        }
+      >
+        <div className="ticket-head">
+          <div className="ticket-title">
+            <strong>{title}</strong>
+            <span className="muted">
+              {stringValue(order.receiptId || order.receiptNumber)
+                ? `Receipt ${stringValue(order.receiptId || order.receiptNumber)} | `
+                : ""}
+              {stringValue(order.orderDateTime)}{" "}
+              {order.staff ? `| ${stringValue(order.staff)}` : ""}
+            </span>
+            {phone && <span className="muted">Phone: {phone}</span>}
+            {place && <span className="ticket-place">{place}</span>}
+          </div>
+          <div className="actions">
+            <PreparationStatusBadge status={preparationStatus} />
+            {view !== "barista" && (
+              <PaymentStatusBadge status={paymentStatus} />
+            )}
+          </div>
         </div>
-        <div className="actions">
-          {showPaymentActions && <Pill value={stringValue(order.paymentStatus) || "Paid"} />}
-          {pickedUp && <Pill value="Picked Up" />}
-        </div>
-      </div>
 
-      <div className="ticket-items">
-        {items.length ? (
-          items.map((item, index) => {
-            const text = stringValue(item);
-            const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
-            return (
-              <div className="ticket-item" key={`${text}-${index}`}>
-                <span>{match ? match[1] : text}</span>
-                <span>x{match ? match[2] : "1"}</span>
-              </div>
-            );
-          })
-        ) : (
-          <div className="muted">No item description.</div>
+        <div className="ticket-items">
+          {items.length ? (
+            items.map((item, index) => {
+              const text = stringValue(item);
+              const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
+              return (
+                <div className="ticket-item" key={`${text}-${index}`}>
+                  <span>{match ? match[1] : text}</span>
+                  <span>x{match ? match[2] : "1"}</span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="muted">No item description.</div>
+          )}
+        </div>
+
+        <div className="ticket-total">
+          <span>Total</span>
+          <span>{money(order.total)} EGP</span>
+        </div>
+        {receiptNotes && (
+          <div className="ticket-notes">
+            <strong>Notes:</strong> {receiptNotes}
+          </div>
+        )}
+        {showPaymentActions && (
+          <div className="stock-meta">
+            <span>Paid: {money(order.paidAmount)} EGP</span>
+            <span>Remaining: {money(due)} EGP</span>
+            {changeAmount > 0 && <span>Change: {money(changeAmount)} EGP</span>}
+            {receiptDiscountPercentage > 0 && (
+              <span>Discount: {money(receiptDiscountPercentage)}%</span>
+            )}
+            <span className={`pill ${paymentClass}`}>
+              {paymentStatus === "Partially Paid" && due > 0
+                ? `Remaining ${money(due)} EGP`
+                : paymentStatus}
+            </span>
+          </div>
         )}
       </div>
-
-      <div className="ticket-total">
-        <span>Total</span>
-        <span>{money(order.total)} EGP</span>
-      </div>
-      {showPaymentActions && (
-        <div className="stock-meta">
-          <span>Paid: {money(order.paidAmount)} EGP</span>
-          <span className={`pill ${due > 0 ? "unpaid" : "paid"}`}>
-            {due > 0 ? `Due ${money(due)} EGP` : "Ready"}
-          </span>
-        </div>
-      )}
-      <div className={`ticket-actions ${ticketActionClass(showPaymentActions, showPickupAction)}`}>
+      <div
+        className={`ticket-actions ${ticketActionClass(showPaymentActions, showPickupAction)}`}
+      >
         {showPaymentActions && (
           <>
-            <button className="secondary" onClick={() => onSetPayment(payload, "Paid")} type="button">
-              Paid
+            <button
+              className="secondary"
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("payment-paid", () =>
+                  onSetPayment(payload, "Paid"),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "payment-paid" ? "Saving..." : "Paid"}
             </button>
-            <button className="secondary" onClick={() => onSetPayment(payload, "Unpaid")} type="button">
-              Unpaid
+            <button
+              className="secondary"
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("collect-payment", () =>
+                  onCollectPayment(payload),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "collect-payment" ? "Saving..." : "Collect"}
+            </button>
+            <button
+              className="secondary"
+              disabled={Boolean(pendingAction)}
+              onClick={() => printReceipt(order)}
+              type="button"
+            >
+              Print
+            </button>
+            <button
+              className="secondary"
+              disabled={cancelled || !canSetPayment || Boolean(pendingAction)}
+              onClick={() =>
+                void runTicketAction("payment-unpaid", () =>
+                  onSetPayment(payload, "Unpaid"),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "payment-unpaid" ? "Saving..." : "Unpaid"}
             </button>
           </>
         )}
-        {showPickupAction && (
-          <button className="primary" disabled={pickedUp} onClick={() => onDone(payload)} type="button">
-            Picked Up
+        {showPickupAction && view === "barista" && (
+          <>
+            <button
+              className="accept"
+              disabled={
+                cancelled ||
+                preparationStatus !== "Requested" ||
+                !canAccept ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runBaristaStatusAction("acceptOrder", "Accepted", () =>
+                  onStatus(payload, "acceptOrder", "Receipt accepted."),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "acceptOrder"
+                ? "Accepting…"
+                : preparationStatus === "Accepted"
+                  ? "Accepted"
+                  : "Accept"}
+            </button>
+            <button
+              className="pickup"
+              disabled={
+                cancelled ||
+                !["Accepted", "Preparing", "Ready"].includes(
+                  preparationStatus,
+                ) ||
+                !canPickup ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runBaristaStatusAction("pickupOrder", "Picked Up", () =>
+                  onDone(payload),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === "pickupOrder" ? "Picking Up…" : "Pick Up"}
+            </button>
+          </>
+        )}
+        {showPickupAction && view !== "barista" && (
+          <>
+            <button
+              className="accept"
+              disabled={
+                cancelled ||
+                !prepAction ||
+                !canRunPrepAction ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                prepAction &&
+                canRunPrepAction &&
+                void runTicketAction(prepAction.action, () =>
+                  onStatus(payload, prepAction.action, prepAction.message),
+                )
+              }
+              type="button"
+            >
+              {pendingAction === prepAction?.action
+                ? "Saving..."
+                : prepAction?.label || "Accepted"}
+            </button>
+            <button
+              className="pickup"
+              disabled={
+                !canPickup ||
+                cancelled ||
+                pickedUp ||
+                preparationStatus !== "Ready" ||
+                Boolean(pendingAction)
+              }
+              onClick={() =>
+                void runTicketAction("markReceiptDone", () => onDone(payload))
+              }
+              type="button"
+            >
+              {pendingAction === "markReceiptDone" ? "Saving..." : "Pickup"}
+            </button>
+          </>
+        )}
+        {canCancel && view !== "barista" && (
+          <button
+            className="danger"
+            disabled={cancelled || pickedUp || Boolean(pendingAction)}
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Mark this receipt as cancelled? It will stay visible for the owner audit.",
+              );
+              if (!confirmed) return;
+              void runTicketAction("cancelReceipt", () =>
+                onStatus(payload, "cancelReceipt", "Receipt cancelled."),
+              );
+            }}
+            type="button"
+          >
+            {pendingAction === "cancelReceipt" ? "Saving..." : "Wrong / Cancel"}
           </button>
         )}
       </div>
     </article>
   );
+}
+
+function PreparationStatusBadge({ status }: { status: PreparationStatus }) {
+  return (
+    <span
+      className={`pill status-badge preparation-status-badge ${getPreparationStatusClass(status)}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  const normalized = normalizePaymentStatusForDisplay(status);
+  return (
+    <span
+      className={`pill status-badge payment-status-badge ${getPaymentStatusClass(normalized)}`}
+    >
+      {normalized}
+    </span>
+  );
+}
+
+function nextPreparationAction(status: PreparationStatus) {
+  if (status === "Submitted") {
+    return {
+      action: "markReceiptAccepted",
+      label: "Accept",
+      message: "Receipt accepted.",
+    };
+  }
+  if (status === "Accepted") {
+    return {
+      action: "markReceiptPreparing",
+      label: "Start",
+      message: "Receipt marked preparing.",
+    };
+  }
+  if (status === "Preparing") {
+    return {
+      action: "markReceiptReady",
+      label: "Ready",
+      message: "Receipt marked ready.",
+    };
+  }
+  return null;
 }
 
 function StockCard({ item }: { item: Row }) {
@@ -2042,7 +3947,9 @@ function StockCard({ item }: { item: Row }) {
       <div className="stock-row">
         <div className="stock-row inner">
           <span className="stock-rank">{stringValue(item.rank)}</span>
-          <strong className="stock-name">{stringValue(item.itemName) || "Item"}</strong>
+          <strong className="stock-name">
+            {stringValue(item.itemName) || "Item"}
+          </strong>
         </div>
         <span className={`pill ${isAlert ? "unpaid" : "paid"}`}>{alert}</span>
       </div>
@@ -2057,7 +3964,10 @@ function StockCard({ item }: { item: Row }) {
   );
 }
 
-function ticketActionClass(showPaymentActions: boolean, showPickupAction: boolean) {
+function ticketActionClass(
+  showPaymentActions: boolean,
+  showPickupAction: boolean,
+) {
   if (showPaymentActions && !showPickupAction) return "payment-only";
   if (!showPaymentActions && showPickupAction) return "pickup-only";
   return "";
@@ -2114,7 +4024,10 @@ function DataTable({
           );
 
           return (
-            <article className="mobile-data-card" key={`${rowSearchText(row)}-${index}`}>
+            <article
+              className="mobile-data-card"
+              key={`${rowSearchText(row)}-${index}`}
+            >
               <div className="mobile-card-head">
                 <div>
                   <span className="mobile-card-label">{titleColumn[1]}</span>
@@ -2127,7 +4040,9 @@ function DataTable({
                     </span>
                   )}
                 </div>
-                {action && <div className="mobile-card-actions">{action(row)}</div>}
+                {action && (
+                  <div className="mobile-card-actions">{action(row)}</div>
+                )}
               </div>
               <dl className="mobile-card-grid">
                 {detailColumns.map(([key, label]) => (
@@ -2163,7 +4078,8 @@ function FormattedValue({ value }: { value: unknown }) {
     "picked-up",
   ];
 
-  if (pillValues.includes(key)) return <span className={`pill ${key}`}>{text}</span>;
+  if (pillValues.includes(key))
+    return <span className={`pill ${key}`}>{text}</span>;
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
     return <span className="date-pill">{text.slice(0, 10)}</span>;
   }
@@ -2216,13 +4132,14 @@ function Field({
     <label>
       {label}
       <input
+        defaultValue={!onChange ? value : undefined}
         list={list}
         name={name}
         onChange={(event) => onChange?.(event.target.value)}
         placeholder={placeholder}
         required={required}
         type={type}
-        value={value}
+        value={onChange ? value : undefined}
       />
     </label>
   );
@@ -2263,7 +4180,9 @@ function FilterBar({
           ))}
         </div>
       )}
-      <span className="muted">Search by name, item, status, staff, phone, or code</span>
+      <span className="muted">
+        Search by name, item, status, staff, phone, or code
+      </span>
     </div>
   );
 }
@@ -2336,6 +4255,83 @@ function ensureConnectedData(source: AppData | null): AppData {
   return nextData;
 }
 
+function mergeConnectedData(
+  current: AppData | null,
+  incoming: AppData,
+): AppData {
+  const base = ensureConnectedData(current);
+  const next = ensureConnectedData(incoming);
+
+  return ensureConnectedData({
+    ...base,
+    ...next,
+    dashboard: next.dashboard || base.dashboard,
+    dashboardOrders: next.dashboardOrders
+      ? mergeRowsByKey(
+          base.dashboardOrders || [],
+          next.dashboardOrders,
+          receiptKeyOf,
+        )
+      : base.dashboardOrders,
+    dashboardTopItems: next.dashboardTopItems || base.dashboardTopItems,
+    historyDays: next.historyDays || base.historyDays,
+    lists: {
+      ...(base.lists || {}),
+      ...(next.lists || {}),
+    },
+    orders: next.orders
+      ? mergeRowsByKey(base.orders || [], next.orders, receiptKeyOf)
+      : base.orders,
+    payments: next.payments || base.payments,
+    staffProfile: next.staffProfile || base.staffProfile,
+    unpaid: next.unpaid || base.unpaid,
+  });
+}
+
+function mergeRowsByKey(
+  current: Row[],
+  incoming: Row[],
+  keyForRow: (row: Row) => string,
+) {
+  const byKey = new Map<string, Row>();
+  current.forEach((row, index) => {
+    byKey.set(keyForRow(row) || `current-${index}`, row);
+  });
+  incoming.forEach((row, index) => {
+    byKey.set(keyForRow(row) || `incoming-${index}`, {
+      ...(byKey.get(keyForRow(row)) || {}),
+      ...row,
+    });
+  });
+  return Array.from(byKey.values());
+}
+
+function receiptKeyOf(row: Row) {
+  return stringValue(
+    row.receiptId ||
+      row.receiptNumber ||
+      row.receiptKey ||
+      row.orderId ||
+      row.orderDateTime,
+  );
+}
+
+function safeReceiptTotals(
+  items: Array<{
+    discount?: number | string;
+    extrasTotal?: number | string;
+    qty?: number;
+    unitPrice?: number | string;
+  }>,
+  discount: string,
+) {
+  try {
+    return calculateReceiptTotals(items, discount);
+  } catch {
+    return calculateReceiptTotals(items, 0);
+  }
+}
+
 function dataSummary(data: AppData) {
   return `Menu: ${data.menu?.length || 0}, Customers: ${data.customers?.length || 0}, Orders: ${data.orders?.length || 0}`;
 }
@@ -2346,7 +4342,7 @@ function buildDashboardCounts(data: AppData): Dashboard {
   const unpaid = data.unpaid || [];
   const base = data.dashboard || {};
   const pickedUpReceipts = dashboardOrders.filter((order) =>
-    isPickedUp(order.orderStatus),
+    isPickedUpStatus(order.orderStatus),
   ).length;
   const unpaidReceipts = dashboardOrders.filter(
     (order) => numberValue(order.outstandingAmount) > 0,
@@ -2358,7 +4354,10 @@ function buildDashboardCounts(data: AppData): Dashboard {
     totalItems: base.totalItems ?? orders.length ?? 0,
     totalPaid:
       base.totalPaid ??
-      dashboardOrders.reduce((total, order) => total + numberValue(order.paidAmount), 0),
+      dashboardOrders.reduce(
+        (total, order) => total + numberValue(order.paidAmount),
+        0,
+      ),
     totalUnpaid:
       base.totalUnpaid ??
       unpaid.reduce((total, row) => total + numberValue(row.unpaidBalance), 0),
@@ -2371,12 +4370,16 @@ function buildDashboardCounts(data: AppData): Dashboard {
 function buildDashboardOrders(orders: Row[]) {
   const grouped: Record<
     string,
-    Row & { orderDescriptions: string[]; pickedUpCount: number }
+    Row & {
+      orderDescriptions: string[];
+      pickedUpCount: number;
+      receiptNotes: string[];
+    }
   > = {};
 
   orders.forEach((order) => {
     const key =
-      stringValue(order.receiptId) ||
+      receiptKeyOf(order) ||
       [
         order.orderDateTime,
         order.customerId,
@@ -2395,43 +4398,114 @@ function buildDashboardOrders(orders: Row[]) {
         outstandingAmount: 0,
         orderDescriptions: [],
         pickedUpCount: 0,
+        receiptNotes: [],
       };
     }
 
     const group = grouped[key];
     group.itemCount = numberValue(group.itemCount) + 1;
     group.total = numberValue(group.total) + numberValue(order.total);
-    group.paidAmount = numberValue(group.paidAmount) + numberValue(order.paidAmount);
-    group.outstandingAmount =
-      numberValue(group.outstandingAmount) + numberValue(order.outstandingAmount);
+    group.paidAmount =
+      numberValue(group.paidAmount) + receiptRowPaidAmount(order);
+    group.receiptDiscountPercentage = Math.max(
+      numberValue(group.receiptDiscountPercentage),
+      numberValue(order.receiptDiscountPercentage || order.discount),
+    );
     group.orderPlace = group.orderPlace || orderPlaceOf(order);
-    if (isPickedUp(order.orderStatus)) {
+    if (isPickedUpStatus(order.orderStatus)) {
       group.pickedUpCount += 1;
     }
     group.orderDescriptions.push(
       `${stringValue(order.item || order.itemName) || "Item"} x${stringValue(order.qty) || "1"}`,
     );
+    const notes = cleanReceiptNotes(order.notes);
+    if (notes) group.receiptNotes.push(notes);
   });
 
-  return Object.values(grouped).map((row) => ({
-    ...row,
-    itemCount: String(row.itemCount),
-    orderDescription: row.orderDescriptions.join(" + "),
-    orderItems: row.orderDescriptions,
-    orderStatus:
-      row.pickedUpCount >= numberValue(row.itemCount)
-        ? "Picked Up"
-        : row.orderStatus,
-    paidAmount: String(row.paidAmount),
-    outstandingAmount: String(row.outstandingAmount),
-    total: String(row.total),
-  }));
+  return Object.values(grouped).map((row) => {
+    const paidAmount = Math.min(
+      numberValue(row.total),
+      numberValue(row.paidAmount),
+    );
+    const outstandingAmount = Math.max(0, numberValue(row.total) - paidAmount);
+    return {
+      ...row,
+      itemCount: String(row.itemCount),
+      orderDescription: row.orderDescriptions.join(" + "),
+      orderItems: row.orderDescriptions,
+      orderStatus:
+        row.pickedUpCount >= numberValue(row.itemCount)
+          ? "Picked Up"
+          : row.orderStatus,
+      paidAmount: String(paidAmount),
+      outstandingAmount: String(outstandingAmount),
+      paymentStatus: derivePaymentStatus(paidAmount, numberValue(row.total)),
+      receiptDiscountPercentage: String(row.receiptDiscountPercentage || 0),
+      receiptNotes: uniqueStrings(row.receiptNotes).join(" | "),
+      customerNotes: uniqueStrings(row.receiptNotes).join(" | "),
+      total: String(row.total),
+    };
+  });
+}
+
+function receiptRowPaidAmount(order: Row) {
+  const explicitPaid = numberValue(order.paidAmount);
+  if (explicitPaid > 0) return explicitPaid;
+  const status = stringValue(order.paymentStatus).toLowerCase();
+  if (status === "paid") return numberValue(order.total);
+  if (status === "partial") return partialPaidAmount(order);
+  return 0;
+}
+
+function partialPaidAmount(order: Row) {
+  return Array.from(
+    stringValue(order.notes).matchAll(/Paid now:\s*([\d,]+(?:\.\d+)?)/gi),
+  ).reduce((total, match) => total + numberValue(match[1]), 0);
+}
+
+function derivePaymentStatus(paidAmount: number, receiptTotal: number) {
+  if (paidAmount <= 0) return "Unpaid";
+  if (paidAmount < receiptTotal) return "Partial";
+  return "Paid";
+}
+
+function cleanReceiptNotes(notes: unknown) {
+  const internalPrefixes = [
+    "place:",
+    "staff label:",
+    "size:",
+    "discount:",
+    "subtotal:",
+    "discount amount:",
+    "idempotency:",
+    "receipt:",
+    "paid now:",
+    "payment changed",
+    "status changed",
+    "settled unpaid",
+  ];
+  return stringValue(notes)
+    .split("|")
+    .map(stringValue)
+    .filter((part) => {
+      const lower = part.toLowerCase();
+      return (
+        part && !internalPrefixes.some((prefix) => lower.startsWith(prefix))
+      );
+    })
+    .join(" | ");
 }
 
 function buildDashboardTopItems(orders: Row[]) {
   const grouped: Record<
     string,
-    { itemName: string; category: string; qtySold: number; totalSales: number; lastSold: string }
+    {
+      itemName: string;
+      category: string;
+      qtySold: number;
+      totalSales: number;
+      lastSold: string;
+    }
   > = {};
 
   orders.forEach((order) => {
@@ -2453,11 +4527,15 @@ function buildDashboardTopItems(orders: Row[]) {
 
     grouped[groupKey].qtySold += qtySold;
     grouped[groupKey].totalSales += numberValue(order.total);
-    grouped[groupKey].lastSold = stringValue(order.orderDateTime) || grouped[groupKey].lastSold;
+    grouped[groupKey].lastSold =
+      stringValue(order.orderDateTime) || grouped[groupKey].lastSold;
   });
 
   return Object.values(grouped)
-    .sort((left, right) => right.qtySold - left.qtySold || right.totalSales - left.totalSales)
+    .sort(
+      (left, right) =>
+        right.qtySold - left.qtySold || right.totalSales - left.totalSales,
+    )
     .slice(0, 8)
     .map((row, index) => ({
       ...row,
@@ -2475,15 +4553,18 @@ function buildDashboardTopItems(orders: Row[]) {
 
 function orderItemName(order: Row) {
   return (
-    stringValue(order.item || order.itemName || order.menuItem || order.productName) ||
-    "Item"
+    stringValue(
+      order.item || order.itemName || order.menuItem || order.productName,
+    ) || "Item"
   );
 }
 
 function orderQty(order: Row) {
   return Math.max(
     1,
-    numberValue(order.qty || order.quantity || order.count || order.itemCount) || 1,
+    numberValue(
+      order.qty || order.quantity || order.count || order.itemCount,
+    ) || 1,
   );
 }
 
@@ -2503,7 +4584,8 @@ function buildRewards(customers: Row[], orders: Row[], vouchers: Row[]) {
       );
       const generatedVouchers = customerVouchers.length;
       const redeemedVouchers = customerVouchers.filter(
-        (voucher) => stringValue(voucher.redeemStatus).toLowerCase() === "redeemed",
+        (voucher) =>
+          stringValue(voucher.redeemStatus).toLowerCase() === "redeemed",
       ).length;
       const pendingVouchers = generatedVouchers - redeemedVouchers;
       const freeDrinksReady = Math.max(0, earnedFreeDrinks - generatedVouchers);
@@ -2546,7 +4628,9 @@ function paidEligibleDrinkQty(order: Row) {
 function isOrderPaidForRewards(order: Row) {
   const status = stringValue(order.paymentStatus).toLowerCase();
   if (status === "paid") return true;
-  return numberValue(order.total) > 0 && numberValue(order.outstandingAmount) <= 0;
+  return (
+    numberValue(order.total) > 0 && numberValue(order.outstandingAmount) <= 0
+  );
 }
 
 function isRewardEligibleOrder(order: Row) {
@@ -2555,7 +4639,8 @@ function isRewardEligibleOrder(order: Row) {
 }
 
 function isDrinkOrder(order: Row) {
-  const text = `${stringValue(order.category)} ${orderItemName(order)}`.toLowerCase();
+  const text =
+    `${stringValue(order.category)} ${orderItemName(order)}`.toLowerCase();
   if (
     [
       "cake",
@@ -2603,7 +4688,9 @@ function rowsMatchCustomer(row: Row, customer: Row) {
   const customerPhone = digitsOnly(phoneOf(customer) || customer.customerPhone);
   if (rowPhone && customerPhone && rowPhone === customerPhone) return true;
 
-  return customerNameKey(row) && customerNameKey(row) === customerNameKey(customer);
+  return (
+    customerNameKey(row) && customerNameKey(row) === customerNameKey(customer)
+  );
 }
 
 function customerNameKey(row: Row) {
@@ -2677,6 +4764,8 @@ function receiptActionPayload(order: Row) {
   const payload: ReceiptPayload = {
     receiptId: stringValue(order.receiptId),
     receiptKey: stringValue(order.receiptKey),
+    orderId: stringValue(order.orderId),
+    receiptNumber: stringValue(order.receiptNumber || order.receiptId),
     customerId: stringValue(order.customerId),
     customerName: stringValue(order.customerName),
     orderDateTime: stringValue(order.orderDateTime),
@@ -2690,19 +4779,62 @@ function receiptPayloadFrom(value: string) {
   return JSON.parse(decodeURIComponent(value)) as ReceiptPayload;
 }
 
-function isPickedUp(value: unknown) {
-  const normalized = stringValue(value).toLowerCase().replace(/[-_\s]+/g, "");
-  return normalized === "done" || normalized === "pickedup" || normalized === "pickup";
-}
-
 function orderPlaceOf(row: Row) {
   const direct = stringValue(
     row.orderPlace || row.tableNumber || row.table || row.place || row.location,
   );
   if (direct) return direct;
 
-  const match = stringValue(row.notes).match(/(?:Place|Table|Location):\s*([^|]+)/i);
+  const match = stringValue(row.notes).match(
+    /(?:Place|Table|Location):\s*([^|]+)/i,
+  );
   return match ? stringValue(match[1]) : "";
+}
+
+function printReceipt(order: Row) {
+  const items = Array.isArray(order.orderItems)
+    ? order.orderItems.map((item) => {
+        const text = stringValue(item);
+        const match = text.match(/^(.*)\sx(\d+(\.\d+)?)$/i);
+        return {
+          itemName: match ? match[1] : text,
+          qty: match ? numberValue(match[2]) : 1,
+          unitPrice: numberValue(order.unitPrice),
+          total: numberValue(order.total),
+          size: stringValue(order.size),
+        };
+      })
+    : [
+        {
+          itemName: stringValue(order.item || order.orderDescription || "Item"),
+          qty: numberValue(order.qty) || 1,
+          unitPrice: numberValue(order.unitPrice),
+          total: numberValue(order.total),
+          size: stringValue(order.size),
+        },
+      ];
+  const html = buildReceiptPrintHtml({
+    customerName: stringValue(order.customerName),
+    customerPhone: phoneOf(order),
+    receiptId: stringValue(order.receiptId),
+    receiptNumber: stringValue(order.receiptNumber || order.receiptId),
+    items,
+    discountPercentage: numberValue(order.receiptDiscountPercentage),
+    subtotal: numberValue(order.subtotal || order.total),
+    total: numberValue(order.total),
+    paidAmount: numberValue(order.paidAmount),
+    outstandingAmount: numberValue(order.outstandingAmount),
+    changeAmount: numberValue(order.changeAmount),
+    paymentStatus: stringValue(order.paymentStatus),
+    orderDateTime: stringValue(order.orderDateTime),
+    staff: stringValue(order.staff),
+    orderPlace: orderPlaceOf(order),
+    notes: stringValue(order.notes || order.customerNotes),
+  });
+  const win = window.open("", "_blank", "width=760,height=900");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
 }
 
 function printVoucher(row: Row) {
@@ -2710,7 +4842,8 @@ function printVoucher(row: Row) {
   const drink = favoriteDrink(row) || "your favorite drink";
   const code = stringValue(row.voucherCode || row.code);
   const reward = stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`;
-  const generatedAt = stringValue(row.generatedAt || row.date) || new Date().toLocaleDateString();
+  const generatedAt =
+    stringValue(row.generatedAt || row.date) || new Date().toLocaleDateString();
   const win = window.open("", "_blank", "width=460,height=760");
   if (!win) return;
 
@@ -2798,9 +4931,13 @@ function voucherWhatsAppText(row: Row) {
 async function shareVoucherImage(row: Row) {
   try {
     const blob = await voucherPngBlob(row);
-    const file = new File([blob], `${stringValue(row.voucherCode || "joy-corner-voucher")}.png`, {
-      type: "image/png",
-    });
+    const file = new File(
+      [blob],
+      `${stringValue(row.voucherCode || "joy-corner-voucher")}.png`,
+      {
+        type: "image/png",
+      },
+    );
     const nav = navigator as Navigator & {
       canShare?: (data: ShareData) => boolean;
       share?: (data: ShareData) => Promise<void>;
@@ -2837,12 +4974,18 @@ async function voucherPngBlob(row: Row) {
   URL.revokeObjectURL(url);
 
   return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Voucher image failed."))), "image/png");
+    canvas.toBlob(
+      (blob) =>
+        blob ? resolve(blob) : reject(new Error("Voucher image failed.")),
+      "image/png",
+    );
   });
 }
 
 function openVoucherImage(row: Row) {
-  const url = URL.createObjectURL(new Blob([voucherSvg(row)], { type: "image/svg+xml" }));
+  const url = URL.createObjectURL(
+    new Blob([voucherSvg(row)], { type: "image/svg+xml" }),
+  );
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
@@ -2851,7 +4994,9 @@ function voucherSvg(row: Row) {
   const customer = escapeHtml(customerName(row) || "Joy Corner Guest");
   const drink = escapeHtml(favoriteDrink(row) || "your favorite drink");
   const code = escapeHtml(stringValue(row.voucherCode || row.code));
-  const reward = escapeHtml(stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`);
+  const reward = escapeHtml(
+    stringValue(row.voucherReward) || `Enjoy 1 Free ${drink}`,
+  );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
     <defs>
@@ -2891,25 +5036,30 @@ function whatsAppPhone(phone: string) {
 }
 
 function formObject(form: HTMLFormElement) {
-  return Object.fromEntries(new FormData(form).entries()) as Record<string, unknown>;
-}
-
-function tabsForRole(role: StaffRole) {
-  if (role === "barista") return tabs.filter(([id]) => id === "dashboard");
-  if (role === "waiter") return tabs.filter(([id]) => id === "orders");
-  return tabs;
+  return Object.fromEntries(new FormData(form).entries()) as Record<
+    string,
+    unknown
+  >;
 }
 
 const rolePermissions: Record<StaffRole, Set<string>> = {
   owner: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "resetDay",
@@ -2917,18 +5067,27 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
     "customerHistory",
     "historyDays",
     "dayHistory",
+    "organizeSpreadsheet",
     "debugAuth",
     "debugSheets",
   ]),
   manager: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "customerSearch",
@@ -2941,12 +5100,20 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   cashier: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addCustomer",
     "removeCustomer",
     "addReceipt",
+    "cancelReceipt",
     "collectUnpaidPayment",
+    "collectReceiptPayment",
     "updateReceiptPayment",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
+    "acceptOrder",
+    "pickupOrder",
     "generateVoucher",
     "redeemVoucher",
     "customerSearch",
@@ -2959,19 +5126,42 @@ const rolePermissions: Record<StaffRole, Set<string>> = {
   waiter: new Set([
     "appData",
     "getAppData",
+    "liveData",
     "addReceipt",
     "customerSearch",
     "customerHistory",
+    "markReceiptAccepted",
+    "markReceiptPreparing",
+    "markReceiptReady",
     "markReceiptDone",
     "debugAuth",
   ]),
   barista: new Set([
     "appData",
     "getAppData",
-    "markReceiptDone",
+    "liveData",
+    "acceptOrder",
+    "pickupOrder",
     "debugAuth",
   ]),
 };
+
+function canRunActionForProfile(
+  profile: StaffProfile | null,
+  fallbackRole: StaffRole,
+  action: string,
+) {
+  const feature = actionFeaturePermissions[action];
+  if (!feature) return canRunAction(fallbackRole, action);
+  if (!profile) return canRunAction(fallbackRole, action);
+  return hasPermission({
+    effectivePermissions: profile.effectivePermissions,
+    feature,
+    grant: profile.grant || profile.permissions,
+    revoke: profile.revoke || profile.revokedPermissions,
+    role: profile.role || fallbackRole,
+  });
+}
 
 function canRunAction(role: StaffRole, action: string) {
   return rolePermissions[role]?.has(action) === true;
@@ -3003,9 +5193,7 @@ function unpaidDescriptionParts(row: Row) {
   return description
     .split(/\s*\|\s*|\n+|;+/)
     .flatMap((part) =>
-      part
-        .split(/(?=\d{4}-\d{2}-\d{2}\s+-\s+)/)
-        .map((item) => item.trim()),
+      part.split(/(?=\d{4}-\d{2}-\d{2}\s+-\s+)/).map((item) => item.trim()),
     )
     .filter(Boolean)
     .slice(0, 6);
@@ -3037,7 +5225,9 @@ function enrichOrderCustomerPhone(order: Row, customers: Row[]) {
   const orderCustomerName = stringValue(order.customerName).toLowerCase();
   const customer = customers.find((row) => {
     if (orderCustomerId && customerIdOf(row) === orderCustomerId) return true;
-    return orderCustomerName && customerName(row).toLowerCase() === orderCustomerName;
+    return (
+      orderCustomerName && customerName(row).toLowerCase() === orderCustomerName
+    );
   });
 
   const phone = phoneOf(customer);
@@ -3077,7 +5267,9 @@ function localPhoneDisplay(value: string) {
 
 function favoriteDrink(row?: Row) {
   if (!row) return "";
-  return stringValue(row.favoriteDrink || row.favouriteDrink || row.favorite || row.drink);
+  return stringValue(
+    row.favoriteDrink || row.favouriteDrink || row.favorite || row.drink,
+  );
 }
 
 function menuName(row: Row) {
@@ -3086,7 +5278,45 @@ function menuName(row: Row) {
 
 function menuPrice(row: Row) {
   return stringValue(
-    row.priceText || row.priceTextEditLater || row["priceTextEditLater)"] || row.price,
+    row.priceText ||
+      row.priceTextEditLater ||
+      row["priceTextEditLater)"] ||
+      row.price,
+  );
+}
+
+function menuSizesFor(row: Row) {
+  if (Array.isArray(row.sizes)) {
+    return row.sizes
+      .map((size) => {
+        const record = size as Row;
+        return {
+          price: numberValue(record.price),
+          size: stringValue(record.size) || "Standard",
+        };
+      })
+      .filter((size) => size.price > 0);
+  }
+
+  return [
+    {
+      price: numberValue(row.suggestedPrice) || firstPrice(menuPrice(row)),
+      size: stringValue(row.standardSize) || "Standard",
+    },
+  ].filter((size) => size.price > 0);
+}
+
+function resolvePriceForMenuRow(row: Row, requestedSize: string) {
+  return resolveLiveMenuPrice(
+    {
+      category: stringValue(row.category),
+      itemId: stringValue(row.itemId),
+      itemName: menuName(row),
+      name: menuName(row),
+      sizes: menuSizesFor(row),
+      standardSize: stringValue(row.standardSize) || "Standard",
+    },
+    requestedSize,
   );
 }
 
@@ -3132,6 +5362,22 @@ function stringValue(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function activeValue(value: unknown) {
+  if (value == null || value === "") return true;
+  if (typeof value === "boolean") return value;
+  return !["no", "false", "disabled", "inactive", "blocked", "0"].includes(
+    stringValue(value).toLowerCase(),
+  );
+}
+
+function stringArrayValue(value: unknown) {
+  if (Array.isArray(value)) return value.map(stringValue).filter(Boolean);
+  return stringValue(value)
+    .split(/[,\n|]+/)
+    .map(stringValue)
+    .filter(Boolean);
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -3155,9 +5401,10 @@ function errorMessage(error: unknown) {
 
 function isFirebaseAuthConfigurationError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = typeof error === "object" && error && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : "";
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
 
   return (
     code === "auth/configuration-not-found" ||
@@ -3167,9 +5414,10 @@ function isFirebaseAuthConfigurationError(error: unknown) {
 
 function isFirebaseInvalidCredentialError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = typeof error === "object" && error && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : "";
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
 
   return (
     code === "auth/invalid-credential" ||

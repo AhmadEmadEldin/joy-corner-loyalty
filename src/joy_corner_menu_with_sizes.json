@@ -1,0 +1,1872 @@
+{
+  "brand": "Joy Corner",
+  "currency": "EGP",
+  "price_format": {
+    "single_price": "number",
+    "multiple_prices": "array ordered from smallest to largest size"
+  },
+  "categories": [
+    {
+      "name": "Hot Beverages",
+      "items": [
+        {
+          "name": "Turkish Coffee",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 34
+            },
+            {
+              "size": "Medium",
+              "price": 39
+            }
+          ]
+        },
+        {
+          "name": "French Coffee",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 59
+            },
+            {
+              "size": "Medium",
+              "price": 69
+            },
+            {
+              "size": "Large",
+              "price": 79
+            }
+          ]
+        },
+        {
+          "name": "Nutella Coffee",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Hazelnut Coffee",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Hazelnut Coffee Nutella",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 90
+            },
+            {
+              "size": "Medium",
+              "price": 100
+            },
+            {
+              "size": "Large",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Espresso",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 45
+            },
+            {
+              "size": "Medium",
+              "price": 55
+            }
+          ]
+        },
+        {
+          "name": "Ristretto",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 45
+            },
+            {
+              "size": "Medium",
+              "price": 55
+            }
+          ]
+        },
+        {
+          "name": "Macchiato",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 60
+            },
+            {
+              "size": "Medium",
+              "price": 70
+            }
+          ]
+        },
+        {
+          "name": "Espresso Con Panna",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 65
+            },
+            {
+              "size": "Medium",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Espresso Affogato",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 75
+            },
+            {
+              "size": "Medium",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Corto Classic",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 65
+            }
+          ]
+        },
+        {
+          "name": "Corto Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Corto Caramel",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "American Black",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 60
+            },
+            {
+              "size": "Medium",
+              "price": 70
+            },
+            {
+              "size": "Large",
+              "price": 80
+            }
+          ]
+        },
+        {
+          "name": "American White",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 70
+            },
+            {
+              "size": "Medium",
+              "price": 80
+            },
+            {
+              "size": "Large",
+              "price": 90
+            }
+          ]
+        },
+        {
+          "name": "Cappuccino",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Latte",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Hot Spanish Latte",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Flat White",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Mocha",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 95
+            },
+            {
+              "size": "Medium",
+              "price": 105
+            },
+            {
+              "size": "Large",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Mocha White",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 95
+            },
+            {
+              "size": "Medium",
+              "price": 110
+            },
+            {
+              "size": "Large",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Caramel Macchiato",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 95
+            },
+            {
+              "size": "Medium",
+              "price": 110
+            },
+            {
+              "size": "Large",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Nescafe",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 60
+            },
+            {
+              "size": "Medium",
+              "price": 70
+            },
+            {
+              "size": "Large",
+              "price": 80
+            }
+          ]
+        },
+        {
+          "name": "Nescafe Black",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 50
+            },
+            {
+              "size": "Medium",
+              "price": 60
+            },
+            {
+              "size": "Large",
+              "price": 70
+            }
+          ]
+        },
+        {
+          "name": "Hot Chocolate",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 80
+            },
+            {
+              "size": "Medium",
+              "price": 90
+            },
+            {
+              "size": "Large",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Hot Chocolate Nutella",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 90
+            },
+            {
+              "size": "Medium",
+              "price": 100
+            },
+            {
+              "size": "Large",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Hot White Chocolate",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 95
+            },
+            {
+              "size": "Medium",
+              "price": 105
+            },
+            {
+              "size": "Large",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Hot Lotus Biscoff",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 120
+            },
+            {
+              "size": "Medium",
+              "price": 130
+            },
+            {
+              "size": "Large",
+              "price": 140
+            }
+          ]
+        },
+        {
+          "name": "Hot Cider",
+          "flavors": [
+            "Apple",
+            "Pineapple",
+            "Orange"
+          ],
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 55
+            },
+            {
+              "size": "Medium",
+              "price": 65
+            },
+            {
+              "size": "Large",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Tea",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 24
+            },
+            {
+              "size": "Medium",
+              "price": 29
+            }
+          ]
+        },
+        {
+          "name": "Green Tea",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 24
+            },
+            {
+              "size": "Medium",
+              "price": 29
+            }
+          ]
+        },
+        {
+          "name": "Tea with Milk",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 29
+            },
+            {
+              "size": "Medium",
+              "price": 39
+            }
+          ]
+        },
+        {
+          "name": "Flavored Black Tea",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 29
+            },
+            {
+              "size": "Medium",
+              "price": 39
+            }
+          ]
+        },
+        {
+          "name": "Hot Herbs",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 24
+            },
+            {
+              "size": "Medium",
+              "price": 29
+            }
+          ]
+        },
+        {
+          "name": "Hot Herbs Cocktail",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 39
+            },
+            {
+              "size": "Medium",
+              "price": 49
+            }
+          ]
+        },
+        {
+          "name": "Vitamin C",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 49
+            },
+            {
+              "size": "Medium",
+              "price": 59
+            }
+          ]
+        },
+        {
+          "name": "Sahlab",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 70
+            },
+            {
+              "size": "Medium",
+              "price": 80
+            },
+            {
+              "size": "Large",
+              "price": 90
+            }
+          ]
+        },
+        {
+          "name": "Sahlab Nuts",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 85
+            },
+            {
+              "size": "Medium",
+              "price": 95
+            },
+            {
+              "size": "Large",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Sahlab",
+          "flavors": [
+            "Caramel",
+            "Kinder",
+            "Nutella"
+          ],
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 95
+            },
+            {
+              "size": "Medium",
+              "price": 105
+            },
+            {
+              "size": "Large",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Sahlab Pistachio",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 115
+            },
+            {
+              "size": "Medium",
+              "price": 125
+            },
+            {
+              "size": "Large",
+              "price": 135
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Iced Drinks",
+      "items": [
+        {
+          "name": "Iced Coffee",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Iced Coffee Salted Caramel",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Iced Cappuccino",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Iced Latte",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Iced Spanish Latte",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Iced Americano",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 80
+            }
+          ]
+        },
+        {
+          "name": "Iced Mocha",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Iced White Mocha",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Iced Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 90
+            }
+          ]
+        },
+        {
+          "name": "Iced Caramel Macchiato",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Iced Tea",
+          "flavors": [
+            "Peach",
+            "Raspberry",
+            "Lemon"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 80
+            }
+          ]
+        },
+        {
+          "name": "Mojito Classic",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Mojito",
+          "flavors": [
+            "Passion",
+            "Watermelon",
+            "Blueberry"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Shakes",
+      "items": [
+        {
+          "name": "Milkshake Vanilla",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Mango",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Nutella",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Oreo",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Kinder",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Brownies",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Double Chocolate Cookie",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Lotus Biscoff",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 150
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Cheesecake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Cheesecake Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 145
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Cheesecake Pistachio",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 145
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Cheesecake Nutella",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 145
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Coffee",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 125
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Raspberry Boba Blueberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 150
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Date Nuts",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 150
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Pistachio",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Raspberry White Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Blueberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Milkshake Caramel Shoko Cream",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Smoothies",
+      "items": [
+        {
+          "name": "Smoothie Passion Fruit",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Green Apple",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pineapple",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pineapple Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Lemon Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Blueberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Peach",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Peach Passion",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Mango",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Mango Passion",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Strawberry Lemon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Watermelon Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pinacolada",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pineapple Lemon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pineapple Orange",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pineapple Green Apple",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Strawberry Kiwi",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Mix Berry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Pinacolada Boba Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 140
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Lemon Boba Cola",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 140
+            }
+          ]
+        },
+        {
+          "name": "Smoothie Cola",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 100
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Juices",
+      "items": [
+        {
+          "name": "Orange",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 65
+            }
+          ]
+        },
+        {
+          "name": "Lemon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 65
+            }
+          ]
+        },
+        {
+          "name": "Lemon Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Pink Lemon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 90
+            }
+          ]
+        },
+        {
+          "name": "Guava",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Guava Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Mango",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Mango Mint",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Banana",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Watermelon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Pomegranate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Kiwi",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Date",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Frappes",
+      "items": [
+        {
+          "name": "Frappuccino",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 105
+            }
+          ]
+        },
+        {
+          "name": "Frappe Caramel",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 110
+            }
+          ]
+        },
+        {
+          "name": "Frappe Salted Caramel",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 130
+            }
+          ]
+        },
+        {
+          "name": "Frappe Oreo",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Frappe Lotus",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 145
+            }
+          ]
+        },
+        {
+          "name": "Frappe Cookie",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Frappe Brownies",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Frappe Pistachio",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 125
+            }
+          ]
+        },
+        {
+          "name": "Frappe White Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 125
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cocktails",
+      "items": [
+        {
+          "name": "Tropical Night",
+          "ingredients": [
+            "Mango",
+            "Banana",
+            "Kiwi"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Florida",
+          "ingredients": [
+            "Mango",
+            "Guava",
+            "Strawberry"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Mix Berry",
+          "ingredients": [
+            "Blueberry",
+            "Raspberry",
+            "Cream"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Sweet & Sour Mix",
+          "ingredients": [
+            "Fresh Orange",
+            "Pineapple",
+            "Lemon"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Kiwi / Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Strawberry / Pomegranate / Watermelon",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Guava / Banana",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Soft Drinks",
+      "items": [
+        {
+          "name": "Mineral Water",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 10
+            }
+          ]
+        },
+        {
+          "name": "Can",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 30
+            }
+          ]
+        },
+        {
+          "name": "Red Bull",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 70
+            }
+          ]
+        },
+        {
+          "name": "Sunshine",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 60
+            }
+          ]
+        },
+        {
+          "name": "Cherry Cola",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 60
+            }
+          ]
+        },
+        {
+          "name": "Cinnamon Cola",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 60
+            }
+          ]
+        },
+        {
+          "name": "Vanilla Cola",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sandwiches",
+      "items": [
+        {
+          "name": "Salami Turkey",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Smoked Turkey Sandwich",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Mix Cheese Sandwich",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Tuna Sandwich",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Roast Beef Sandwich",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "name": "Chicken Pesto",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Matcha",
+      "items": [
+        {
+          "name": "Hot Matcha",
+          "sizes": [
+            {
+              "size": "Small",
+              "price": 105
+            },
+            {
+              "size": "Medium",
+              "price": 115
+            },
+            {
+              "size": "Large",
+              "price": 120
+            }
+          ]
+        },
+        {
+          "name": "Ice Matcha Cubes",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Frappe Matcha",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 115
+            }
+          ]
+        },
+        {
+          "name": "Matcha Strawberry",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 135
+            }
+          ]
+        },
+        {
+          "name": "Matcha Mango",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 135
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dessert",
+      "items": [
+        {
+          "name": "Flutes Cake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Honey Cake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Cheese Cake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Cheese Cake Flavoured",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 90
+            }
+          ]
+        },
+        {
+          "name": "Nutella Molten Cake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 80
+            }
+          ]
+        },
+        {
+          "name": "Lotus Molten Cake",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 85
+            }
+          ]
+        },
+        {
+          "name": "Brownies",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 65
+            }
+          ]
+        },
+        {
+          "name": "Tres Leches",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Eclair Nutella",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 65
+            }
+          ]
+        },
+        {
+          "name": "Eclair Lotus",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 70
+            }
+          ]
+        },
+        {
+          "name": "Milky Cake",
+          "flavors": [
+            "Kinder",
+            "Lotus",
+            "Caramel",
+            "Nutella"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 75
+            }
+          ]
+        },
+        {
+          "name": "Swiss Roll",
+          "flavors": [
+            "Lotus",
+            "Nutella"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 95
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Extras",
+      "items": [
+        {
+          "name": "Flavor",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 35
+            }
+          ]
+        },
+        {
+          "name": "Puree",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 45
+            }
+          ]
+        },
+        {
+          "name": "Espresso",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 25
+            }
+          ]
+        },
+        {
+          "name": "Nutella",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 30
+            }
+          ]
+        },
+        {
+          "name": "White Chocolate",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 35
+            }
+          ]
+        },
+        {
+          "name": "Lotus",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 50
+            }
+          ]
+        },
+        {
+          "name": "Kinder",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 50
+            }
+          ]
+        },
+        {
+          "name": "Pistachio",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 50
+            }
+          ]
+        },
+        {
+          "name": "Nuts",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 40
+            }
+          ]
+        },
+        {
+          "name": "Whipped Cream",
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Extra Boba",
+      "items": [
+        {
+          "name": "Boba",
+          "flavors": [
+            "Strawberry",
+            "Watermelon",
+            "Blueberry",
+            "Cola",
+            "Green Apple",
+            "Passion"
+          ],
+          "sizes": [
+            {
+              "size": "Standard",
+              "price": 45
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "size_note": "For multi-price menu items, prices are mapped left-to-right as Small, Medium, Large. Items with one listed price are marked Standard."
+}

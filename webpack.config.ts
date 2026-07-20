@@ -18,6 +18,17 @@ const firebaseConfig = {
   storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
 };
 
+const supabaseConfig = {
+  url: process.env.VITE_SUPABASE_URL || "",
+  publishableKey:
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    "",
+};
+
+const dataProvider =
+  process.env.VITE_DATA_PROVIDER === "legacy" ? "legacy" : "supabase";
+
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
   entry: path.resolve(__dirname, "src", "index.tsx"),
@@ -50,6 +61,8 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   plugins: [
     new webpack.DefinePlugin({
       __FIREBASE_CONFIG__: JSON.stringify(firebaseConfig),
+      __SUPABASE_CONFIG__: JSON.stringify(supabaseConfig),
+      __DATA_PROVIDER__: JSON.stringify(dataProvider),
     }),
   ],
   devServer: {
@@ -61,12 +74,15 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
     hot: true,
     open: true,
     port,
-    proxy: [
-      {
-        context: ["/api", "/health"],
-        target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
-      },
-    ],
+    proxy:
+      dataProvider === "legacy"
+        ? [
+            {
+              context: ["/api", "/health"],
+              target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
+            },
+          ]
+        : undefined,
     static: {
       directory: path.resolve(__dirname, "public"),
     },

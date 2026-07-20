@@ -3,20 +3,21 @@
 ## Production Path
 
 ```text
-Firebase Hosting
--> dist/index.html and dist/app.js
--> /api rewrite
--> firebase-functions.cjs
--> server/googleSheetsBackend.ts
--> Firestore profiles
--> Google Sheets
+Static host
+-> dist/index.html and webpack chunks
+-> src/RootApp.tsx
+-> Supabase Auth + Data API
+-> PostgreSQL RLS + transactional RPCs
+-> integration_outbox
+-> scheduled Google Sheets reporting worker
 ```
 
 ## Frontend
 
 - `src/index.tsx` mounts the React app.
-- `src/app.tsx` contains the staff dashboard and customer order portal.
-- `src/firebase.ts` owns browser Firebase Auth and Firestore profile checks.
+- `src/RootApp.tsx` selects Supabase before legacy code is loaded.
+- `src/supabase/` contains the active customer/staff portals and data boundary.
+- `src/app.tsx` and `src/firebase.ts` are the explicit legacy fallback.
 - `src/app.css` contains Joy Corner UI styling.
 - `public/index.html` is the HTML shell.
 - `public/assets/` is the single runtime asset folder copied into `dist/assets`.
@@ -25,11 +26,14 @@ Avoid adding production secrets, Google Sheets clients, or Canva API clients in 
 
 ## Backend
 
-- `firebase-functions.cjs` exports the Firebase HTTPS Function named `api`.
-- `server/googleSheetsBackend.ts` owns API routing, Firebase Admin token verification, Firestore role checks, and Google Sheets reads/writes.
-- `server/sheetSchema.ts` defines sheet write headers and formula-protected columns.
+- `supabase/migrations/` owns schema, RLS, grants, RPCs, projections, Storage,
+  Realtime publication, and the reporting outbox.
+- `scripts/sync_supabase_reporting.ts` is the server-only Sheets export worker.
+- `server/reporting/sheetMappings.ts` owns explicit Supabase-to-tab mappings.
+- `firebase-functions.cjs` and `server/googleSheetsBackend.ts` are rollback-only.
 
-Production Google Sheets auth uses the Firebase Functions runtime service account. The Sheet must be shared with that service account as Editor.
+The reporting worker's Google service account must have Editor access to the
+workbook. Browser code never receives its credentials.
 
 ## Scripts
 
@@ -39,11 +43,12 @@ Production Google Sheets auth uses the Firebase Functions runtime service accoun
 
 ## Configuration
 
-- `firebase.json` is the production deploy config.
+- `supabase/config.toml` is the backend development configuration.
+- `firebase.json` is retained only for rollback hosting/functions.
 - `.firebaserc` points to `joycornerapp-c784d`.
 - `.env.local` is local only and ignored by Git.
 - `.env.example` documents safe variable names only.
-- `firestore.rules` controls browser Firestore access.
+- `firestore.rules` controls access only when legacy mode is intentionally used.
 
 ## Do Not Reintroduce
 
