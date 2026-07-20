@@ -42,6 +42,10 @@ Local-only migrations must be reviewed and explicitly approved before:
 npm run supabase:push
 ```
 
+Production currently includes migrations through
+`20260720211217_reporting_outbox.sql`, applied after explicit approval on
+2026-07-21. The approval requirement still applies to every newer migration.
+
 The React build is generated in `dist/` and requires an SPA rewrite to
 `index.html`. Supabase provides the application backend; select a static
 frontend host separately.

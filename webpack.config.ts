@@ -18,12 +18,17 @@ const firebaseConfig = {
   storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
 };
 
+// Supabase publishable configuration is intentionally browser-visible. Keep a
+// project fallback so static hosts remain usable even when their environment
+// settings have not been configured; deployment-specific values may override it.
 const supabaseConfig = {
-  url: process.env.VITE_SUPABASE_URL || "",
+  url:
+    process.env.VITE_SUPABASE_URL ||
+    "https://ruurfhrjqfcydxbzpuqi.supabase.co",
   publishableKey:
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
-    "",
+    "sb_publishable_a4ySmRdu-RJoISB_kvjjgg_3iCha3z1",
 };
 
 const dataProvider =
