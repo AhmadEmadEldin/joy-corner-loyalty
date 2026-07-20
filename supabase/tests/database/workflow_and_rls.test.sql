@@ -1,5 +1,5 @@
 begin;
-select plan(27);
+select plan(29);
 
 select has_function(
   'public',
@@ -37,6 +37,30 @@ select ok(
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.kitchen_order_queue'::regclass),
   'kitchen projection has RLS enabled'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.pg_class relation
+    join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public'
+      and relation.relkind in ('r', 'p')
+      and not relation.relrowsecurity
+  ),
+  'every public table and partition has RLS enabled'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.pg_proc proc
+    join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+    where namespace.nspname = 'public'
+      and proc.prosecdef
+      and has_function_privilege('anon', proc.oid, 'EXECUTE')
+  ),
+  'anonymous users cannot execute public SECURITY DEFINER functions'
 );
 
 select ok(

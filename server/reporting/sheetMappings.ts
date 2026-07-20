@@ -177,7 +177,7 @@ export const REPORTING_SHEETS: Record<string, ReportingSheet> = {
   orders: orderSheet,
   payments: paymentSheet,
   profiles: customerSheet,
-  reward_transactions: rewardSheet,
+  rewards_accounts: rewardSheet,
   voucher_redemptions: redemptionSheet,
   vouchers: voucherSheet,
 };

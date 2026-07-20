@@ -8,6 +8,7 @@ import {
   REPORTING_SHEETS,
   reportingRecord,
 } from "../server/reporting/sheetMappings";
+import { buildSheetWritePlan } from "../server/reporting/sheetWritePlan";
 
 dotenv.config({ path: [".env.local", ".env"] });
 
@@ -161,39 +162,27 @@ async function fetchRows(
   table: string,
   ids: string[],
 ): Promise<DatabaseRow[]> {
-  if (table === "reward_transactions") {
-    const { data: transactions, error: transactionError } = await supabase
+  if (table === "rewards_accounts") {
+    const { data: accounts, error: accountError } = await supabase
       .from(table)
       .select("*")
-      .in("id", [...new Set(ids)]);
-    if (transactionError) throw transactionError;
+      .in("customer_id", [...new Set(ids)]);
+    if (accountError) throw accountError;
 
-    const customerIds = [
-      ...new Set((transactions || []).map((row) => row.customer_id)),
-    ].filter(Boolean) as string[];
-    const [accountResult, profileResult] = await Promise.all([
-      supabase
-        .from("rewards_accounts")
-        .select("*")
-        .in("customer_id", customerIds),
-      supabase
-        .from("profiles")
-        .select("id, full_name, phone, favorite_drink")
-        .in("id", customerIds),
-    ]);
-    if (accountResult.error) throw accountResult.error;
+    const customerIds = (accounts || []).map((row) => row.customer_id);
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, favorite_drink")
+      .in("id", customerIds);
     if (profileResult.error) throw profileResult.error;
 
-    const accountByCustomer = new Map(
-      (accountResult.data || []).map((row) => [row.customer_id, row]),
-    );
     const profileByCustomer = new Map(
       (profileResult.data || []).map((row) => [row.id, row]),
     );
-    return customerIds.map((customerId) => ({
-      customer_id: customerId,
-      ...accountByCustomer.get(customerId),
-      ...profileByCustomer.get(customerId),
+    return (accounts || []).map((account) => ({
+      ...account,
+      ...profileByCustomer.get(account.customer_id),
+      customer_id: account.customer_id,
     }));
   }
 
@@ -249,51 +238,18 @@ async function upsertSheetRows(
     if (id) existingRows.set(id, index + 2);
   });
 
-  const deduplicated = new Map(
-    records.map((record) => [String(record[idHeader] || ""), record]),
-  );
-  const updates: sheets_v4.Schema$ValueRange[] = [];
-  const appends: unknown[][] = [];
   const lastColumn = columnLetter(headers.length - 1);
-  const managedHeaders = [...new Set(records.flatMap(Object.keys))];
-  const missingHeaders = managedHeaders.filter(
-    (header) => !headers.includes(header),
-  );
-  if (missingHeaders.length) {
-    throw new Error(
-      `${sheetName} is missing managed columns: ${missingHeaders.join(", ")}.`,
-    );
+  let plan;
+  try {
+    plan = buildSheetWritePlan(headers, idHeader, records, existingRows);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${sheetName}: ${message}`);
   }
-  const managedColumnGroups = contiguousGroups(
-    managedHeaders
-      .map((header) => headers.indexOf(header))
-      .sort((a, b) => a - b),
-  );
-
-  for (const [id, record] of deduplicated) {
-    if (!id) throw new Error(`${sheetName} reporting row has no ${idHeader}.`);
-    const rowNumber = existingRows.get(id);
-    if (rowNumber) {
-      for (const [start, end] of managedColumnGroups) {
-        updates.push({
-          range: `${quotedSheet(sheetName)}!${columnLetter(start)}${rowNumber}:${columnLetter(end)}${rowNumber}`,
-          values: [
-            headers
-              .slice(start, end + 1)
-              .map((header) => safeSheetValue(record[header])),
-          ],
-        });
-      }
-    } else {
-      appends.push(
-        headers.map((header) =>
-          Object.prototype.hasOwnProperty.call(record, header)
-            ? safeSheetValue(record[header])
-            : "",
-        ),
-      );
-    }
-  }
+  const updates: sheets_v4.Schema$ValueRange[] = plan.updates.map((update) => ({
+    range: `${quotedSheet(sheetName)}!${columnLetter(update.startColumn)}${update.rowNumber}:${columnLetter(update.endColumn)}${update.rowNumber}`,
+    values: [update.values],
+  }));
 
   if (updates.length) {
     await sheets.spreadsheets.values.batchUpdate({
@@ -301,11 +257,11 @@ async function upsertSheetRows(
       spreadsheetId,
     });
   }
-  if (appends.length) {
+  if (plan.appends.length) {
     await sheets.spreadsheets.values.append({
       insertDataOption: "INSERT_ROWS",
       range: `${quotedSheet(sheetName)}!A:${lastColumn}`,
-      requestBody: { values: appends },
+      requestBody: { values: plan.appends },
       spreadsheetId,
       valueInputOption: "RAW",
     });
@@ -335,16 +291,6 @@ async function readSheetHeaders(
   const headers = (data.values?.[0] || []).map((value) => String(value));
   if (!headers.length) throw new Error(`${sheetName} has no header row.`);
   return headers;
-}
-
-function contiguousGroups(indices: number[]): Array<[number, number]> {
-  const groups: Array<[number, number]> = [];
-  for (const index of indices) {
-    const previous = groups.at(-1);
-    if (previous && index === previous[1] + 1) previous[1] = index;
-    else groups.push([index, index]);
-  }
-  return groups;
 }
 
 function latestByRecord(events: OutboxEvent[]) {
@@ -379,11 +325,6 @@ function columnLetter(index: number) {
     value = Math.floor((value - 1) / 26);
   }
   return result;
-}
-
-function safeSheetValue(value: unknown) {
-  if (value == null) return "";
-  return value;
 }
 
 void main().catch((error) => {

@@ -26,7 +26,9 @@ so the Supabase bundle does not initialize Firebase. Set
 
 Database triggers append reporting references to `integration_outbox`. The
 server-only `sync:reporting` worker claims them in bounded batches and upserts
-Google Sheets rows. Failures retry with backoff and never roll back an order.
+Google Sheets rows. The reporting migration also queues the current operational
+state once, allowing the initial approved sync to backfill existing data.
+Failures retry with backoff and never roll back an order.
 
 Browser code must never receive Google service account keys, Firebase Admin keys, Neon connection strings, or Canva secrets.
 It must also never receive the Supabase service-role key; only the public

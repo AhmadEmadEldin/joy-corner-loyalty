@@ -196,4 +196,11 @@ server-only claim/complete/fail functions. The Google Sheets worker batch-upsert
 stable record IDs into the eight existing operational tabs, changes only mapped
 columns on existing rows, and retries independently of order transactions. It
 will not create tabs or rewrite formula/manual columns. No Firebase order/receipt
-mirror was added. Neither local-only migration has been pushed.
+mirror was added. The migration seeds current operational records into the queue
+for a first-run backfill, while deliberately excluding historical audit logs.
+Neither local-only migration has been pushed.
+
+The policies were subsequently compared directly with Supabase's current RLS
+guide. Regression coverage now fails if any public table/partition lacks RLS or
+if an anonymous user can execute a public `SECURITY DEFINER` function. No new
+authorization defect was identified by that comparison.

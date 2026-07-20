@@ -56,7 +56,7 @@ declare
   changed_id text;
 begin
   changed_json := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
-  changed_id := changed_json ->> 'id';
+  changed_id := coalesce(changed_json ->> 'id', changed_json ->> 'customer_id');
 
   if changed_id is null then
     raise exception using errcode = '22023', message = 'Reporting source row requires an id.';
@@ -88,7 +88,7 @@ begin
     'orders',
     'order_items',
     'payments',
-    'reward_transactions',
+    'rewards_accounts',
     'vouchers',
     'voucher_redemptions',
     'audit_logs'
@@ -105,6 +105,25 @@ begin
   end loop;
 end;
 $$;
+
+-- Seed the queue from the current operational state so the first worker run
+-- fills existing records as well as changes made after this migration. Audit
+-- history is intentionally not backfilled because that table can be large;
+-- new audit events are still queued by the trigger above.
+insert into public.integration_outbox (source_table, record_id, operation)
+select 'profiles', id::text, 'insert' from public.profiles where role = 'customer'
+union all
+select 'orders', id::text, 'insert' from public.orders
+union all
+select 'order_items', id::text, 'insert' from public.order_items
+union all
+select 'payments', id::text, 'insert' from public.payments
+union all
+select 'rewards_accounts', customer_id::text, 'insert' from public.rewards_accounts
+union all
+select 'vouchers', id::text, 'insert' from public.vouchers
+union all
+select 'voucher_redemptions', id::text, 'insert' from public.voucher_redemptions;
 
 create or replace function public.claim_integration_outbox(
   batch_size integer,
