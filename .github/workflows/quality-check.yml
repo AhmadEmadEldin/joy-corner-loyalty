@@ -1,0 +1,41 @@
+name: Code Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - agent/fix-code-errors
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript check
+        run: npm run lint:types
+
+      - name: ESLint check
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --runInBand
+
+      - name: Production build
+        run: npm run build
