@@ -393,7 +393,7 @@ function CustomerWorkspace({ user }: { user: User }) {
           </button>
         </div>
       </header>
-      {message && !checkoutOpen ? (
+      {message ? (
         <p className="portal-message" role="status">
           {message}
         </p>
