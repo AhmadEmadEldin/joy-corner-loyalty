@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, MenuItem } from "./repository";
+import { createClientId } from "./cartDraft";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -78,7 +79,7 @@ export function ProductCustomizer({
     if (!item.available || !size) return;
     onSave({
       item,
-      lineId: initial?.lineId || crypto.randomUUID(),
+      lineId: initial?.lineId || createClientId(),
       modifiers: selectedModifiers,
       notes: notes.trim(),
       quantity,

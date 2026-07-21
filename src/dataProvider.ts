@@ -1,14 +1,4 @@
-const supabaseConfig =
-  typeof __SUPABASE_CONFIG__ === "undefined"
-    ? { publishableKey: "", url: "" }
-    : __SUPABASE_CONFIG__;
-export const configuredDataProvider =
-  typeof __DATA_PROVIDER__ === "undefined" ? "supabase" : __DATA_PROVIDER__;
+const apiConfig =
+  typeof __API_CONFIG__ === "undefined" ? { baseUrl: "/api" } : __API_CONFIG__;
 
-export const supabaseConfigPresent = Boolean(
-  supabaseConfig.url && supabaseConfig.publishableKey,
-);
-
-export const supabaseModeEnabled = Boolean(
-  configuredDataProvider === "supabase" && supabaseConfigPresent,
-);
+export const apiConfigPresent = Boolean(apiConfig.baseUrl);

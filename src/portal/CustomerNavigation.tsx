@@ -51,6 +51,7 @@ export function CustomerNavigation({
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
+    const trigger = triggerRef.current;
     document.body.style.overflow = "hidden";
     const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -79,7 +80,7 @@ export function CustomerNavigation({
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
-      triggerRef.current?.focus();
+      trigger?.focus();
     };
   }, [open]);
 

@@ -19,26 +19,25 @@
   --glow-gold: 0 0 24px rgba(217, 173, 99, 0.3);
 }
 
-/* Supabase customer portal. It remains inside this app and is enabled only by
-   VITE_DATA_PROVIDER=supabase after the migration checklist passes. */
-.supabase-portal {
+/* Customer and staff portal shared by the Vercel frontend. */
+.joy-portal {
   margin: 0 auto;
   max-width: 1440px;
   min-height: 100vh;
   padding: 24px;
 }
 
-.supabase-portal.center-state {
+.joy-portal.center-state {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.supabase-access .auth-card {
+.joy-access .auth-card {
   max-width: 520px;
 }
 
-.supabase-access .auth-card h1 {
+.joy-access .auth-card h1 {
   background: none;
   color: #2b1c13;
   -webkit-text-fill-color: #2b1c13;
@@ -228,7 +227,7 @@
 }
 
 @media (max-width: 820px) {
-  .supabase-portal {
+  .joy-portal {
     padding: 14px;
   }
 

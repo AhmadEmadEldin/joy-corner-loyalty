@@ -9,11 +9,23 @@ type StoredCartDraft = {
 };
 
 function storageKey(userId: string) {
-  return `joy-corner:supabase-cart:${userId}`;
+  return `joy-corner:cart:${userId}`;
+}
+
+export function createClientId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function createOrderIdempotencyKey(): string {
-  return crypto.randomUUID();
+  return createClientId();
 }
 
 export function loadCartDraft(userId: string): StoredCartDraft | null {

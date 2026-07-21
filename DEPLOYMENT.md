@@ -1,75 +1,26 @@
-# Joy Corner Supabase Deployment
+# Deployment
 
-## Runtime architecture
+## Neon
 
-```text
-React static build
--> Supabase Auth
--> Supabase PostgreSQL + RLS + transactional RPCs
--> Supabase Realtime role-safe projections
--> integration_outbox
--> scheduled Google Sheets reporting worker
-```
+Create a PostgreSQL project and retain its pooled connection string as `NEON_DATABASE_URL`. The Northflank backend applies `server/migrations/001_initial.sql` at startup.
 
-Firebase Hosting, Functions, Auth, and Firestore are retained only as an
-explicit rollback system. They are not started by `npm run dev`, and Supabase
-orders or receipts are never mirrored to Firestore.
+## Northflank backend
 
-## Frontend variables
+Deploy this repository as a Node.js service with:
 
-```text
-VITE_DATA_PROVIDER=supabase
-VITE_SUPABASE_URL=https://ruurfhrjqfcydxbzpuqi.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key>
-```
+- Build command: `npm ci && npm run lint:types`
+- Start command: `npm run backend`
+- Port: `3001` (HTTP, publicly exposed)
+- Health check: `/health`
 
-Only these public values belong in the browser build. Never expose the
-service-role key or Google credentials through a `VITE_` variable.
+Required variables: `NODE_ENV=production`, `NEON_DATABASE_URL`, `JWT_SECRET`, `FRONTEND_ORIGIN`, and `PUBLIC_API_URL`.
 
-## Verify before deployment
+Run one instance while using the in-process SSE event fan-out. Neon remains the durable source of truth.
 
-```powershell
-npm ci
-npm run check
-npm run e2e
-npm run supabase:lint
-npx supabase migration list --linked
-```
+## Vercel frontend
 
-Local-only migrations must be reviewed and explicitly approved before:
+Deploy the repository with `npm run build` and output directory `dist`. Set `VITE_API_URL` to the Northflank public URL followed by `/api`.
 
-```powershell
-npm run supabase:push
-```
+## Google Sheets reports
 
-Production currently includes migrations through
-`20260720211217_reporting_outbox.sql`, applied after explicit approval on
-2026-07-21. The approval requirement still applies to every newer migration.
-
-The React build is generated in `dist/` and requires an SPA rewrite to
-`index.html`. Supabase provides the application backend; select a static
-frontend host separately.
-
-## Google Sheets reporting worker
-
-Run this on a trusted scheduled server process:
-
-```powershell
-npm run sync:reporting
-```
-
-It requires `SUPABASE_SERVICE_ROLE_KEY`, the workbook ID, and one Google
-service-account credential method from `.env.example`. It claims bounded outbox
-batches, upserts by stable record ID, and retries failures with exponential
-backoff. Sheet downtime does not delay or cancel customer orders.
-
-## Legacy rollback only
-
-```powershell
-npm run dev:legacy
-npm run e2e:legacy
-npm run deploy:firebase
-```
-
-Do not run legacy and Supabase as simultaneous operational writers. Never
-upload `.env`, `.env.local`, service-account JSON, or private keys.
+Run `npm run sync:reporting` on a schedule from Northflank or GitHub Actions with `NEON_DATABASE_URL`, `GOOGLE_SHEET_ID`, and one server-side Google credential method. The live app never reads Google Sheets.

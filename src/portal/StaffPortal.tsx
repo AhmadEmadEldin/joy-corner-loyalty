@@ -1,6 +1,9 @@
-import type { User } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useState } from "react";
-import { getSupabaseClient } from "./client";
+import {
+  restoreSession,
+  subscribeToSession,
+  type SessionUser,
+} from "./client";
 import {
   CartLine,
   changeOrderStatus,
@@ -12,7 +15,6 @@ import {
   loadMenu,
   MenuItem,
   QueueOrder,
-  sendStaffMagicLink,
   signInStaff,
   signOutCustomer,
   StaffProfile,
@@ -20,6 +22,7 @@ import {
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
+import { createClientId } from "./cartDraft";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -30,24 +33,23 @@ function getMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-export function SupabaseStaffPortal() {
-  const [user, setUser] = useState<User | null>(null);
+export function StaffPortal() {
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [checking, setChecking] = useState(true);
   useEffect(() => {
-    const client = getSupabaseClient();
-    void client.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+    void restoreSession().then((sessionUser) => {
+      setUser(sessionUser);
       setChecking(false);
     });
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+    const unsubscribe = subscribeToSession((sessionUser) => {
+      setUser(sessionUser);
       setChecking(false);
     });
-    return () => data.subscription.unsubscribe();
+    return unsubscribe;
   }, []);
   if (checking)
     return (
-      <main className="supabase-portal center-state">
+      <main className="joy-portal center-state">
         Checking staff access…
       </main>
     );
@@ -56,7 +58,6 @@ export function SupabaseStaffPortal() {
 
 function StaffAccess() {
   const [busy, setBusy] = useState(false);
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,20 +74,8 @@ function StaffAccess() {
       setBusy(false);
     }
   }
-  async function sendMagicLink() {
-    setBusy(true);
-    setMessage("");
-    try {
-      await sendStaffMagicLink(email);
-      setMessage("Check your email for a secure Joy Corner sign-in link.");
-    } catch (error) {
-      setMessage(getMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
-    <main className="auth-shell supabase-access">
+    <main className="auth-shell joy-access">
       <section className="auth-card">
         <img
           alt="Joy Corner"
@@ -100,10 +89,8 @@ function StaffAccess() {
             Email
             <input
               name="email"
-              onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
-              value={email}
             />
           </label>
           <label>
@@ -113,14 +100,6 @@ function StaffAccess() {
           <button disabled={busy} type="submit">
             {busy ? "Signing in…" : "Sign in"}
           </button>
-          <button
-            className="button-secondary"
-            disabled={busy || !email.trim()}
-            onClick={sendMagicLink}
-            type="button"
-          >
-            Email me a secure sign-in link
-          </button>
         </form>
         {message ? <p role="alert">{message}</p> : null}
         <a href="/order">Customer ordering</a>
@@ -129,7 +108,7 @@ function StaffAccess() {
   );
 }
 
-function StaffWorkspace({ user }: { user: User }) {
+function StaffWorkspace({ user }: { user: SessionUser }) {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [cashier, setCashier] = useState<QueueOrder[]>([]);
   const [kitchen, setKitchen] = useState<QueueOrder[]>([]);
@@ -187,12 +166,13 @@ function StaffWorkspace({ user }: { user: User }) {
   }, [user.id]);
 
   useEffect(() => {
-    if (!profile) return;
+    const role = profile?.role;
+    if (!role) return;
     let refreshTimer: number | undefined;
-    const unsubscribe = subscribeToStaffQueues(profile.role, () => {
+    const unsubscribe = subscribeToStaffQueues(role, () => {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(
-        () => void refreshQueues(profile.role),
+        () => void refreshQueues(role),
         150,
       );
     });
@@ -200,7 +180,7 @@ function StaffWorkspace({ user }: { user: User }) {
       window.clearTimeout(refreshTimer);
       unsubscribe();
     };
-  }, [profile?.id, profile?.role]);
+  }, [profile?.role]);
 
   async function move(
     order: QueueOrder,
@@ -247,7 +227,7 @@ function StaffWorkspace({ user }: { user: User }) {
     profile && ["owner", "manager", "cashier", "waiter"].includes(profile.role);
   const canOverview = profile && ["owner", "manager"].includes(profile.role);
   return (
-    <main className="supabase-portal">
+    <main className="joy-portal">
       <header className="portal-header">
         <div>
           <p className="eyebrow">Joy Corner operations</p>
@@ -467,7 +447,7 @@ function StaffOrderForm({
             ...current,
             {
               item,
-              lineId: crypto.randomUUID(),
+              lineId: createClientId(),
               modifiers: [],
               notes: "",
               quantity: 1,

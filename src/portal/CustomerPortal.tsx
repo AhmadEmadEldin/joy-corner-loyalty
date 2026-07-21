@@ -1,10 +1,13 @@
-import type { User } from "@supabase/supabase-js";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { CustomerCheckout, CheckoutSubmission } from "./CustomerCheckout";
 import { CustomerMenu } from "./CustomerMenu";
 import { CustomerNavigation, CustomerSection } from "./CustomerNavigation";
 import { CustomerOrders } from "./CustomerOrders";
-import { getSupabaseClient } from "./client";
+import {
+  restoreSession,
+  subscribeToSession,
+  type SessionUser,
+} from "./client";
 import {
   clearCartDraft,
   createOrderIdempotencyKey,
@@ -37,26 +40,25 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-export function SupabaseCustomerPortal() {
-  const [user, setUser] = useState<User | null>(null);
+export function CustomerPortal() {
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const client = getSupabaseClient();
-    void client.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+    void restoreSession().then((sessionUser) => {
+      setUser(sessionUser);
       setCheckingSession(false);
     });
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+    const unsubscribe = subscribeToSession((sessionUser) => {
+      setUser(sessionUser);
       setCheckingSession(false);
     });
-    return () => data.subscription.unsubscribe();
+    return unsubscribe;
   }, []);
 
   if (checkingSession) {
     return (
-      <main className="supabase-portal center-state" aria-busy="true">
+      <main className="joy-portal center-state" aria-busy="true">
         <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
         <p>Preparing your Joy Corner account…</p>
       </main>
@@ -100,7 +102,7 @@ function CustomerAccess() {
   }
 
   return (
-    <main className="auth-shell supabase-access">
+    <main className="auth-shell joy-access">
       <section className="auth-card">
         <img
           alt="Joy Corner"
@@ -177,7 +179,7 @@ function CustomerAccess() {
   );
 }
 
-function CustomerWorkspace({ user }: { user: User }) {
+function CustomerWorkspace({ user }: { user: SessionUser }) {
   const initialDraft = useMemo(() => loadCartDraft(user.id), [user.id]);
   const [section, setSection] = useState<CustomerSection>("menu");
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -331,14 +333,14 @@ function CustomerWorkspace({ user }: { user: User }) {
 
   if (!profile && loading) {
     return (
-      <main className="supabase-portal center-state" aria-busy="true">
+      <main className="joy-portal center-state" aria-busy="true">
         Loading your live menu and rewards…
       </main>
     );
   }
   if (!profile) {
     return (
-      <main className="supabase-portal center-state">
+      <main className="joy-portal center-state">
         <p role="alert">
           {message || "Your customer profile could not be loaded."}
         </p>
@@ -350,7 +352,7 @@ function CustomerWorkspace({ user }: { user: User }) {
   }
 
   return (
-    <main className="supabase-portal customer-app-shell">
+    <main className="joy-portal customer-app-shell">
       <header className="customer-topbar">
         <CustomerNavigation
           active={section}

@@ -8,9 +8,6 @@ declare module "*.png" {
   export default source;
 }
 
-declare const __SUPABASE_CONFIG__: {
-  publishableKey: string;
-  url: string;
+declare const __API_CONFIG__: {
+  baseUrl: string;
 };
-
-declare const __DATA_PROVIDER__: "legacy" | "supabase";
