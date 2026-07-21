@@ -9,7 +9,8 @@
       "es2019.object",
       "es2019.string",
       "es2020.promise",
-      "es2020.string"
+      "es2020.string",
+      "es2022.error"
     ],
     "types": ["node", "webpack-env", "jest"],
     "composite": false,

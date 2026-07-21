@@ -244,7 +244,7 @@ async function upsertSheetRows(
     plan = buildSheetWritePlan(headers, idHeader, records, existingRows);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${sheetName}: ${message}`);
+    throw new Error(`${sheetName}: ${message}`, { cause: error });
   }
   const updates: sheets_v4.Schema$ValueRange[] = plan.updates.map((update) => ({
     range: `${quotedSheet(sheetName)}!${columnLetter(update.startColumn)}${update.rowNumber}:${columnLetter(update.endColumn)}${update.rowNumber}`,
