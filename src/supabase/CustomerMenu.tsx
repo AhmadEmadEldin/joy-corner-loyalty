@@ -103,6 +103,11 @@ export function CustomerMenu({
                 <div className="product-skeleton" key={index} />
               ))}
             </div>
+          ) : menu.length === 0 ? (
+            <div className="empty-menu-state">
+              <strong>No menu items available.</strong>
+              <p>Please check back later.</p>
+            </div>
           ) : visible.length ? (
             <div className="kiosk-product-grid">
               {visible.map((item) => (
