@@ -19,6 +19,7 @@ import {
   subscribeToStaffQueues,
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
+import { OwnerMenuManager } from "./OwnerMenuManager";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -136,18 +137,28 @@ function StaffWorkspace({ user }: { user: User }) {
     [],
   );
   const [tab, setTab] = useState<
-    "overview" | "new_order" | "cashier" | "kitchen" | "customers"
+    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu"
   >("cashier");
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
 
-  async function refresh() {
+  async function refreshQueues(role: StaffProfile["role"]) {
+    try {
+      const queues = await loadStaffQueues(role);
+      setCashier(queues.cashier);
+      setKitchen(queues.kitchen);
+    } catch (error) {
+      setMessage(getMessage(error));
+    }
+  }
+
+  async function initializeWorkspace() {
     try {
       const nextProfile = await loadStaffProfile();
       if (nextProfile.role === "customer")
         throw new Error("This account does not have staff access.");
       const [queues, directory] = await Promise.all([
-        loadStaffQueues(),
+        loadStaffQueues(nextProfile.role),
         ["owner", "manager", "cashier"].includes(nextProfile.role)
           ? loadCustomerDirectory()
           : Promise.resolve([]),
@@ -172,17 +183,24 @@ function StaffWorkspace({ user }: { user: User }) {
   }
 
   useEffect(() => {
-    void refresh();
+    void initializeWorkspace();
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!profile) return;
     let refreshTimer: number | undefined;
-    const unsubscribe = subscribeToStaffQueues(() => {
+    const unsubscribe = subscribeToStaffQueues(profile.role, () => {
       window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => void refresh(), 150);
+      refreshTimer = window.setTimeout(
+        () => void refreshQueues(profile.role),
+        150,
+      );
     });
     return () => {
       window.clearTimeout(refreshTimer);
       unsubscribe();
     };
-  }, [user.id]);
+  }, [profile?.id, profile?.role]);
 
   async function move(
     order: QueueOrder,
@@ -192,7 +210,7 @@ function StaffWorkspace({ user }: { user: User }) {
     setBusyOrder(order.order_id);
     try {
       await changeOrderStatus(order.order_id, next, reason);
-      await refresh();
+      if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
     } finally {
@@ -213,7 +231,7 @@ function StaffWorkspace({ user }: { user: User }) {
           | "manual_transfer",
         reference: "",
       });
-      await refresh();
+      if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
     } finally {
@@ -277,6 +295,15 @@ function StaffWorkspace({ user }: { user: User }) {
             Cashier ({cashier.length})
           </button>
         ) : null}
+        {profile?.role === "owner" ? (
+          <button
+            className={tab === "menu" ? "active" : ""}
+            onClick={() => setTab("menu")}
+            type="button"
+          >
+            Menu & images
+          </button>
+        ) : null}
         {canKitchen ? (
           <button
             className={tab === "kitchen" ? "active" : ""}
@@ -309,7 +336,7 @@ function StaffWorkspace({ user }: { user: User }) {
           customers={customers}
           onCreated={async (orderNumber) => {
             setMessage(`Order ${orderNumber} was sent to the kitchen.`);
-            await refresh();
+            if (profile) await refreshQueues(profile.role);
           }}
         />
       ) : null}
@@ -403,6 +430,9 @@ function StaffWorkspace({ user }: { user: User }) {
             ))}
           </div>
         </section>
+      ) : null}
+      {tab === "menu" && profile?.role === "owner" ? (
+        <OwnerMenuManager />
       ) : null}
     </main>
   );

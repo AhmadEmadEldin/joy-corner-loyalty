@@ -19,15 +19,20 @@ export function ProductCustomizer({
   onClose,
   onSave,
 }: ProductCustomizerProps) {
-  const [sizeId, setSizeId] = useState(initial?.size.id || item.sizes[0]?.id || "");
+  const [sizeId, setSizeId] = useState(
+    initial?.size.id || item.sizes[0]?.id || "",
+  );
   const [modifierIds, setModifierIds] = useState(
     () => new Set(initial?.modifiers.map((modifier) => modifier.id) || []),
   );
   const [quantity, setQuantity] = useState(initial?.quantity || 1);
   const [notes, setNotes] = useState(initial?.notes || "");
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const size = item.sizes.find((option) => option.id === sizeId);
-  const selectedModifiers = item.modifiers.filter((modifier) => modifierIds.has(modifier.id));
+  const selectedModifiers = item.modifiers.filter((modifier) =>
+    modifierIds.has(modifier.id),
+  );
   const total = useMemo(
     () =>
       ((size?.price || 0) +
@@ -37,12 +42,35 @@ export function ProductCustomizer({
   );
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     closeRef.current?.focus();
-    function closeOnEscape(event: KeyboardEvent) {
+    function handleDialogKeys(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", handleDialogKeys);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleDialogKeys);
+      previouslyFocused?.focus();
+    };
   }, [onClose]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -67,9 +95,11 @@ export function ProductCustomizer({
         type="button"
       />
       <section
+        aria-describedby="product-dialog-description"
         aria-labelledby="product-dialog-title"
         aria-modal="true"
         className="product-dialog"
+        ref={dialogRef}
         role="dialog"
       >
         <button
@@ -94,12 +124,17 @@ export function ProductCustomizer({
         <form className="product-customizer" onSubmit={submit}>
           <small>{item.category}</small>
           <h2 id="product-dialog-title">{item.name}</h2>
-          <p>{item.description || "Prepared fresh by the Joy Corner team."}</p>
+          <p id="product-dialog-description">
+            {item.description || "Prepared fresh by the Joy Corner team."}
+          </p>
           <fieldset>
             <legend>Choose a size</legend>
             <div className="option-grid">
               {item.sizes.map((option) => (
-                <label className={sizeId === option.id ? "selected" : ""} key={option.id}>
+                <label
+                  className={sizeId === option.id ? "selected" : ""}
+                  key={option.id}
+                >
                   <input
                     checked={sizeId === option.id}
                     name="size"
@@ -158,7 +193,7 @@ export function ProductCustomizer({
               >
                 −
               </button>
-              <output>{quantity}</output>
+              <output aria-live="polite">{quantity}</output>
               <button
                 aria-label="Increase quantity"
                 disabled={quantity >= 99}
@@ -169,7 +204,8 @@ export function ProductCustomizer({
               </button>
             </div>
             <button disabled={!item.available || !size} type="submit">
-              {initial ? "Update order" : "Add to order"} · {money.format(total)}
+              {initial ? "Update order" : "Add to order"} ·{" "}
+              {money.format(total)}
             </button>
           </div>
         </form>

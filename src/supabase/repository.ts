@@ -36,6 +36,13 @@ export type MenuItem = {
   sizes: MenuSize[];
 };
 
+export type OwnerMenuItem = MenuItem & {
+  active: boolean;
+  category_id: string;
+  preparation_station: "barista" | "kitchen";
+  sort_order: number;
+};
+
 export type CustomerOrder = {
   cancellation_reason: string | null;
   confirmation_status: string;
@@ -112,6 +119,19 @@ export type StaffProfile = {
   id: string;
   role: "owner" | "manager" | "cashier" | "waiter" | "barista";
 };
+
+export function staffQueueTables(
+  role: StaffProfile["role"],
+): Array<"cashier_order_queue" | "kitchen_order_queue"> {
+  return [
+    ...(["owner", "manager", "cashier"].includes(role)
+      ? (["cashier_order_queue"] as const)
+      : []),
+    ...(["owner", "manager", "barista"].includes(role)
+      ? (["kitchen_order_queue"] as const)
+      : []),
+  ];
+}
 
 export type AuthProfile = Omit<StaffProfile, "role"> & {
   role: StaffProfile["role"] | "customer";
@@ -208,14 +228,21 @@ export async function loadStaffProfile(): Promise<AuthProfile> {
   return data as AuthProfile;
 }
 
-export async function loadStaffQueues(): Promise<{
+export async function loadStaffQueues(role: StaffProfile["role"]): Promise<{
   cashier: QueueOrder[];
   kitchen: QueueOrder[];
 }> {
   const client = getSupabaseClient();
+  const permittedTables = staffQueueTables(role);
+  const canReadCashier = permittedTables.includes("cashier_order_queue");
+  const canReadKitchen = permittedTables.includes("kitchen_order_queue");
   const [cashier, kitchen] = await Promise.all([
-    client.from("cashier_order_queue").select("*").order("created_at"),
-    client.from("kitchen_order_queue").select("*").order("order_time"),
+    canReadCashier
+      ? client.from("cashier_order_queue").select("*").order("created_at")
+      : Promise.resolve({ data: [], error: null }),
+    canReadKitchen
+      ? client.from("kitchen_order_queue").select("*").order("order_time")
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const permittedError = cashier.error || kitchen.error;
   if (permittedError && permittedError.code !== "42501") {
@@ -270,9 +297,13 @@ export async function loadCustomerDirectory(): Promise<
   return (data || []) as Array<Record<string, unknown>>;
 }
 
-export function subscribeToStaffQueues(onChange: () => void): () => void {
+export function subscribeToStaffQueues(
+  role: StaffProfile["role"],
+  onChange: () => void,
+): () => void {
   const client = getSupabaseClient();
-  const channels = ["cashier_order_queue", "kitchen_order_queue"].map((table) =>
+  const tables = staffQueueTables(role);
+  const channels = tables.map((table) =>
     client
       .channel(`staff:${table}:${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table }, onChange)
@@ -357,6 +388,26 @@ export async function loadMenu(): Promise<MenuItem[]> {
       { id: String(row.id), name: String(row.name), price: Number(row.price) },
     ]),
   );
+  const sizesByItem = new Map<string, MenuSize[]>();
+  for (const size of sizes || []) {
+    const itemId = String(size.menu_item_id);
+    const grouped = sizesByItem.get(itemId) || [];
+    grouped.push({
+      id: String(size.id),
+      price: Number(size.price),
+      size_name: String(size.size_name),
+    });
+    sizesByItem.set(itemId, grouped);
+  }
+  const modifiersByItem = new Map<string, MenuModifier[]>();
+  for (const link of itemModifiers || []) {
+    const itemId = String(link.menu_item_id);
+    const modifier = modifierMap.get(String(link.modifier_id));
+    if (!modifier) continue;
+    const grouped = modifiersByItem.get(itemId) || [];
+    grouped.push(modifier);
+    modifiersByItem.set(itemId, grouped);
+  }
   return (items || []).map((row) => ({
     available: Boolean(row.available),
     category: categoryMap.get(String(row.category_id)) || "Menu",
@@ -364,19 +415,166 @@ export async function loadMenu(): Promise<MenuItem[]> {
     id: String(row.id),
     image_url: row.image_url ? String(row.image_url) : null,
     loyalty_eligible: Boolean(row.loyalty_eligible),
-    modifiers: (itemModifiers || [])
-      .filter((link) => link.menu_item_id === row.id)
-      .map((link) => modifierMap.get(String(link.modifier_id)))
-      .filter((modifier): modifier is MenuModifier => Boolean(modifier)),
+    modifiers: modifiersByItem.get(String(row.id)) || [],
     name: String(row.name),
-    sizes: (sizes || [])
-      .filter((size) => size.menu_item_id === row.id)
-      .map((size) => ({
-        id: String(size.id),
-        price: Number(size.price),
-        size_name: String(size.size_name),
-      })),
+    sizes: sizesByItem.get(String(row.id)) || [],
   }));
+}
+
+export async function loadOwnerMenu(): Promise<OwnerMenuItem[]> {
+  const client = getSupabaseClient();
+  const [
+    { data: categories, error: categoryError },
+    { data: items, error: itemError },
+    { data: sizes, error: sizeError },
+  ] = await Promise.all([
+    client.from("menu_categories").select("id,name").order("sort_order"),
+    client
+      .from("menu_items")
+      .select(
+        "id,category_id,name,description,image_url,active,available,loyalty_eligible,preparation_station,sort_order",
+      )
+      .is("archived_at", null)
+      .order("sort_order"),
+    client
+      .from("menu_item_sizes")
+      .select("id,menu_item_id,size_name,price")
+      .order("sort_order"),
+  ]);
+  if (categoryError || itemError || sizeError) {
+    fail(
+      "Owner menu could not be loaded.",
+      categoryError || itemError || sizeError,
+    );
+  }
+  const categoryMap = new Map(
+    (categories || []).map((row) => [String(row.id), String(row.name)]),
+  );
+  const sizesByItem = new Map<string, MenuSize[]>();
+  for (const row of sizes || []) {
+    const itemId = String(row.menu_item_id);
+    const grouped = sizesByItem.get(itemId) || [];
+    grouped.push({
+      id: String(row.id),
+      price: Number(row.price),
+      size_name: String(row.size_name),
+    });
+    sizesByItem.set(itemId, grouped);
+  }
+  return (items || []).map((row) => ({
+    active: Boolean(row.active),
+    available: Boolean(row.available),
+    category: categoryMap.get(String(row.category_id)) || "Menu",
+    category_id: String(row.category_id),
+    description: String(row.description || ""),
+    id: String(row.id),
+    image_url: row.image_url ? String(row.image_url) : null,
+    loyalty_eligible: Boolean(row.loyalty_eligible),
+    modifiers: [],
+    name: String(row.name),
+    preparation_station: row.preparation_station as "barista" | "kitchen",
+    sizes: sizesByItem.get(String(row.id)) || [],
+    sort_order: Number(row.sort_order),
+  }));
+}
+
+export async function updateOwnerMenuItem(input: {
+  active: boolean;
+  available: boolean;
+  description: string;
+  id: string;
+  loyaltyEligible: boolean;
+  name: string;
+  preparationStation: "barista" | "kitchen";
+}): Promise<void> {
+  const { error } = await getSupabaseClient()
+    .from("menu_items")
+    .update({
+      active: input.active,
+      available: input.available,
+      description: input.description.trim(),
+      loyalty_eligible: input.loyaltyEligible,
+      name: input.name.trim(),
+      preparation_station: input.preparationStation,
+    })
+    .eq("id", input.id);
+  if (error) fail("Menu item could not be saved.", error);
+}
+
+export async function updateOwnerMenuSize(
+  sizeId: string,
+  price: number,
+): Promise<void> {
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error("Size price must be greater than zero.");
+  }
+  const { error } = await getSupabaseClient()
+    .from("menu_item_sizes")
+    .update({ price })
+    .eq("id", sizeId);
+  if (error) fail("Size price could not be saved.", error);
+}
+
+function menuImageObjectPath(publicUrl: string | null): string | null {
+  if (!publicUrl) return null;
+  const marker = "/storage/v1/object/public/menu-images/";
+  const markerIndex = publicUrl.indexOf(marker);
+  if (markerIndex < 0) return null;
+  return decodeURIComponent(publicUrl.slice(markerIndex + marker.length));
+}
+
+export async function uploadOwnerMenuImage(
+  itemId: string,
+  file: File,
+  previousUrl: string | null,
+): Promise<string> {
+  const allowedTypes = new Set([
+    "image/avif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ]);
+  if (!allowedTypes.has(file.type)) {
+    throw new Error("Choose a JPG, PNG, WebP, or AVIF image.");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Menu images must be 5 MB or smaller.");
+  }
+  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const objectPath = `${itemId}/${crypto.randomUUID()}.${extension}`;
+  const client = getSupabaseClient();
+  const { error: uploadError } = await client.storage
+    .from("menu-images")
+    .upload(objectPath, file, { cacheControl: "31536000", upsert: false });
+  if (uploadError) fail("Menu image could not be uploaded.", uploadError);
+  const { data } = client.storage.from("menu-images").getPublicUrl(objectPath);
+  const { error: updateError } = await client
+    .from("menu_items")
+    .update({ image_url: data.publicUrl })
+    .eq("id", itemId);
+  if (updateError) {
+    await client.storage.from("menu-images").remove([objectPath]);
+    fail("Menu item could not be linked to the uploaded image.", updateError);
+  }
+  const previousPath = menuImageObjectPath(previousUrl);
+  if (previousPath) {
+    await client.storage.from("menu-images").remove([previousPath]);
+  }
+  return data.publicUrl;
+}
+
+export async function removeOwnerMenuImage(
+  itemId: string,
+  imageUrl: string | null,
+): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client
+    .from("menu_items")
+    .update({ image_url: null })
+    .eq("id", itemId);
+  if (error) fail("Menu image could not be removed.", error);
+  const objectPath = menuImageObjectPath(imageUrl);
+  if (objectPath) await client.storage.from("menu-images").remove([objectPath]);
 }
 
 export async function loadCustomerDashboard(): Promise<{

@@ -36,14 +36,20 @@ describe("CustomerMenu", () => {
         onCheckout={jest.fn()}
       />,
     );
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search the menu" }), {
-      target: { value: "cake" },
-    });
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the menu" }),
+      {
+        target: { value: "cake" },
+      },
+    );
     expect(screen.queryByText("Caffè Latte")).toBeNull();
     expect(screen.getByText("Coffee Cake")).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Customize Coffee Cake" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Customize Coffee Cake",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
@@ -58,7 +64,9 @@ describe("CustomerMenu", () => {
         onCheckout={jest.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Customize Caffè Latte" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize Caffè Latte" }),
+    );
     fireEvent.click(screen.getByRole("radio", { name: /Large/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Extra shot/ }));
     fireEvent.click(screen.getByRole("button", { name: "Increase quantity" }));
@@ -68,5 +76,29 @@ describe("CustomerMenu", () => {
     expect(saved[0]?.size.id).toBe("large");
     expect(saved[0]?.quantity).toBe(2);
     expect(lineTotal(saved[0] as CartLine)).toBe(190);
+  });
+
+  it("traps focus in the product dialog and restores it when closed", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const trigger = screen.getByRole("button", {
+      name: /Customize Caff.+ Latte/,
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.activeElement).toBe(
+      screen.getAllByRole("button", { name: "Close product details" })[1],
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.body.style.overflow).toBe("");
+    expect(document.activeElement).toBe(trigger);
   });
 });
