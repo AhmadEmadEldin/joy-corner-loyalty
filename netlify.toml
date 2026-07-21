@@ -1,0 +1,23 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  VITE_DATA_PROVIDER = "supabase"
+  VITE_SUPABASE_URL = "https://ruurfhrjqfcydxbzpuqi.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_a4ySmRdu-RJoISB_kvjjgg_3iCha3z1"
+
+# React routes such as /order are handled by the client application.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+
+  [headers.values]
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
