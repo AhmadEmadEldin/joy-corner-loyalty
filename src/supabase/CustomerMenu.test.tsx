@@ -26,6 +26,22 @@ const unavailable: MenuItem = {
 };
 
 describe("CustomerMenu", () => {
+  it("shows a clear empty state when the database menu has no items", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No menu items available.")).toBeTruthy();
+    expect(screen.getByText("Please check back later.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
+  });
+
   it("filters the database menu and prevents unavailable ordering", () => {
     render(
       <CustomerMenu
