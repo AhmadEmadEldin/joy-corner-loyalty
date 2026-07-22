@@ -2702,7 +2702,7 @@ tbody tr:hover {
   }
 }
 
-/* Supabase customer ordering experience */
+/* Customer ordering experience */
 .customer-app-shell {
   background: #f8f2e8;
   max-width: none;
@@ -4162,7 +4162,7 @@ tbody tr:hover {
   }
 }
 
-/* Supabase role-specific operations */
+/* Role-specific operations */
 .staff-overview,
 .staff-queue-header {
   margin: 0 auto;
