@@ -1,4 +1,4 @@
-name: Sync Supabase Reporting to Google Sheets
+name: Sync Neon Reporting to Google Sheets
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sync-supabase-reporting-to-google-sheets
+  group: sync-neon-reporting-to-google-sheets
   cancel-in-progress: false
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SYNC_CONFIGURED: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.GOOGLE_SHEET_ID != '' && secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
+      SYNC_CONFIGURED: ${{ secrets.NEON_DATABASE_URL != '' && secrets.GOOGLE_SHEET_ID != '' && secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - name: Report missing sync configuration
         if: env.SYNC_CONFIGURED != 'true'
@@ -41,8 +41,8 @@ jobs:
       - name: Run reporting sync
         if: env.SYNC_CONFIGURED == 'true'
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DATABASE_SSL: "true"
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: npm run sync:reporting

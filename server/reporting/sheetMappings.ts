@@ -1,4 +1,4 @@
-import { getCairoBusinessDate } from "../../src/cairoDate";
+import { getCairoBusinessDate } from "../cairoDate";
 
 export type DatabaseRow = Record<string, unknown>;
 

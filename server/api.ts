@@ -7,7 +7,7 @@ import express, {
   type Response,
 } from "express";
 import type { PoolClient } from "pg";
-import { getCairoBusinessDate } from "../src/cairoDate";
+import { getCairoBusinessDate } from "./cairoDate";
 import {
   applyNeonMigrations,
   closeNeonPool,
@@ -254,8 +254,21 @@ function publish(topic: string, entityId: string): void {
 }
 
 app.get("/health", asyncRoute(async (_req, res) => {
-  const database = await neonHealth();
-  res.status(database.ok ? 200 : 503).json({ database, ok: database.ok, service: "joy-corner-api" });
+  res.status(200).json({ ok: true, service: "joy-corner-api" });
+}));
+
+app.get("/ready", asyncRoute(async (_req, res) => {
+  const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
+  try {
+    const db = await neonHealth();
+    checks.database = db;
+  } catch (error) {
+    checks.database = { ok: false, error: error instanceof Error ? error.message : "Unknown database error" };
+  }
+  const hasJwtSecret = Boolean(jwtSecret && jwtSecret.length >= 16);
+  checks.config = { ok: hasJwtSecret };
+  const allOk = Object.values(checks).every((check) => check.ok);
+  res.status(allOk ? 200 : 503).json({ ok: allOk, checks });
 }));
 
 app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
