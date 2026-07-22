@@ -141,7 +141,7 @@ export function staffQueueTables(
   ];
 }
 
-type AuthResult = { token: string; user: SessionUser };
+type AuthResult = { user: SessionUser };
 type OrderInput = {
   modifierIds: string[];
   notes: string;
@@ -168,7 +168,7 @@ export async function signUpCustomer(input: {
     body: JSON.stringify(input),
     method: "POST",
   });
-  setSession(result.token, result.user);
+  setSession(result.user);
 }
 
 export async function signInCustomer(email: string, password: string): Promise<void> {
@@ -176,10 +176,11 @@ export async function signInCustomer(email: string, password: string): Promise<v
     body: JSON.stringify({ email: email.trim(), password }),
     method: "POST",
   });
-  setSession(result.token, result.user);
+  setSession(result.user);
 }
 
 export async function signOutCustomer(): Promise<void> {
+  await apiRequest("/auth/logout", { method: "POST" }).catch(() => undefined);
   clearSession();
 }
 
@@ -187,7 +188,7 @@ export async function signInStaff(email: string, password: string): Promise<void
   await signInCustomer(email, password);
   const profile = await loadStaffProfile();
   if (profile.role === "customer") {
-    clearSession();
+    await signOutCustomer();
     throw new Error("This account does not have staff access.");
   }
 }
@@ -233,6 +234,24 @@ export async function confirmOrderPayment(input: {
 export async function loadCustomerDirectory(): Promise<Array<Record<string, unknown>>> {
   return (await apiRequest<{ customers: Array<Record<string, unknown>> }>("/staff/customers"))
     .customers;
+}
+
+export type EndDayReport = {
+  business_date: string;
+  cancelled_order_count: number;
+  closed_order_count: number;
+  gross_sales: number;
+  loyalty_points_issued: number;
+  order_count: number;
+  payments_received: number;
+  performed_at: string;
+};
+
+export async function runEndDay(): Promise<EndDayReport> {
+  return (await apiRequest<{ report: EndDayReport }>("/admin/end-day", {
+    body: JSON.stringify({}),
+    method: "POST",
+  })).report;
 }
 
 export function subscribeToStaffQueues(

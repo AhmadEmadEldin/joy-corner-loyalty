@@ -15,6 +15,7 @@ import {
   loadMenu,
   MenuItem,
   QueueOrder,
+  runEndDay,
   signInStaff,
   signOutCustomer,
   StaffProfile,
@@ -120,6 +121,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
   >("cashier");
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
+  const [endingDay, setEndingDay] = useState(false);
 
   async function refreshQueues(role: StaffProfile["role"]) {
     try {
@@ -219,6 +221,19 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     }
   }
 
+  async function endDay() {
+    if (!window.confirm("Close today's reporting period and send its summary to Google Sheets?")) return;
+    setEndingDay(true);
+    try {
+      const report = await runEndDay();
+      setMessage(`End Day completed: ${report.order_count} orders, ${money.format(report.gross_sales)} gross sales. Reporting is queued for Google Sheets.`);
+    } catch (error) {
+      setMessage(getMessage(error));
+    } finally {
+      setEndingDay(false);
+    }
+  }
+
   const canCashier =
     profile && ["owner", "manager", "cashier"].includes(profile.role);
   const canKitchen =
@@ -309,6 +324,8 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           customers={customers.length}
           kitchen={kitchen}
           onNavigate={setTab}
+          onEndDay={() => void endDay()}
+          endingDay={endingDay}
         />
       ) : null}
       {tab === "new_order" ? (
@@ -669,12 +686,16 @@ function Queue({
 function StaffOverview({
   cashier,
   customers,
+  endingDay,
   kitchen,
+  onEndDay,
   onNavigate,
 }: {
   cashier: QueueOrder[];
   customers: number;
+  endingDay: boolean;
   kitchen: QueueOrder[];
+  onEndDay: () => void;
   onNavigate: (
     tab: "overview" | "new_order" | "cashier" | "kitchen" | "customers",
   ) => void;
@@ -716,6 +737,13 @@ function StaffOverview({
           <small>Customer directory</small>
           <strong>{customers}</strong>
           <span>Permission-filtered records</span>
+        </button>
+      </div>
+      <div className="portal-section">
+        <h3>Daily reporting</h3>
+        <p>End Day is available when every order for today is closed, rejected, or cancelled.</p>
+        <button disabled={endingDay} onClick={onEndDay} type="button">
+          {endingDay ? "Closing day…" : "End Day & queue Google Sheets report"}
         </button>
       </div>
     </section>

@@ -176,8 +176,29 @@ const auditSheet: ReportingSheet = {
   }),
 };
 
+const endDaySheet: ReportingSheet = {
+  idHeader: "dateKey",
+  sheetName: "Day History",
+  toRecord: (row) => ({
+    dateKey: row.business_date,
+    receiptCount: row.closed_order_count,
+    orderCount: row.order_count,
+    paymentCount: row.payment_count,
+    redemptionCount: row.redemption_count,
+    totalSales: row.gross_sales,
+    totalPaid: row.payments_received,
+    totalUnpaid: Math.max(0, Number(row.gross_sales || 0) - Number(row.payments_received || 0)),
+    bestSellingItem: row.best_selling_item,
+    bestSellingQty: row.best_selling_qty,
+    latestReceiptSerial: row.latest_receipt_serial,
+    resetAt: row.performed_at,
+    resetBy: row.performed_by_name || row.performed_by,
+  }),
+};
+
 export const REPORTING_SHEETS: Record<string, ReportingSheet> = {
   audit_logs: auditSheet,
+  end_day_reports: endDaySheet,
   order_items: itemSheet,
   orders: orderSheet,
   payments: paymentSheet,

@@ -12,7 +12,6 @@ const runtimeConfig =
     ? { baseUrl: "/api" }
     : __API_CONFIG__;
 
-const TOKEN_KEY = "joy-corner:access-token";
 const USER_KEY = "joy-corner:session-user";
 const sessionListeners = new Set<(user: SessionUser | null) => void>();
 
@@ -32,18 +31,12 @@ export function currentSessionUser(): SessionUser | null {
   return storedUser();
 }
 
-export function accessToken(): string | null {
-  return window.localStorage.getItem(TOKEN_KEY);
-}
-
-export function setSession(token: string, user: SessionUser): void {
-  window.localStorage.setItem(TOKEN_KEY, token);
+export function setSession(user: SessionUser): void {
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
   sessionListeners.forEach((listener) => listener(user));
 }
 
 export function clearSession(): void {
-  window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(USER_KEY);
   sessionListeners.forEach((listener) => listener(null));
 }
@@ -59,13 +52,15 @@ export async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const token = accessToken();
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers });
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    credentials: "include",
+    headers,
+  });
   const payload = (await response
     .json()
     .catch(() => ({}))) as T & ApiError;
@@ -79,7 +74,6 @@ export async function apiRequest<T>(
 }
 
 export async function restoreSession(): Promise<SessionUser | null> {
-  if (!accessToken()) return null;
   try {
     const result = await apiRequest<{ user: SessionUser }>("/auth/me");
     window.localStorage.setItem(USER_KEY, JSON.stringify(result.user));
@@ -95,11 +89,9 @@ export function subscribeToEvents(
   onChange: () => void,
 ): () => void {
   const controller = new AbortController();
-  const token = accessToken();
-  if (!token) return () => controller.abort();
 
   void fetch(`${apiBaseUrl}/events?topics=${encodeURIComponent(topics.join(","))}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
     signal: controller.signal,
   })
     .then(async (response) => {

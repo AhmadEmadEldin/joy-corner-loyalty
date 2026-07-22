@@ -7,6 +7,7 @@ import express, {
   type Response,
 } from "express";
 import type { PoolClient } from "pg";
+import { getCairoBusinessDate } from "../src/cairoDate";
 import {
   applyNeonMigrations,
   closeNeonPool,
@@ -18,7 +19,7 @@ import {
 dotenv.config({ path: [".env.local", ".env"] });
 
 type Role = "owner" | "manager" | "cashier" | "waiter" | "barista" | "customer";
-type Claims = { email: string; exp: number; full_name: string; role: Role; sub: string };
+type Claims = { email: string; exp: number; full_name: string; iat: number; role: Role; sub: string };
 type AuthedRequest = Request & { auth?: Claims };
 type OrderItemInput = {
   modifierIds?: string[];
@@ -31,6 +32,8 @@ const app = express();
 const port = Number(process.env.PORT || process.env.API_PORT || 3001);
 const jwtSecret = process.env.JWT_SECRET || "";
 const isProduction = process.env.NODE_ENV === "production";
+const sessionCookieName = "joy_corner_session";
+const sessionLifetimeSeconds = 12 * 60 * 60;
 const scrypt = promisify(crypto.scrypt);
 const allowedOrigins = new Set(
   (process.env.FRONTEND_ORIGIN || "http://localhost:8081")
@@ -53,9 +56,13 @@ app.use((req, res, next) => {
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   }
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
+  if (origin && !allowedOrigins.has(origin) && req.path.startsWith("/api/")) {
+    return res.status(403).json({ error: "This origin is not allowed." });
+  }
   if (req.method === "OPTIONS") return res.sendStatus(204);
   return next();
 });
@@ -73,8 +80,9 @@ function base64url(value: object | string): string {
   return Buffer.from(input).toString("base64url");
 }
 
-function signToken(user: Omit<Claims, "exp">): string {
-  const payload = { ...user, exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60 };
+function signToken(user: Omit<Claims, "exp" | "iat">): string {
+  const iat = Math.floor(Date.now() / 1000);
+  const payload = { ...user, exp: iat + sessionLifetimeSeconds, iat };
   const unsigned = `${base64url({ alg: "HS256", typ: "JWT" })}.${base64url(payload)}`;
   const signature = crypto
     .createHmac("sha256", jwtSecret || "joy-corner-development-secret-only")
@@ -86,13 +94,15 @@ function signToken(user: Omit<Claims, "exp">): string {
 function verifyToken(token: string): Claims {
   const [header, payload, signature] = token.split(".");
   if (!header || !payload || !signature) throw new Error("Invalid session.");
+  const decodedHeader = JSON.parse(Buffer.from(header, "base64url").toString("utf8")) as Record<string, unknown>;
+  if (decodedHeader.alg !== "HS256" || decodedHeader.typ !== "JWT") throw new Error("Invalid session.");
   const unsigned = `${header}.${payload}`;
   const expected = crypto
     .createHmac("sha256", jwtSecret || "joy-corner-development-secret-only")
     .update(unsigned)
     .digest("base64url");
-  const suppliedBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(signature, "base64url");
+  const expectedBuffer = Buffer.from(expected, "base64url");
   if (
     suppliedBuffer.length !== expectedBuffer.length ||
     !crypto.timingSafeEqual(suppliedBuffer, expectedBuffer)
@@ -100,20 +110,45 @@ function verifyToken(token: string): Claims {
     throw new Error("Invalid session.");
   }
   const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Claims;
-  if (!claims.sub || !claims.role || claims.exp <= Math.floor(Date.now() / 1000)) {
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    !claims.sub ||
+    !Number.isFinite(claims.iat) ||
+    !Number.isFinite(claims.exp) ||
+    claims.iat > now + 60 ||
+    claims.exp <= now ||
+    claims.exp - claims.iat > sessionLifetimeSeconds
+  ) {
     throw new Error("Session expired.");
   }
   return claims;
 }
 
-function authenticate(req: AuthedRequest, res: Response, next: NextFunction): void {
+function cookieValue(req: Request, name: string): string {
+  const encoded = `${name}=`;
+  const part = String(req.headers.cookie || "").split(";").map((value) => value.trim()).find((value) => value.startsWith(encoded));
+  return part ? decodeURIComponent(part.slice(encoded.length)) : "";
+}
+
+function requestToken(req: Request): string {
   const value = req.headers.authorization || "";
-  try {
-    req.auth = verifyToken(value.startsWith("Bearer ") ? value.slice(7) : "");
+  return value.startsWith("Bearer ") ? value.slice(7) : cookieValue(req, sessionCookieName);
+}
+
+function authenticate(req: AuthedRequest, res: Response, next: NextFunction): void {
+  void (async () => {
+    const verified = verifyToken(requestToken(req));
+    const rows = await query<Record<string, unknown>>(
+      "select id,email,full_name,role from accounts where id=$1 and active=true limit 1",
+      [verified.sub],
+    );
+    if (!rows[0]) throw new Error("Inactive account.");
+    req.auth = { ...publicUser(rows[0]), exp: verified.exp, iat: verified.iat };
     next();
-  } catch {
+  })().catch(() => {
+    clearSessionCookie(res);
     res.status(401).json({ error: "Please sign in again." });
-  }
+  });
 }
 
 function requireRoles(...roles: Role[]) {
@@ -140,7 +175,7 @@ async function passwordMatches(password: string, stored: string): Promise<boolea
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
-function publicUser(row: Record<string, unknown>): Omit<Claims, "exp"> {
+function publicUser(row: Record<string, unknown>): Omit<Claims, "exp" | "iat"> {
   return {
     email: String(row.email),
     full_name: String(row.full_name),
@@ -149,10 +184,29 @@ function publicUser(row: Record<string, unknown>): Omit<Claims, "exp"> {
   };
 }
 
-function sessionResponse(row: Record<string, unknown>) {
+function setSessionCookie(res: Response, token: string): void {
+  res.cookie(sessionCookieName, token, {
+    httpOnly: true,
+    maxAge: sessionLifetimeSeconds * 1000,
+    path: "/",
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+  });
+}
+
+function clearSessionCookie(res: Response): void {
+  res.clearCookie(sessionCookieName, {
+    httpOnly: true,
+    path: "/",
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+  });
+}
+
+function sessionResponse(row: Record<string, unknown>, res: Response) {
   const claims = publicUser(row);
+  setSessionCookie(res, signToken(claims));
   return {
-    token: signToken(claims),
     user: { ...claims, id: claims.sub },
   };
 }
@@ -222,13 +276,16 @@ app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
       String(existing[0].password_hash).startsWith("migrated$") &&
       String(existing[0].phone || "") === phone
     ) {
+      if (isProduction && process.env.ALLOW_MIGRATED_ACCOUNT_CLAIM !== "true") {
+        throw new HttpError(409, "This imported account needs an administrator password reset.");
+      }
       const claimed = await query<Record<string, unknown>>(
         `update accounts set password_hash=$2,full_name=$3,phone=$4
          where id=$1 returning *`,
         [existing[0].id, passwordHash, fullName, phone],
       );
       await query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [claimed[0]?.id]);
-      res.status(200).json(sessionResponse(claimed[0] as Record<string, unknown>));
+      res.status(200).json(sessionResponse(claimed[0] as Record<string, unknown>, res));
       return;
     }
     throw new HttpError(409, "An account already exists for this email.");
@@ -242,7 +299,7 @@ app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
   if (!rows[0]) throw new HttpError(409, "An account already exists for this email.");
   await query("insert into rewards_accounts(customer_id) values($1) on conflict do nothing", [rows[0].id]);
   await query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [rows[0].id]);
-  res.status(201).json(sessionResponse(rows[0]));
+  res.status(201).json(sessionResponse(rows[0], res));
 }));
 
 app.post("/api/auth/login", loginRateLimit, asyncRoute(async (req, res) => {
@@ -255,8 +312,14 @@ app.post("/api/auth/login", loginRateLimit, asyncRoute(async (req, res) => {
   if (!rows[0] || !(await passwordMatches(password, String(rows[0].password_hash)))) {
     throw new HttpError(401, "Email or password is incorrect.");
   }
-  res.json(sessionResponse(rows[0]));
+  loginAttempts.delete(req.ip || "unknown");
+  res.json(sessionResponse(rows[0], res));
 }));
+
+app.post("/api/auth/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.status(204).send();
+});
 
 app.get("/api/auth/me", authenticate, asyncRoute(async (req, res) => {
   const rows = await query<Record<string, unknown>>(
@@ -437,7 +500,10 @@ async function createOrder(
     if (!size) throw new HttpError(409, "A selected size is unavailable.");
     const quantity = Number(item.quantity || 0);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 20) throw new HttpError(400, "Item quantity is invalid.");
-    const selectedModifiers = (item.modifierIds || []).map((id) => {
+    if (!Array.isArray(item.modifierIds) || item.modifierIds.length > 10) {
+      throw new HttpError(400, "Too many options were selected for one item.");
+    }
+    const selectedModifiers = [...new Set(item.modifierIds)].map((id) => {
       const modifier = modifierByItemAndId.get(`${size.menu_item_id}:${id}`);
       if (!modifier) throw new HttpError(409, "A selected option is unavailable for this item.");
       return modifier;
@@ -574,7 +640,13 @@ app.post("/api/orders/:id/status", authenticate, requireRoles("owner","manager",
     const row = current.rows[0];
     if (!row) throw new HttpError(404, "Order not found.");
     if (!(transitions[String(row.status)] || []).includes(status)) throw new HttpError(409, "That order status change is not allowed.");
+    const role = req.auth?.role;
+    const cashierStep = String(row.status) === "pending_confirmation" || String(row.status) === "picked_up";
+    const kitchenStep = ["confirmed", "accepted", "preparing", "ready"].includes(String(row.status));
+    if (cashierStep && !role?.match(/^(owner|manager|cashier)$/)) throw new HttpError(403, "A cashier must perform that status change.");
+    if (kitchenStep && !role?.match(/^(owner|manager|barista)$/)) throw new HttpError(403, "A barista must perform that status change.");
     if (status === "rejected" && !reason) throw new HttpError(400, "A rejection reason is required.");
+    if (status === "closed" && row.payment_status !== "paid") throw new HttpError(409, "The order must be fully paid before it can be closed.");
     const confirmationStatus = status === "confirmed" ? "confirmed" : status === "rejected" ? "rejected" : row.confirmation_status;
     await client.query(
       `update orders set status=$2,confirmation_status=$3,rejection_reason=case when $2='rejected' then $4 else rejection_reason end,
@@ -599,6 +671,7 @@ app.post("/api/orders/:id/status", authenticate, requireRoles("owner","manager",
         [row.customer_id, points],
       );
       await client.query("update orders set rewards_applied=true where id=$1", [req.params.id]);
+      await client.query("insert into reporting_outbox(topic,entity_id,payload) values('rewards_accounts',$1,'{}'::jsonb)", [row.customer_id]);
     }
     await client.query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'change_status','order',$3,$4::jsonb)", [req.auth?.sub,req.auth?.role,req.params.id,JSON.stringify({ from: row.status, reason, to: status })]);
     await client.query("insert into reporting_outbox(topic,entity_id,payload) values('orders',$1,$2::jsonb)", [req.params.id,JSON.stringify({ status })]);
@@ -618,6 +691,9 @@ app.post("/api/orders/:id/payment", authenticate, requireRoles("owner","manager"
     const orderResult = await client.query<Record<string, unknown>>("select * from orders where id=$1 for update", [req.params.id]);
     const order = orderResult.rows[0];
     if (!order) throw new HttpError(404, "Order not found.");
+    if (["cancelled", "rejected"].includes(String(order.status))) {
+      throw new HttpError(409, "Payments cannot be recorded for a cancelled or rejected order.");
+    }
     const paidResult = await client.query<{ paid: string }>("select coalesce(sum(amount),0)::text as paid from payments where order_id=$1", [req.params.id]);
     const paidBefore = Number(paidResult.rows[0]?.paid || 0);
     const remaining = Math.max(0, Number(order.total) - paidBefore);
@@ -631,10 +707,79 @@ app.post("/api/orders/:id/payment", authenticate, requireRoles("owner","manager"
     const paymentStatus = paidBefore + amount >= Number(order.total) - 0.01 ? "paid" : "partially_paid";
     await client.query("update orders set payment_status=$2 where id=$1", [req.params.id,paymentStatus]);
     await client.query("insert into reporting_outbox(topic,entity_id,payload) values('payments',$1,$2::jsonb)", [payment.rows[0]?.id,JSON.stringify({ amount, paymentStatus })]);
+    await client.query("insert into reporting_outbox(topic,entity_id,payload) values('orders',$1,$2::jsonb)", [req.params.id,JSON.stringify({ paymentStatus })]);
   });
   publish("orders", String(req.params.id));
   publish("cashier_order_queue", String(req.params.id));
   res.json({ ok: true });
+}));
+
+app.post("/api/admin/end-day", authenticate, requireRoles("owner", "manager"), asyncRoute(async (req, res) => {
+  const businessDate = String(req.body?.businessDate || getCairoBusinessDate());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) throw new HttpError(400, "Business date must use YYYY-MM-DD.");
+  const report = await transaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`joy-corner-end-day:${businessDate}`]);
+    const active = await client.query<{ count: string }>(
+      `select count(*)::text as count from orders
+       where (created_at at time zone 'Africa/Cairo')::date=$1::date
+         and status not in ('closed','rejected','cancelled')`,
+      [businessDate],
+    );
+    if (Number(active.rows[0]?.count || 0) > 0) {
+      throw new HttpError(409, `${active.rows[0]?.count} order(s) must be closed, rejected, or cancelled before End Day.`);
+    }
+    const summary = await client.query<Record<string, unknown>>(
+      `select count(*)::int as order_count,
+              count(*) filter (where status='closed')::int as closed_order_count,
+              count(*) filter (where status in ('cancelled','rejected'))::int as cancelled_order_count,
+              coalesce(sum(total) filter (where status='closed'),0)::numeric(12,2) as gross_sales,
+              coalesce((select sum(p.amount) from payments p
+                where (p.created_at at time zone 'Africa/Cairo')::date=$1::date),0)::numeric(12,2) as payments_received,
+              (select count(*)::int from payments p
+                where (p.created_at at time zone 'Africa/Cairo')::date=$1::date) as payment_count,
+              coalesce(sum(floor(total)) filter (where status='closed' and rewards_applied),0)::int as loyalty_points_issued
+       from orders where (created_at at time zone 'Africa/Cairo')::date=$1::date`,
+      [businessDate],
+    );
+    const row = summary.rows[0] || {};
+    const bestSeller = await client.query<{ item_name_snapshot: string; quantity: number }>(
+      `select oi.item_name_snapshot,sum(oi.quantity)::int as quantity from order_items oi
+       join orders o on o.id=oi.order_id
+       where (o.created_at at time zone 'Africa/Cairo')::date=$1::date and o.status='closed'
+       group by oi.item_name_snapshot order by quantity desc,oi.item_name_snapshot limit 1`,
+      [businessDate],
+    );
+    const latestReceipt = await client.query<{ order_number: string }>(
+      `select order_number from orders where (created_at at time zone 'Africa/Cairo')::date=$1::date
+       order by created_at desc limit 1`, [businessDate],
+    );
+    const inserted = await client.query<Record<string, unknown>>(
+      `insert into end_day_reports(business_date,order_count,closed_order_count,cancelled_order_count,
+          gross_sales,payments_received,loyalty_points_issued,performed_by,payment_count,
+          best_selling_item,best_selling_qty,latest_receipt_serial)
+       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       on conflict(business_date) do update set
+          order_count=excluded.order_count,closed_order_count=excluded.closed_order_count,
+          cancelled_order_count=excluded.cancelled_order_count,gross_sales=excluded.gross_sales,
+          payments_received=excluded.payments_received,loyalty_points_issued=excluded.loyalty_points_issued,
+          payment_count=excluded.payment_count,best_selling_item=excluded.best_selling_item,
+          best_selling_qty=excluded.best_selling_qty,latest_receipt_serial=excluded.latest_receipt_serial,
+          performed_by=excluded.performed_by,performed_at=now()
+       returning *`,
+      [businessDate,row.order_count || 0,row.closed_order_count || 0,row.cancelled_order_count || 0,
+       row.gross_sales || 0,row.payments_received || 0,row.loyalty_points_issued || 0,req.auth?.sub,
+       row.payment_count || 0,bestSeller.rows[0]?.item_name_snapshot || null,bestSeller.rows[0]?.quantity || 0,
+       latestReceipt.rows[0]?.order_number || null],
+    );
+    const saved = inserted.rows[0];
+    await client.query("insert into reporting_outbox(topic,entity_id,payload) values('end_day_reports',$1,'{}'::jsonb)", [saved?.id]);
+    await client.query(
+      "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'end_day','end_day_report',$3,$4::jsonb)",
+      [req.auth?.sub, req.auth?.role, saved?.id, JSON.stringify({ businessDate })],
+    );
+    return saved;
+  });
+  res.json({ report: { ...report, gross_sales: Number(report?.gross_sales), payments_received: Number(report?.payments_received) } });
 }));
 
 app.get("/api/owner/menu", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {

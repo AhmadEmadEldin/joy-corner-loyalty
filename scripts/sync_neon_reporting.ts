@@ -105,10 +105,28 @@ async function syncPayment(id: string): Promise<void> {
   if (rows[0]) await upsertRecord("payments", rows[0]);
 }
 
+async function syncRewards(id: string): Promise<void> {
+  const rows = await query<DatabaseRow>(
+    `select r.*,a.full_name,a.phone,a.favorite_drink from rewards_accounts r
+     join accounts a on a.id=r.customer_id where r.customer_id=$1`, [id],
+  );
+  if (rows[0]) await upsertRecord("rewards_accounts", rows[0]);
+}
+
+async function syncEndDay(id: string): Promise<void> {
+  const rows = await query<DatabaseRow>(
+    `select r.*,a.full_name as performed_by_name from end_day_reports r
+     join accounts a on a.id=r.performed_by where r.id=$1`, [id],
+  );
+  if (rows[0]) await upsertRecord("end_day_reports", rows[0]);
+}
+
 async function syncEvent(event: OutboxRow): Promise<void> {
   if (event.topic === "accounts") return syncAccount(event.entity_id);
   if (event.topic === "orders") return syncOrder(event.entity_id);
   if (event.topic === "payments") return syncPayment(event.entity_id);
+  if (event.topic === "rewards_accounts") return syncRewards(event.entity_id);
+  if (event.topic === "end_day_reports") return syncEndDay(event.entity_id);
   throw new Error(`Unsupported reporting topic: ${event.topic}`);
 }
 
@@ -116,7 +134,7 @@ async function main(): Promise<void> {
   const events = await query<OutboxRow>(
     `select id::text,topic,entity_id,attempts from reporting_outbox
      where completed_at is null and available_at<=now() order by id limit $1`,
-    [Number(process.env.REPORTING_BATCH_SIZE || 100)],
+    [Number(process.env.REPORTING_SYNC_BATCH_SIZE || process.env.REPORTING_BATCH_SIZE || 100)],
   );
   let completed = 0;
   let failed = 0;
