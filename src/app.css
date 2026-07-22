@@ -291,6 +291,32 @@
   padding-left: 20px;
 }
 
+.queue-payment-summary {
+  background: #f6efe6;
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.queue-payment-summary div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.queue-payment-summary dt,
+.queue-payment-summary dd {
+  margin: 0;
+}
+
+.queue-payment-summary div:last-child {
+  border-top: 1px solid #dfd0bd;
+  font-weight: 800;
+  padding-top: 6px;
+}
+
 .staff-table {
   overflow-x: auto;
 }

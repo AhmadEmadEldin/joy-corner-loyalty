@@ -24,6 +24,7 @@ import {
 import { OperationalOrderStatus, statusLabel } from "./workflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
 import { createClientId } from "./cartDraft";
+import { buildReceiptPrintHtml } from "../receiptPrint";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -192,6 +193,9 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     setBusyOrder(order.order_id);
     try {
       await changeOrderStatus(order.order_id, next, reason);
+      if (next === "confirmed") {
+        setMessage(`Order ${order.order_number} confirmed and sent to the barista.`);
+      }
       if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
@@ -201,10 +205,21 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
   }
 
   async function collect(order: QueueOrder) {
+    const remaining = order.remaining_amount ?? order.total ?? 0;
+    const entered = window.prompt(
+      `Payment received for ${order.order_number} (remaining ${money.format(remaining)}):`,
+      remaining.toFixed(2),
+    );
+    if (entered === null) return;
+    const amount = Number(entered.trim().replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > remaining + 0.01) {
+      setMessage(`Enter a payment between ${money.format(0.01)} and ${money.format(remaining)}.`);
+      return;
+    }
     setBusyOrder(order.order_id);
     try {
       await confirmOrderPayment({
-        amount: order.total || 0,
+        amount,
         orderId: order.order_id,
         paymentMethod: (order.payment_method || "cash_at_cashier") as
           | "cash_at_cashier"
@@ -213,12 +228,43 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           | "manual_transfer",
         reference: "",
       });
+      setMessage(`${money.format(amount)} recorded for ${order.order_number}.`);
       if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
     } finally {
       setBusyOrder(null);
     }
+  }
+
+  function printReceipt(order: QueueOrder) {
+    const receiptWindow = window.open("", "_blank", "width=900,height=800");
+    if (!receiptWindow) {
+      setMessage("Allow pop-ups for Joy Corner to print the receipt.");
+      return;
+    }
+    receiptWindow.opener = null;
+    receiptWindow.document.write(buildReceiptPrintHtml({
+      customerName: order.pickup_name,
+      items: order.item_summary.map((item) => ({
+        itemName: item.itemName || item.name || "Item",
+        qty: item.quantity || 1,
+        size: item.size || "",
+        total: Number(item.totalPrice || 0),
+        unitPrice: Number(item.unitPrice || 0),
+      })),
+      notes: order.customer_notes,
+      orderDateTime: order.created_at ? new Date(order.created_at).toLocaleString() : "",
+      orderPlace: "Joy Corner pickup",
+      outstandingAmount: order.remaining_amount || 0,
+      paidAmount: order.paid_amount || 0,
+      paymentStatus: order.payment_status?.replace(/_/g, " ") || "unpaid",
+      receiptNumber: order.order_number,
+      staff: profile?.full_name || "Joy Corner staff",
+      subtotal: order.subtotal || order.total || 0,
+      total: order.total || 0,
+    }));
+    receiptWindow.document.close();
   }
 
   async function endDay() {
@@ -332,7 +378,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
         <StaffOrderForm
           customers={customers}
           onCreated={async (orderNumber) => {
-            setMessage(`Order ${orderNumber} was sent to the kitchen.`);
+            setMessage(`Order ${orderNumber} was sent to the cashier for confirmation.`);
             if (profile) await refreshQueues(profile.role);
           }}
         />
@@ -366,11 +412,14 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
                   </button>
                 </>
               ) : null}
-              {order.payment_status !== "paid" ? (
+              {order.status !== "pending_confirmation" && order.payment_status !== "paid" ? (
                 <button onClick={() => void collect(order)} type="button">
-                  Confirm {money.format(order.total || 0)} paid
+                  Record payment ({money.format(order.remaining_amount ?? order.total ?? 0)} due)
                 </button>
               ) : null}
+              <button className="button-secondary" onClick={() => printReceipt(order)} type="button">
+                Print receipt
+              </button>
               {order.status === "picked_up" ? (
                 <button
                   onClick={() => void move(order, "closed")}
@@ -670,7 +719,11 @@ function Queue({
                 </p>
               ) : null}
               {typeof order.total === "number" ? (
-                <strong>{money.format(order.total)}</strong>
+                <dl className="queue-payment-summary">
+                  <div><dt>Total</dt><dd>{money.format(order.total)}</dd></div>
+                  <div><dt>Paid</dt><dd>{money.format(order.paid_amount || 0)}</dd></div>
+                  <div><dt>Remaining</dt><dd>{money.format(order.remaining_amount ?? order.total)}</dd></div>
+                </dl>
               ) : null}
               <footer>{actions(order)}</footer>
             </article>

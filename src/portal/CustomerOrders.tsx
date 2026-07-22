@@ -99,7 +99,9 @@ export function CustomerOrders({
                 </div>
                 <div>
                   <dt>Payment</dt>
-                  <dd>{order.payment_status.replace(/_/g, " ")}</dd>
+                  <dd>
+                    {money.format(order.paid_amount)} paid · {money.format(order.remaining_amount)} remaining
+                  </dd>
                 </div>
                 <div>
                   <dt>Pickup</dt>
@@ -284,6 +286,14 @@ function OrderReceipt({
           <div className="grand-total">
             <dt>Total</dt>
             <dd>{money.format(order.total)}</dd>
+          </div>
+          <div>
+            <dt>Paid</dt>
+            <dd>{money.format(order.paid_amount)}</dd>
+          </div>
+          <div>
+            <dt>Remaining</dt>
+            <dd>{money.format(order.remaining_amount)}</dd>
           </div>
         </dl>
         {order.customer_notes ? (

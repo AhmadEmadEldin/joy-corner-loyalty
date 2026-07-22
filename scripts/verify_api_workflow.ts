@@ -90,9 +90,17 @@ async function main(): Promise<void> {
     method: "POST",
   });
   orderIds.push(customerOrder.orderId);
+  const beforeConfirmation = await request<{ kitchen: Array<{ order_id: string }> }>("/staff/queues", cookies.barista);
+  if (beforeConfirmation.kitchen.some((order) => order.order_id === customerOrder.orderId)) {
+    throw new Error("An unconfirmed order leaked into the barista queue.");
+  }
   await request(`/orders/${customerOrder.orderId}/status`, cookies.owner, { body: JSON.stringify({ status: "confirmed" }), method: "POST" });
   const changeFrame = new TextDecoder().decode((await reader.read()).value);
   if (!changeFrame.includes("event: change")) throw new Error("Barista did not receive the realtime confirmation update.");
+  const afterConfirmation = await request<{ kitchen: Array<{ order_id: string }> }>("/staff/queues", cookies.barista);
+  if (!afterConfirmation.kitchen.some((order) => order.order_id === customerOrder.orderId)) {
+    throw new Error("The confirmed order did not appear in the barista queue.");
+  }
   controller.abort();
 
   for (const status of ["accepted", "preparing", "ready", "picked_up"]) {
@@ -108,9 +116,16 @@ async function main(): Promise<void> {
   paymentIds.push(...paymentRows.map((row) => row.id));
   await request(`/orders/${customerOrder.orderId}/status`, cookies.cashier, { body: JSON.stringify({ status: "closed" }), method: "POST" });
 
-  const dashboard = await request<{ rewards: { eligible_purchase_count: number; points_balance: number } }>("/customer/dashboard", cookies.customer);
+  const dashboard = await request<{
+    orders: Array<{ id: string; paid_amount: number; remaining_amount: number }>;
+    rewards: { eligible_purchase_count: number; points_balance: number };
+  }>("/customer/dashboard", cookies.customer);
   if (Number(dashboard.rewards?.eligible_purchase_count) !== 1 || Number(dashboard.rewards?.points_balance) <= 0) {
     throw new Error("Closing the paid customer order did not apply loyalty credit.");
+  }
+  const receipt = dashboard.orders.find((order) => order.id === customerOrder.orderId);
+  if (!receipt || Number(receipt.paid_amount) !== Number(queued.total) || Number(receipt.remaining_amount) !== 0) {
+    throw new Error("The customer receipt did not expose the correct paid and remaining amounts.");
   }
 
   const customerId = accountIds[roles.indexOf("customer")];
@@ -128,7 +143,9 @@ async function main(): Promise<void> {
     endDay: "verified",
     loyalty: "verified",
     orderLifecycle: ["pending_confirmation","confirmed","accepted","preparing","ready","picked_up","paid","closed"],
+    receiptAmounts: "verified",
     realtime: "verified",
+    unconfirmedBaristaVisibility: "blocked",
     waiterOrder: "verified",
   }, null, 2));
 }

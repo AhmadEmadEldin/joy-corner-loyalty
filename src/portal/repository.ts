@@ -43,10 +43,12 @@ export type CustomerOrder = {
   discount_total: number;
   id: string;
   order_number: string;
+  paid_amount: number;
   payment_method: string | null;
   payment_status: string;
   pickup_name: string;
   rejection_reason: string | null;
+  remaining_amount: number;
   subtotal: number;
   status: OperationalOrderStatus;
   tax_total: number;
@@ -117,14 +119,22 @@ export type QueueOrder = {
     name?: string;
     quantity?: number;
     size?: string;
+    totalPrice?: number;
+    unitPrice?: number;
   }>;
   order_id: string;
   order_time?: string;
   order_number: string;
+  paid_amount?: number;
   payment_method?: string | null;
   payment_status?: string;
   pickup_name: string;
+  remaining_amount?: number;
   status: OperationalOrderStatus;
+  subtotal?: number;
+  discount_total?: number;
+  voucher_discount?: number;
+  tax_total?: number;
   total?: number;
 };
 

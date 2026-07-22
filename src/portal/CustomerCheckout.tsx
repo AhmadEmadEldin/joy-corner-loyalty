@@ -25,7 +25,7 @@ const steps = [
   "Review order",
   "Pickup details",
   "Voucher & rewards",
-  "Payment method",
+  "Payment at cashier",
   "Confirm order",
 ] as const;
 
@@ -147,7 +147,8 @@ export function CustomerCheckout({
             ) : null}
             {step === 3 ? (
               <section>
-                <h2>Payment method</h2>
+                <h2>How will you pay at Joy Corner?</h2>
+                <p className="muted">No payment is taken in the web app. The cashier records it after confirming your order.</p>
                 <div className="payment-options">
                   {([
                     ["cash_at_cashier", "Cash at cashier", "Pay when the cashier confirms your order."],
@@ -161,7 +162,7 @@ export function CustomerCheckout({
                     </label>
                   ))}
                 </div>
-                <p className="security-note">Payment is confirmed only by authorized Joy Corner staff.</p>
+                <p className="security-note">The cashier or owner confirms the order first. Only then is it sent to the barista.</p>
               </section>
             ) : null}
             {step === 4 ? (

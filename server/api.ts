@@ -435,14 +435,20 @@ app.patch("/api/customer/profile", authenticate, requireRoles("customer"), async
 app.get("/api/customer/dashboard", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
   const userId = req.auth?.sub;
   const [orders, orderItems, orderModifiers, rewards, vouchers, notifications] = await Promise.all([
-    query<Record<string, unknown>>("select * from orders where customer_id=$1 order by created_at desc limit 100", [userId]),
+    query<Record<string, unknown>>(
+      `select o.*,
+              coalesce((select sum(p.amount) from payments p where p.order_id=o.id),0) as paid_amount,
+              greatest(o.total-coalesce((select sum(p.amount) from payments p where p.order_id=o.id),0),0) as remaining_amount
+       from orders o where o.customer_id=$1 order by o.created_at desc limit 100`,
+      [userId],
+    ),
     query<Record<string, unknown>>(`select oi.* from order_items oi join orders o on o.id=oi.order_id where o.customer_id=$1 order by oi.created_at`, [userId]),
     query<Record<string, unknown>>(`select om.* from order_item_modifiers om join order_items oi on oi.id=om.order_item_id join orders o on o.id=oi.order_id where o.customer_id=$1 order by om.created_at`, [userId]),
     query<Record<string, unknown>>("select points_balance,eligible_purchase_count,free_rewards_available from rewards_accounts where customer_id=$1", [userId]),
     query<Record<string, unknown>>("select id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,status,expires_at from vouchers where customer_id=$1 order by issued_at desc", [userId]),
     query<Record<string, unknown>>("select id,type,title,message,read,related_order_id,created_at from notifications where user_id=$1 order by created_at desc limit 50", [userId]),
   ]);
-  const numericOrderFields = ["subtotal", "discount_total", "voucher_discount", "tax_total", "total"];
+  const numericOrderFields = ["subtotal", "discount_total", "voucher_discount", "tax_total", "total", "paid_amount", "remaining_amount"];
   res.json({
     notifications,
     orderItems: orderItems.map((row) => ({ ...row, unit_price: Number(row.unit_price), modifiers_total: Number(row.modifiers_total), total_price: Number(row.total_price) })),
@@ -595,13 +601,20 @@ app.post("/api/orders/staff", authenticate, requireRoles("owner","manager","cash
 async function queueRows(where: string, values: unknown[]) {
   const rows = await query<Record<string, unknown>>(
     `select o.id as order_id,o.order_number,o.pickup_name,o.status,o.confirmation_status,
-            o.payment_status,o.payment_method,o.total,o.customer_notes,o.created_at,o.created_at as order_time,
-            coalesce(jsonb_agg(jsonb_build_object('itemName',oi.item_name_snapshot,'quantity',oi.quantity,'size',oi.size_name)
+            o.payment_status,o.payment_method,o.subtotal,o.discount_total,o.voucher_discount,o.tax_total,o.total,
+            coalesce((select sum(p.amount) from payments p where p.order_id=o.id),0) as paid_amount,
+            greatest(o.total-coalesce((select sum(p.amount) from payments p where p.order_id=o.id),0),0) as remaining_amount,
+            o.customer_notes,o.created_at,o.created_at as order_time,
+            coalesce(jsonb_agg(jsonb_build_object('itemName',oi.item_name_snapshot,'quantity',oi.quantity,'size',oi.size_name,
+              'unitPrice',oi.unit_price,'totalPrice',oi.total_price)
               order by oi.created_at) filter (where oi.id is not null),'[]'::jsonb) as item_summary
      from orders o left join order_items oi on oi.order_id=o.id
      where ${where} group by o.id order by o.created_at`, values,
   );
-  return rows.map((row) => ({ ...row, total: Number(row.total) }));
+  const numericFields = ["subtotal", "discount_total", "voucher_discount", "tax_total", "total", "paid_amount", "remaining_amount"];
+  return rows.map((row) => Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key, numericFields.includes(key) ? Number(value) : value]),
+  ));
 }
 
 app.get("/api/staff/queues", authenticate, requireRoles("owner","manager","cashier","barista","waiter"), asyncRoute(async (req, res) => {
@@ -693,6 +706,9 @@ app.post("/api/orders/:id/payment", authenticate, requireRoles("owner","manager"
     if (!order) throw new HttpError(404, "Order not found.");
     if (["cancelled", "rejected"].includes(String(order.status))) {
       throw new HttpError(409, "Payments cannot be recorded for a cancelled or rejected order.");
+    }
+    if (order.status === "pending_confirmation") {
+      throw new HttpError(409, "Confirm the order before recording a payment.");
     }
     const paidResult = await client.query<{ paid: string }>("select coalesce(sum(amount),0)::text as paid from payments where order_id=$1", [req.params.id]);
     const paidBefore = Number(paidResult.rows[0]?.paid || 0);
