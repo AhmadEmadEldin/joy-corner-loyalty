@@ -13,4 +13,4 @@ The backend:
 
 Only temporary daily operational state should be reset. If archive writes fail, reset fails.
 
-Automatic scheduled close and full restore tooling require a scheduler/runtime decision and are tracked in `docs/implementation-checklist.md`.
+Automatic scheduled close and full restore tooling require a scheduler/runtime decision and are tracked in future development planning.

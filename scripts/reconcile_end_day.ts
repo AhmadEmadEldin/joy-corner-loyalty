@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { closeNeonPool, query } from "../server/neon";
-import { getCairoBusinessDate } from "../src/cairoDate";
+import { getCairoBusinessDate } from "../server/cairoDate";
 
 dotenv.config({ path: [".env.local", ".env"] });
 

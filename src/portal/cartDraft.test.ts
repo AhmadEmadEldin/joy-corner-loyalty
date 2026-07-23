@@ -20,7 +20,7 @@ const line: CartLine = {
   size: { id: "size-1", price: 60, size_name: "Regular" },
 };
 
-describe("Supabase cart draft", () => {
+describe("Cart draft", () => {
   beforeEach(() => window.localStorage.clear());
 
   it("keeps the cart and submission key together", () => {

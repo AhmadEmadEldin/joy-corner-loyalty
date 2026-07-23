@@ -1,6 +1,6 @@
 import { canTransitionOrder, statusLabel, statusProgress } from "./workflow";
 
-describe("Supabase operational order workflow", () => {
+describe("Operational order workflow", () => {
   it("allows only the documented customer-to-kitchen sequence", () => {
     expect(canTransitionOrder("pending_confirmation", "confirmed")).toBe(true);
     expect(canTransitionOrder("confirmed", "accepted")).toBe(true);

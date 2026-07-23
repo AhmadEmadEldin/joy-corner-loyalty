@@ -437,9 +437,13 @@ app.get("/api/customer/profile", authenticate, requireRoles("customer"), asyncRo
 app.patch("/api/customer/profile", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
   const fullName = nonEmpty(req.body?.fullName);
   const phone = nonEmpty(req.body?.phone, 30);
+  const dateOfBirth = req.body?.dateOfBirth ? String(req.body.dateOfBirth) : null;
+  if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+    throw new HttpError(400, "Date of birth must be in YYYY-MM-DD format.");
+  }
   await query(
     `update accounts set full_name=$2,phone=$3,date_of_birth=$4,favorite_drink=$5 where id=$1`,
-    [req.auth?.sub, fullName, phone, req.body?.dateOfBirth || null, String(req.body?.favoriteDrink || "").trim() || null],
+    [req.auth?.sub, fullName, phone, dateOfBirth, String(req.body?.favoriteDrink || "").trim() || null],
   );
   await query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [req.auth?.sub]);
   res.json({ ok: true });

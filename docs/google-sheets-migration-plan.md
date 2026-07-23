@@ -2,9 +2,8 @@
 
 ## Current Access Status
 
-- Repository branch: `feature/google-sheets-normalized-backend`.
-- Workbook ID: `1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8`.
-- Local direct Google API inspection is blocked because `.env.local` points `JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE` at a missing key file. The deployed Firebase Function can access the workbook through its runtime identity and `GOOGLE_SHEET_ID` secret.
+- Workbook ID: `1e1z1pfNArVzaZs5FE4k0e3JqIlwJIPG_aWH4Fziqnl8`
+- Access via Google service account configured in `GOOGLE_SERVICE_ACCOUNT_JSON` env var (Northflank backend).
 
 ## Target Workbook Hierarchy
 
@@ -51,4 +50,4 @@ After migration, verify:
 
 ## Rollback
 
-Use the migration backup copy created by the `backupSheetsWorkbook` action. Because legacy tabs are preserved, rollback can also be performed by disabling normalized read paths and restoring the pre-migration workbook copy.
+Use the migration backup copy created by the backup action. Because legacy tabs are preserved, rollback can also be performed by disabling normalized read paths and restoring the pre-migration workbook copy.
