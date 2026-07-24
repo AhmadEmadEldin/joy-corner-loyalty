@@ -8,6 +8,7 @@ import express, {
 } from "express";
 import type { PoolClient } from "pg";
 import { getCairoBusinessDate } from "./cairoDate";
+import { isValidEmail, normalizePhone } from "./validators";
 import {
   applyNeonMigrations,
   closeNeonPool,
@@ -274,20 +275,21 @@ app.get("/ready", asyncRoute(async (_req, res) => {
 app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
   const email = nonEmpty(req.body?.email).toLowerCase();
   const fullName = nonEmpty(req.body?.fullName);
-  const phone = nonEmpty(req.body?.phone, 30);
+  const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
   const password = String(req.body?.password || "");
-  if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
-  if (!/^\+?[0-9]{8,15}$/.test(phone)) throw new HttpError(400, "Enter a valid phone number.");
+  if (email.endsWith("@joycorner.com")) throw new HttpError(403, "Staff accounts cannot be created through signup.");
+  if (!isValidEmail(email)) throw new HttpError(400, "Enter a valid email address.");
+  if (!phone) throw new HttpError(400, "Enter a valid phone number.");
   if (password.length < 8 || password.length > 200) throw new HttpError(400, "Password must be at least 8 characters.");
   const passwordHash = await hashPassword(password);
-  const existing = await query<Record<string, unknown>>(
+  const existingEmail = await query<Record<string, unknown>>(
     "select * from accounts where email=$1 limit 1",
     [email],
   );
-  if (existing[0]) {
+  if (existingEmail[0]) {
     if (
-      String(existing[0].password_hash).startsWith("migrated$") &&
-      String(existing[0].phone || "") === phone
+      String(existingEmail[0].password_hash).startsWith("migrated$") &&
+      String(existingEmail[0].phone || "") === phone
     ) {
       if (isProduction && process.env.ALLOW_MIGRATED_ACCOUNT_CLAIM !== "true") {
         throw new HttpError(409, "This imported account needs an administrator password reset.");
@@ -295,13 +297,20 @@ app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
       const claimed = await query<Record<string, unknown>>(
         `update accounts set password_hash=$2,full_name=$3,phone=$4
          where id=$1 returning *`,
-        [existing[0].id, passwordHash, fullName, phone],
+        [existingEmail[0].id, passwordHash, fullName, phone],
       );
       await query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [claimed[0]?.id]);
       res.status(200).json(sessionResponse(claimed[0] as Record<string, unknown>, res));
       return;
     }
     throw new HttpError(409, "An account already exists for this email.");
+  }
+  const existingPhone = await query<Record<string, unknown>>(
+    "select * from accounts where phone=$1 and role='customer' limit 1",
+    [phone],
+  );
+  if (existingPhone[0]) {
+    throw new HttpError(409, "A customer account already exists with this phone number.");
   }
   const rows = await query<Record<string, unknown>>(
     `insert into accounts(email,password_hash,full_name,phone,role,customer_number)
@@ -436,7 +445,8 @@ app.get("/api/customer/profile", authenticate, requireRoles("customer"), asyncRo
 
 app.patch("/api/customer/profile", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
   const fullName = nonEmpty(req.body?.fullName);
-  const phone = nonEmpty(req.body?.phone, 30);
+  const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
+  if (!phone) throw new HttpError(400, "Enter a valid phone number.");
   const dateOfBirth = req.body?.dateOfBirth ? String(req.body.dateOfBirth) : null;
   if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
     throw new HttpError(400, "Date of birth must be in YYYY-MM-DD format.");
@@ -653,6 +663,63 @@ app.get("/api/staff/customers", authenticate, requireRoles("owner","manager","ca
   res.json({ customers: rows });
 }));
 
+app.get("/api/staff/customers/search", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (req, res) => {
+  const raw = String(req.query.phone || "");
+  const phone = normalizePhone(raw);
+  if (!phone) throw new HttpError(400, "Enter a valid phone number.");
+  const rows = await query<Record<string, unknown>>(
+    `select id,full_name as "fullName",email,phone,customer_number as "customerNumber"
+     from accounts where phone=$1 and role='customer' and active=true limit 1`,
+    [phone],
+  );
+  res.json({ customer: rows[0] || null });
+}));
+
+app.post("/api/staff/customers", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (req, res) => {
+  const fullName = nonEmpty(req.body?.fullName);
+  const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
+  if (!phone) throw new HttpError(400, "Enter a valid phone number.");
+  const emailRaw = String(req.body?.email || "").trim().toLowerCase();
+  if (emailRaw && !isValidEmail(emailRaw)) throw new HttpError(400, "Enter a valid email address.");
+  const result = await transaction(async (client) => {
+    const existing = await client.query<Record<string, unknown>>(
+      "select id,full_name,email,phone,customer_number from accounts where phone=$1 and role='customer' limit 1",
+      [phone],
+    );
+    if (existing.rows[0]) {
+      const setClauses = [`full_name=$2`];
+      const values: unknown[] = [existing.rows[0].id, fullName];
+      if (emailRaw) {
+        setClauses.push("email=$3");
+        values.push(emailRaw);
+      }
+      const updated = await client.query<Record<string, unknown>>(
+        `update accounts set ${setClauses.join(",")} where id=$1 returning id,full_name as "fullName",email,phone,customer_number as "customerNumber"`,
+        values,
+      );
+      return { customer: updated.rows[0] };
+    }
+    const email = emailRaw || `customer-${phone.replace(/\D/g, "")}@joycorner.local`;
+    const insertResult = await client.query<Record<string, unknown>>(
+      `insert into accounts(email,password_hash,full_name,phone,role,customer_number)
+       values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'))
+       on conflict(email) do nothing returning id,full_name as "fullName",email,phone,customer_number as "customerNumber"`,
+      [email, await hashPassword(crypto.randomUUID()), fullName, phone],
+    );
+    if (!insertResult.rows[0]) {
+      const fallback = await client.query<Record<string, unknown>>(
+        "select id,full_name as \"fullName\",email,phone,customer_number as \"customerNumber\" from accounts where phone=$1 and role='customer' limit 1",
+        [phone],
+      );
+      return { customer: fallback.rows[0] };
+    }
+    await client.query("insert into rewards_accounts(customer_id) values($1) on conflict do nothing", [insertResult.rows[0].id]);
+    await client.query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [insertResult.rows[0].id]);
+    return { customer: insertResult.rows[0] };
+  });
+  res.status(201).json(result);
+}));
+
 const transitions: Record<string, string[]> = {
   pending_confirmation: ["confirmed", "rejected", "cancelled"],
   confirmed: ["accepted", "cancelled"],
@@ -859,8 +926,38 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: isProduction ? "The server could not complete the request." : message });
 });
 
+async function seedStaffAccounts(): Promise<void> {
+  const staff = [
+    { email: "owner@joycorner.com", envKey: "SEED_OWNER_PASSWORD", role: "owner" as const, fullName: "Owner" },
+    { email: "cashier@joycorner.com", envKey: "SEED_CASHIER_PASSWORD", role: "cashier" as const, fullName: "Cashier" },
+    { email: "waiter@joycorner.com", envKey: "SEED_WAITER_PASSWORD", role: "waiter" as const, fullName: "Waiter" },
+    { email: "barista@joycorner.com", envKey: "SEED_BARISTA_PASSWORD", role: "barista" as const, fullName: "Barista" },
+  ];
+  for (const { email, envKey, role, fullName } of staff) {
+    const password = process.env[envKey];
+    if (!password) {
+      console.warn(`Skipping seed for ${email}: ${envKey} is not set.`);
+      continue;
+    }
+    const existing = await query<{ id: string }>(
+      "select id from accounts where email=$1 limit 1",
+      [email],
+    );
+    if (existing[0]) continue;
+    const passwordHash = await hashPassword(password);
+    await query(
+      `insert into accounts(email,password_hash,full_name,role)
+       values($1,$2,$3,$4)
+       on conflict(email) do nothing`,
+      [email, passwordHash, fullName, role],
+    );
+    console.log(`Seeded staff account: ${email}`);
+  }
+}
+
 async function start(): Promise<void> {
   await applyNeonMigrations();
+  await seedStaffAccounts();
   const server = app.listen(port, "0.0.0.0", () => console.log(`Joy Corner API listening on ${port}`));
   const shutdown = () => {
     server.close(() => void closeNeonPool().finally(() => process.exit(0)));
