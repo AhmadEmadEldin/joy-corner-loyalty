@@ -1,0 +1,48 @@
+name: Sync Neon Reporting to Google Sheets
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-neon-reporting-to-google-sheets
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SYNC_CONFIGURED: ${{ secrets.NEON_DATABASE_URL != '' && secrets.GOOGLE_SHEET_ID != '' && secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Report missing sync configuration
+        if: env.SYNC_CONFIGURED != 'true'
+        run: echo "Reporting sync is disabled until all required repository secrets are configured."
+
+      - name: Checkout repository
+        if: env.SYNC_CONFIGURED == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: env.SYNC_CONFIGURED == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        if: env.SYNC_CONFIGURED == 'true'
+        run: npm ci
+
+      - name: Run reporting sync
+        if: env.SYNC_CONFIGURED == 'true'
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DATABASE_SSL: "true"
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: npm run sync:reporting

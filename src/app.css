@@ -19,26 +19,25 @@
   --glow-gold: 0 0 24px rgba(217, 173, 99, 0.3);
 }
 
-/* Supabase customer portal. It remains inside this app and is enabled only by
-   VITE_DATA_PROVIDER=supabase after the migration checklist passes. */
-.supabase-portal {
+/* Customer and staff portal shared by the Vercel frontend. */
+.joy-portal {
   margin: 0 auto;
   max-width: 1440px;
   min-height: 100vh;
   padding: 24px;
 }
 
-.supabase-portal.center-state {
+.joy-portal.center-state {
   align-items: center;
   display: flex;
   justify-content: center;
 }
 
-.supabase-access .auth-card {
+.joy-access .auth-card {
   max-width: 520px;
 }
 
-.supabase-access .auth-card h1 {
+.joy-access .auth-card h1 {
   background: none;
   color: #2b1c13;
   -webkit-text-fill-color: #2b1c13;
@@ -228,7 +227,7 @@
 }
 
 @media (max-width: 820px) {
-  .supabase-portal {
+  .joy-portal {
     padding: 14px;
   }
 
@@ -290,6 +289,32 @@
 .queue-ticket ul {
   margin: 0;
   padding-left: 20px;
+}
+
+.queue-payment-summary {
+  background: #f6efe6;
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.queue-payment-summary div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.queue-payment-summary dt,
+.queue-payment-summary dd {
+  margin: 0;
+}
+
+.queue-payment-summary div:last-child {
+  border-top: 1px solid #dfd0bd;
+  font-weight: 800;
+  padding-top: 6px;
 }
 
 .staff-table {
@@ -2677,7 +2702,7 @@ tbody tr:hover {
   }
 }
 
-/* Supabase customer ordering experience */
+/* Customer ordering experience */
 .customer-app-shell {
   background: #f8f2e8;
   max-width: none;
@@ -4137,7 +4162,7 @@ tbody tr:hover {
   }
 }
 
-/* Supabase role-specific operations */
+/* Role-specific operations */
 .staff-overview,
 .staff-queue-header {
   margin: 0 auto;

@@ -1,38 +1,24 @@
 import { lazy, Suspense } from "react";
-import { configuredDataProvider, supabaseConfigPresent } from "./dataProvider";
+import { apiConfigPresent } from "./dataProvider";
 
-const LegacyApp = lazy(() =>
-  import("./app").then((module) => ({ default: module.App })),
-);
 const CustomerPortal = lazy(() =>
-  import("./supabase/CustomerPortal").then((module) => ({
-    default: module.SupabaseCustomerPortal,
+  import("./portal/CustomerPortal").then((module) => ({
+    default: module.CustomerPortal,
   })),
 );
 const StaffPortal = lazy(() =>
-  import("./supabase/StaffPortal").then((module) => ({
-    default: module.SupabaseStaffPortal,
+  import("./portal/StaffPortal").then((module) => ({
+    default: module.StaffPortal,
   })),
 );
 
 export function RootApp() {
-  if (configuredDataProvider === "legacy") {
+  if (!apiConfigPresent) {
     return (
-      <Suspense fallback={<LoadingState label="Loading backup system…" />}>
-        <LegacyApp />
-      </Suspense>
-    );
-  }
-
-  if (!supabaseConfigPresent) {
-    return (
-      <main className="supabase-portal center-state" role="alert">
+      <main className="joy-portal center-state" role="alert">
         <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
-        <h1>Supabase connection required</h1>
-        <p>
-          Add <code>VITE_SUPABASE_URL</code> and{" "}
-          <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>, then restart the app.
-        </p>
+        <h1>Backend connection required</h1>
+        <p>Add <code>VITE_API_URL</code>, then restart the app.</p>
       </main>
     );
   }
@@ -40,7 +26,6 @@ export function RootApp() {
   const Portal = window.location.pathname.startsWith("/order")
     ? CustomerPortal
     : StaffPortal;
-
   return (
     <Suspense fallback={<LoadingState label="Connecting to Joy Corner…" />}>
       <Portal />
@@ -50,7 +35,7 @@ export function RootApp() {
 
 function LoadingState({ label }: { label: string }) {
   return (
-    <main className="supabase-portal center-state" aria-busy="true">
+    <main className="joy-portal center-state" aria-busy="true">
       <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
       <p>{label}</p>
     </main>

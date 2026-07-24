@@ -1,6 +1,6 @@
 import { reportingRecord, REPORTING_SHEETS } from "./sheetMappings";
 
-describe("Supabase reporting sheet mappings", () => {
+describe("Neon reporting sheet mappings", () => {
   it("keeps stable order and receipt identifiers", () => {
     expect(
       reportingRecord("orders", {

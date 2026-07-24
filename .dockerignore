@@ -1,0 +1,16 @@
+.env
+.env.*
+.git
+.github
+coverage
+dist
+docs
+node_modules
+playwright-report
+public
+test-results
+tests
+scripts
+src
+*.test.ts
+*.test.tsx

@@ -6,11 +6,7 @@ Prepared implementation: `sheets-normalized-runtime`.
 
 ## Workbook Access
 
-Direct local workbook inspection/mutation was attempted through Google Sheets API. It is blocked because `.env.local` points to a service-account key file that is not present in this checkout:
-
-`JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE`
-
-The deployed Firebase Function runtime has workbook access through its configured `GOOGLE_SHEET_ID` secret and default service account. The implemented migration actions are designed to run there.
+Direct workbook inspection/mutation is performed through the Google Sheets API using the service account configured via `GOOGLE_SERVICE_ACCOUNT_JSON` and `GOOGLE_SHEET_ID` environment variables on the Northflank backend.
 
 ## Sheets Added Or Changed By Migration Code
 
@@ -56,11 +52,11 @@ Implemented backend reconciliation calculates customer unpaid balances from open
 
 ## Exceptions
 
-The migration creates `Migration Exceptions` for unresolved legacy records. The current local run could not inspect row-level exceptions because local Google credentials are missing.
+The migration creates `Migration Exceptions` for unresolved legacy records.
 
 ## Formula Errors
 
-The implemented workbook inspector reports `#NAME?`, `#REF!`, `#VALUE!`, and `#DIV/0!` errors in key tabs. Direct local formula-error verification is blocked by the missing local service-account key file.
+The implemented workbook inspector reports `#NAME?`, `#REF!`, `#VALUE!`, and `#DIV/0!` errors in key tabs.
 
 ## Automated Test Results
 
@@ -70,7 +66,3 @@ Added tests verify:
 - Size prices are numeric and not slash-delimited text.
 - Deterministic item IDs and size price resolution.
 - Required normalized tab definitions exist.
-
-## Remaining External Blocker
-
-To run the migration locally against the real workbook, restore or provide the service account JSON file referenced by `JOY_FIREBASE_SERVICE_ACCOUNT_KEY_FILE`, or set `GOOGLE_APPLICATION_CREDENTIALS` to a valid Google service account that can copy and edit the workbook.

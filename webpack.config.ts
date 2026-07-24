@@ -8,31 +8,9 @@ dotenv.config({ path: [".env.local", ".env"] });
 
 const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
 
-const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY || "",
-  appId: process.env.VITE_FIREBASE_APP_ID || "",
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "",
-  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || "",
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+const apiConfig = {
+  baseUrl: process.env.VITE_API_URL || "/api",
 };
-
-// Supabase publishable configuration is intentionally browser-visible. Keep a
-// project fallback so static hosts remain usable even when their environment
-// settings have not been configured; deployment-specific values may override it.
-const supabaseConfig = {
-  url:
-    process.env.VITE_SUPABASE_URL ||
-    "https://ruurfhrjqfcydxbzpuqi.supabase.co",
-  publishableKey:
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    "sb_publishable_a4ySmRdu-RJoISB_kvjjgg_3iCha3z1",
-};
-
-const dataProvider =
-  process.env.VITE_DATA_PROVIDER === "legacy" ? "legacy" : "supabase";
 
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
@@ -65,9 +43,7 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      __FIREBASE_CONFIG__: JSON.stringify(firebaseConfig),
-      __SUPABASE_CONFIG__: JSON.stringify(supabaseConfig),
-      __DATA_PROVIDER__: JSON.stringify(dataProvider),
+      __API_CONFIG__: JSON.stringify(apiConfig),
     }),
   ],
   devServer: {
@@ -79,15 +55,12 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
     hot: true,
     open: true,
     port,
-    proxy:
-      dataProvider === "legacy"
-        ? [
-            {
-              context: ["/api", "/health"],
-              target: `http://localhost:${process.env.API_PORT || process.env.JOY_BACKEND_PORT || 3001}`,
-            },
-          ]
-        : undefined,
+    proxy: [
+      {
+        context: ["/api", "/health"],
+        target: `http://localhost:${process.env.API_PORT || 3001}`,
+      },
+    ],
     static: {
       directory: path.resolve(__dirname, "public"),
     },

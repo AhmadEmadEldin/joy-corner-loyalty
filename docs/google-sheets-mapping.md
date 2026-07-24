@@ -1,10 +1,10 @@
 # Google Sheets Mapping
 
-## Active Supabase reporting path
+## Active Neon reporting path
 
-Supabase is the source of truth. Changes to customers, orders, order items,
+Neon is the source of truth. Changes to customers, orders, order items,
 payments, reward accounts, vouchers, redemptions, and audit logs enqueue a row
-in `public.integration_outbox`. The server-only
+in `public.reporting_outbox`. The server-only
 `npm run sync:reporting` worker claims bounded batches and upserts stable IDs
 using mappings in `server/reporting/sheetMappings.ts`.
 
@@ -14,18 +14,14 @@ so the first approved worker runs populate historical data too. Historical audit
 events are intentionally not backfilled.
 
 The worker uses bounded ID ranges, batched updates/appends, exponential retry,
-and no Firebase dependency. Existing rows update only the mapped columns, so
+and no direct browser access. Existing rows update only the mapped columns, so
 workbook formulas and manually managed columns are preserved. Missing tabs or
 headers fail closed instead of creating more workbook tabs. Spreadsheet outages
 do not affect order commits.
-Supabase rows are archived rather than deleted; a source delete never erases a
+Neon rows are archived rather than deleted; a source delete never erases a
 historical spreadsheet row automatically.
 
-## Legacy mapping
-
-The backend keeps canonical headers in `server/googleSheetsBackend.ts` and write safety rules in `server/sheetSchema.ts`.
-
-Required tabs:
+## Required tabs
 
 - Dashboard
 - Menu

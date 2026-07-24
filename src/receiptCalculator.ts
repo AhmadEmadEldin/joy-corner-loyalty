@@ -204,10 +204,6 @@ export function fromMinorUnits(value: number) {
   return value / MONEY_SCALE;
 }
 
-function moneyNumber(value: unknown) {
-  return toMoney(value);
-}
-
 export function toMoney(value: unknown) {
   const text = String(value ?? "").trim();
   if (!text) return 0;
