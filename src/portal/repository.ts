@@ -246,6 +246,25 @@ export async function loadCustomerDirectory(): Promise<Array<Record<string, unkn
     .customers;
 }
 
+export async function searchCustomerByPhone(phone: string): Promise<Record<string, unknown> | null> {
+  const result = await apiRequest<{ customer: Record<string, unknown> | null }>(
+    `/staff/customers/search?phone=${encodeURIComponent(phone)}`,
+  );
+  return result.customer;
+}
+
+export async function createStaffCustomer(input: {
+  email?: string;
+  fullName: string;
+  phone: string;
+}): Promise<Record<string, unknown>> {
+  const result = await apiRequest<{ customer: Record<string, unknown> }>("/staff/customers", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+  return result.customer;
+}
+
 export type EndDayReport = {
   business_date: string;
   cancelled_order_count: number;

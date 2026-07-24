@@ -7,6 +7,7 @@ import {
 import {
   CartLine,
   changeOrderStatus,
+  createStaffCustomer,
   createStaffOrder,
   confirmOrderPayment,
   loadCustomerDirectory,
@@ -16,6 +17,7 @@ import {
   MenuItem,
   QueueOrder,
   runEndDay,
+  searchCustomerByPhone,
   signInStaff,
   signOutCustomer,
   StaffProfile,
@@ -457,25 +459,18 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
         />
       ) : null}
       {tab === "customers" ? (
-        <section className="portal-section">
-          <h2>Customer directory</h2>
-          <div className="staff-table">
-            <div className="staff-table-row heading">
-              <span>Customer</span>
-              <span>Contact</span>
-              <span>Number</span>
-            </div>
-            {customers.map((customer) => (
-              <div className="staff-table-row" key={String(customer.id)}>
-                <strong>{String(customer.fullName || "")}</strong>
-                <span>
-                  {String(customer.phone || customer.email || "Restricted")}
-                </span>
-                <span>{String(customer.customerNumber || "")}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        <StaffCustomerDirectory
+          customers={customers}
+          onRefresh={async () => {
+            try {
+              const directory = await loadCustomerDirectory();
+              setCustomers(directory);
+            } catch (error) {
+              setMessage(getMessage(error));
+            }
+          }}
+          onError={setMessage}
+        />
       ) : null}
       {tab === "menu" && profile?.role === "owner" ? (
         <OwnerMenuManager />
@@ -485,7 +480,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
 }
 
 function StaffOrderForm({
-  customers,
+  customers: _customers,
   onCreated,
 }: {
   customers: Array<Record<string, unknown>>;
@@ -495,6 +490,14 @@ function StaffOrderForm({
   const [cart, setCart] = useState<CartLine[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [foundCustomer, setFoundCustomer] = useState<Record<string, unknown> | null>(null);
+  const [showCreateInline, setShowCreateInline] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
@@ -522,6 +525,49 @@ function StaffOrderForm({
           ];
     });
   }
+  async function searchCustomer() {
+    if (!customerPhone.trim()) return;
+    setSearching(true);
+    setMessage("");
+    try {
+      const customer = await searchCustomerByPhone(customerPhone.trim());
+      if (customer) {
+        setFoundCustomer(customer);
+        setSelectedCustomerId(String(customer.id));
+        setShowCreateInline(false);
+        setMessage(`Customer found: ${String(customer.fullName || "")}`);
+      } else {
+        setFoundCustomer(null);
+        setSelectedCustomerId(null);
+        setShowCreateInline(true);
+        setMessage("No customer found with this phone number.");
+      }
+    } catch (error) {
+      setMessage(getMessage(error));
+    } finally {
+      setSearching(false);
+    }
+  }
+  async function createInlineCustomer() {
+    if (!newCustomerName.trim() || !customerPhone.trim()) return;
+    setCreatingCustomer(true);
+    setMessage("");
+    try {
+      const customer = await createStaffCustomer({
+        email: newCustomerEmail.trim() || undefined,
+        fullName: newCustomerName.trim(),
+        phone: customerPhone.trim(),
+      });
+      setFoundCustomer(customer);
+      setSelectedCustomerId(String(customer.id));
+      setShowCreateInline(false);
+      setMessage(`Customer created: ${String(customer.fullName || "")}`);
+    } catch (error) {
+      setMessage(getMessage(error));
+    } finally {
+      setCreatingCustomer(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!cart.length) return;
@@ -531,7 +577,7 @@ function StaffOrderForm({
     try {
       const result = await createStaffOrder({
         cart,
-        customerId: String(form.get("customerId") || "") || null,
+        customerId: selectedCustomerId || null,
         customerNotes: String(form.get("customerNotes") || ""),
         paymentMethod: String(
           form.get("paymentMethod") || "cash_at_cashier",
@@ -543,6 +589,10 @@ function StaffOrderForm({
         pickupName: String(form.get("pickupName") || ""),
       });
       setCart([]);
+      setFoundCustomer(null);
+      setCustomerPhone("");
+      setSelectedCustomerId(null);
+      setShowCreateInline(false);
       await onCreated(result.orderNumber);
     } catch (error) {
       setMessage(getMessage(error));
@@ -576,17 +626,47 @@ function StaffOrderForm({
             Pickup name
             <input name="pickupName" required />
           </label>
-          <label>
-            Customer
-            <select name="customerId">
-              <option value="">Walk-in customer</option>
-              {customers.map((customer) => (
-                <option key={String(customer.id)} value={String(customer.id)}>
-                  {String(customer.fullName || customer.customerNumber)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset style={{ border: "1px solid var(--border, #ccc)", padding: "0.5rem", borderRadius: "4px" }}>
+            <legend><strong>Customer (optional)</strong></legend>
+            <label>
+              Phone number
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  inputMode="tel"
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="+201234567890"
+                  value={customerPhone}
+                />
+                <button disabled={searching || !customerPhone.trim()} onClick={() => void searchCustomer()} type="button">
+                  {searching ? "Searching…" : "Search"}
+                </button>
+              </div>
+            </label>
+            {foundCustomer ? (
+              <p style={{ color: "green" }}>
+                Found: <strong>{String(foundCustomer.fullName || "")}</strong>
+                {foundCustomer.customerNumber ? ` (${String(foundCustomer.customerNumber)})` : ""}
+              </p>
+            ) : null}
+            {showCreateInline ? (
+              <div style={{ marginTop: "0.5rem" }}>
+                <label>
+                  New customer name
+                  <input onChange={(e) => setNewCustomerName(e.target.value)} required value={newCustomerName} />
+                </label>
+                <label>
+                  Email (optional)
+                  <input onChange={(e) => setNewCustomerEmail(e.target.value)} value={newCustomerEmail} />
+                </label>
+                <button disabled={creatingCustomer || !newCustomerName.trim()} onClick={() => void createInlineCustomer()} type="button">
+                  {creatingCustomer ? "Creating…" : "Create Customer"}
+                </button>
+              </div>
+            ) : null}
+            {selectedCustomerId ? (
+              <input type="hidden" name="customerId" value={selectedCustomerId} />
+            ) : null}
+          </fieldset>
           <label>
             Payment method
             <select name="paymentMethod">
@@ -798,6 +878,95 @@ function StaffOverview({
         <button disabled={endingDay} onClick={onEndDay} type="button">
           {endingDay ? "Closing day…" : "End Day & queue Google Sheets report"}
         </button>
+      </div>
+    </section>
+  );
+}
+
+function StaffCustomerDirectory({
+  customers,
+  onRefresh,
+  onError,
+}: {
+  customers: Array<Record<string, unknown>>;
+  onRefresh: () => Promise<void>;
+  onError: (msg: string) => void;
+}) {
+  const [addName, setAddName] = useState("");
+  const [addPhone, setAddPhone] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function addCustomer() {
+    if (!addName.trim() || !addPhone.trim()) return;
+    setBusy(true);
+    try {
+      await createStaffCustomer({
+        email: addEmail.trim() || undefined,
+        fullName: addName.trim(),
+        phone: addPhone.trim(),
+      });
+      setAddName("");
+      setAddPhone("");
+      setAddEmail("");
+      await onRefresh();
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="portal-section">
+      <h2>Customer directory</h2>
+      <form
+        className="profile-grid"
+        onSubmit={(e) => { e.preventDefault(); void addCustomer(); }}
+        style={{ marginBottom: "1rem" }}
+      >
+        <label>
+          Name
+          <input
+            onChange={(e) => setAddName(e.target.value)}
+            required
+            value={addName}
+          />
+        </label>
+        <label>
+          Phone
+          <input
+            inputMode="tel"
+            onChange={(e) => setAddPhone(e.target.value)}
+            placeholder="+201234567890"
+            required
+            value={addPhone}
+          />
+        </label>
+        <label>
+          Email (optional)
+          <input
+            onChange={(e) => setAddEmail(e.target.value)}
+            value={addEmail}
+          />
+        </label>
+        <button disabled={busy || !addName.trim() || !addPhone.trim()} type="submit">
+          {busy ? "Adding…" : "Add customer"}
+        </button>
+      </form>
+      <div className="staff-table">
+        <div className="staff-table-row heading">
+          <span>Customer</span>
+          <span>Contact</span>
+          <span>Number</span>
+        </div>
+        {customers.map((customer) => (
+          <div className="staff-table-row" key={String(customer.id)}>
+            <strong>{String(customer.fullName || "")}</strong>
+            <span>
+              {String(customer.phone || customer.email || "Restricted")}
+            </span>
+            <span>{String(customer.customerNumber || "")}</span>
+          </div>
+        ))}
       </div>
     </section>
   );
