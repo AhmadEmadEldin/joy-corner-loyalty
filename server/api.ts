@@ -278,6 +278,7 @@ app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
   const fullName = nonEmpty(req.body?.fullName);
   const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
   const password = String(req.body?.password || "");
+  const marketingConsent = req.body?.marketingConsent === true;
   if (email.endsWith("@joycorner.com")) throw new HttpError(403, "Staff accounts cannot be created through signup.");
   if (!isValidEmail(email)) throw new HttpError(400, "Enter a valid email address.");
   if (!phone) throw new HttpError(400, "Enter a valid phone number.");
@@ -314,10 +315,10 @@ app.post("/api/auth/signup", loginRateLimit, asyncRoute(async (req, res) => {
     throw new HttpError(409, "A customer account already exists with this phone number.");
   }
   const rows = await query<Record<string, unknown>>(
-    `insert into accounts(email,password_hash,full_name,phone,role,customer_number)
-     values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'))
+    `insert into accounts(email,password_hash,full_name,phone,role,customer_number,marketing_consent,marketing_consent_at)
+     values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'),$5,$6)
      on conflict(email) do nothing returning *`,
-    [email, passwordHash, fullName, phone],
+    [email, passwordHash, fullName, phone, marketingConsent, marketingConsent ? new Date().toISOString() : null],
   );
   if (!rows[0]) throw new HttpError(409, "An account already exists for this email.");
   await query("insert into rewards_accounts(customer_id) values($1) on conflict do nothing", [rows[0].id]);
@@ -438,7 +439,9 @@ app.get("/api/menu/images/:itemId", asyncRoute(async (req, res) => {
 
 app.get("/api/customer/profile", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
   const rows = await query<Record<string, unknown>>(
-    `select id,customer_number,full_name,email,phone,date_of_birth,favorite_drink
+    `select id,customer_number,full_name,email,phone,date_of_birth,favorite_drink,
+            marketing_consent as "marketingConsent",
+            marketing_consent_at as "marketingConsentAt"
      from accounts where id=$1`, [req.auth?.sub],
   );
   res.json({ profile: rows[0] });
@@ -452,9 +455,12 @@ app.patch("/api/customer/profile", authenticate, requireRoles("customer"), async
   if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
     throw new HttpError(400, "Date of birth must be in YYYY-MM-DD format.");
   }
+  const marketingConsent = req.body?.marketingConsent === true;
   await query(
-    `update accounts set full_name=$2,phone=$3,date_of_birth=$4,favorite_drink=$5 where id=$1`,
-    [req.auth?.sub, fullName, phone, dateOfBirth, String(req.body?.favoriteDrink || "").trim() || null],
+    `update accounts set full_name=$2,phone=$3,date_of_birth=$4,favorite_drink=$5,
+            marketing_consent=$6,marketing_consent_at=case when $6 and marketing_consent_at is null then now() when $6 then marketing_consent_at else null end
+     where id=$1`,
+    [req.auth?.sub, fullName, phone, dateOfBirth, String(req.body?.favoriteDrink || "").trim() || null, marketingConsent],
   );
   await query("insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)", [req.auth?.sub]);
   res.json({ ok: true });
@@ -658,7 +664,10 @@ app.get("/api/staff/queues", authenticate, requireRoles("owner","manager","cashi
 
 app.get("/api/staff/customers", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (_req, res) => {
   const rows = await query<Record<string, unknown>>(
-    `select id,full_name as "fullName",email,phone,customer_number as "customerNumber"
+    `select id,full_name as "fullName",email,phone,customer_number as "customerNumber",
+            marketing_consent as "marketingConsent",
+            marketing_consent_at as "marketingConsentAt",
+            created_at as "createdAt"
      from accounts where role='customer' and active=true order by full_name`,
   );
   res.json({ customers: rows });

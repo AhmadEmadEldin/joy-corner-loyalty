@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   restoreSession,
   subscribeToSession,
@@ -558,11 +558,27 @@ function StaffOrderForm({
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [category, setCategory] = useState("All");
+  const [menuQuery, setMenuQuery] = useState("");
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
       .catch((error) => setMessage(getMessage(error)));
   }, []);
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(menu.map((item) => item.category).filter(Boolean)))],
+    [menu],
+  );
+  const filteredMenu = useMemo(() => {
+    const search = menuQuery.trim().toLocaleLowerCase();
+    return menu.filter(
+      (item) =>
+        (category === "All" || item.category === category) &&
+        (!search ||
+          item.name.toLocaleLowerCase().includes(search) ||
+          item.description.toLocaleLowerCase().includes(search)),
+    );
+  }, [category, menu, menuQuery]);
   function add(item: MenuItem) {
     const size = item.sizes[0];
     if (!size) return;
@@ -664,22 +680,52 @@ function StaffOrderForm({
     <section className="portal-section">
       <h2>Create branch order</h2>
       <div className="staff-order-layout">
-        <div className="compact-menu">
-          {menu.map((item) => (
-            <button
-              disabled={!item.sizes.length}
-              key={item.id}
-              onClick={() => add(item)}
-              type="button"
-            >
-              <strong>{item.name}</strong>
-              <small>
-                {item.sizes[0]
-                  ? money.format(item.sizes[0].price)
-                  : "Unavailable"}
-              </small>
-            </button>
-          ))}
+        <div className="staff-menu-panel">
+          <label className="menu-search staff-search">
+            <span className="sr-only">Search menu</span>
+            <input
+              onChange={(e) => setMenuQuery(e.target.value)}
+              placeholder="Search menu…"
+              type="search"
+              value={menuQuery}
+            />
+          </label>
+          <nav aria-label="Menu categories" className="category-rail staff-category-rail">
+            {categories.map((name) => (
+              <button
+                aria-pressed={category === name}
+                className={category === name ? "active" : ""}
+                key={name}
+                onClick={() => setCategory(name)}
+                type="button"
+              >
+                {name}
+              </button>
+            ))}
+          </nav>
+          <div className="compact-menu">
+            {filteredMenu.map((item) => (
+              <button
+                disabled={!item.sizes.length}
+                key={item.id}
+                onClick={() => add(item)}
+                type="button"
+              >
+                <strong>{item.name}</strong>
+                {item.description ? <small className="menu-item-desc">{item.description}</small> : null}
+                <small className="menu-item-price">
+                  {item.sizes[0]
+                    ? money.format(item.sizes[0].price)
+                    : "Unavailable"}
+                </small>
+              </button>
+            ))}
+            {filteredMenu.length === 0 && menu.length > 0 ? (
+              <div className="empty-menu-state">
+                <p>No items in this category.</p>
+              </div>
+            ) : null}
+          </div>
         </div>
         <form className="profile-grid staff-order-form" onSubmit={submit}>
           <label>
@@ -1013,16 +1059,22 @@ function StaffCustomerDirectory({
       <div className="staff-table">
         <div className="staff-table-row heading">
           <span>Customer</span>
-          <span>Contact</span>
-          <span>Number</span>
+          <span>Email</span>
+          <span>Phone</span>
+          <span>Consent</span>
         </div>
         {customers.map((customer) => (
           <div className="staff-table-row" key={String(customer.id)}>
             <strong>{String(customer.fullName || "")}</strong>
+            <span>{String(customer.email || "—")}</span>
+            <span>{String(customer.phone || "—")}</span>
             <span>
-              {String(customer.phone || customer.email || "Restricted")}
+              {customer.marketingConsent ? (
+                <span className="consent-badge subscribed">Subscribed</span>
+              ) : (
+                <span className="consent-badge not-subscribed">Not subscribed</span>
+              )}
             </span>
-            <span>{String(customer.customerNumber || "")}</span>
           </div>
         ))}
       </div>

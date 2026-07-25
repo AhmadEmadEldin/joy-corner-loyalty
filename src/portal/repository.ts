@@ -173,6 +173,7 @@ export async function signUpCustomer(input: {
   fullName: string;
   password: string;
   phone: string;
+  marketingConsent?: boolean;
 }): Promise<void> {
   const result = await apiRequest<AuthResult>("/auth/signup", {
     body: JSON.stringify(input),
@@ -298,6 +299,7 @@ export async function updateCustomerProfile(input: {
   dateOfBirth: string | null;
   favoriteDrink: string | null;
   fullName: string;
+  marketingConsent?: boolean;
   phone: string;
 }): Promise<void> {
   await apiRequest("/customer/profile", { body: JSON.stringify(input), method: "PATCH" });

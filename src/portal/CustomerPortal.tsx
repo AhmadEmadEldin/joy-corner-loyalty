@@ -82,6 +82,7 @@ function CustomerAccess() {
         await signUpCustomer({
           email: String(form.get("email") || ""),
           fullName: String(form.get("fullName") || ""),
+          marketingConsent: form.get("marketingConsent") === "on",
           password: String(form.get("password") || ""),
           phone: String(form.get("phone") || ""),
         });
@@ -152,6 +153,12 @@ function CustomerAccess() {
               type="password"
             />
           </label>
+          {mode === "signup" ? (
+            <label className="consent-checkbox">
+              <input name="marketingConsent" type="checkbox" />
+              <span>I agree to receive Joy Corner offers and marketing emails.</span>
+            </label>
+          ) : null}
           <button disabled={busy} type="submit">
             {busy
               ? "Please wait…"
@@ -664,6 +671,7 @@ function ProfileForm({
         dateOfBirth: String(form.get("dateOfBirth") || "") || null,
         favoriteDrink: String(form.get("favoriteDrink") || "") || null,
         fullName: String(form.get("fullName") || ""),
+        marketingConsent: form.get("marketingConsent") === "on",
         phone: String(form.get("phone") || ""),
       });
       await onSaved();
@@ -716,6 +724,14 @@ function ProfileForm({
             defaultValue={profile.favorite_drink || ""}
             name="favoriteDrink"
           />
+        </label>
+        <label className="consent-checkbox">
+          <input
+            defaultChecked={Boolean((profile as Record<string, unknown>).marketingConsent)}
+            name="marketingConsent"
+            type="checkbox"
+          />
+          <span>I agree to receive Joy Corner offers and marketing emails.</span>
         </label>
         <button disabled={busy} type="submit">
           {busy ? "Saving…" : "Save profile"}
