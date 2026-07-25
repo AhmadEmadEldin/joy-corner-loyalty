@@ -546,6 +546,179 @@ export async function createStaffOrder(input: {
   });
 }
 
+// ─── Business Days ───────────────────────────
+
+export type BusinessDay = {
+  business_date: string;
+  closed_at: string | null;
+  closed_by_user_id: string | null;
+  gross_sales: number;
+  id: string;
+  net_sales: number;
+  notes: string | null;
+  opened_at: string;
+  opened_by_user_id: string;
+  order_count: number;
+  paid_amount: number;
+  partially_paid_amount: number;
+  receipt_count: number;
+  refunded_amount: number;
+  status: string;
+  unpaid_amount: number;
+};
+
+export async function loadCurrentBusinessDay(): Promise<BusinessDay | null> {
+  return (await apiRequest<{ businessDay: BusinessDay | null }>("/owner/business-days/current")).businessDay;
+}
+
+export async function loadBusinessDays(limit = 30): Promise<BusinessDay[]> {
+  return (await apiRequest<{ businessDays: BusinessDay[] }>(`/owner/business-days?limit=${limit}`)).businessDays;
+}
+
+export async function startBusinessDay(): Promise<BusinessDay> {
+  return (await apiRequest<{ businessDay: BusinessDay }>("/owner/business-days/start", { method: "POST", body: JSON.stringify({}) })).businessDay;
+}
+
+export async function closeBusinessDay(businessDayId: string, notes?: string): Promise<Record<string, unknown>> {
+  return (await apiRequest<{ report: Record<string, unknown> }>(`/owner/business-days/${encodeURIComponent(businessDayId)}/close`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  })).report;
+}
+
+export async function loadBusinessDayReport(businessDayId: string): Promise<Record<string, unknown>> {
+  return apiRequest(`/owner/business-days/${encodeURIComponent(businessDayId)}/report`);
+}
+
+export async function assignOrdersToBusinessDay(): Promise<{ assigned: number }> {
+  return apiRequest("/owner/business-days/assign-orders", { method: "POST", body: JSON.stringify({}) });
+}
+
+// ─── Owner Orders & Receipts ─────────────────
+
+export type OwnerOrder = {
+  archived: boolean;
+  archive_reason: string | null;
+  archived_at: string | null;
+  business_date: string | null;
+  business_day_id: string | null;
+  confirmation_status: string;
+  created_at: string;
+  creator_name: string | null;
+  customer_email: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  customer_notes: string;
+  customer_phone: string | null;
+  discount_total: number;
+  id: string;
+  item_summary: Array<{ itemName: string; originalUnitPrice?: number; overrideReason?: string; quantity: number; size: string; totalPrice: number; unitPrice: number }>;
+  order_number: string;
+  paid_amount: number;
+  payment_method: string | null;
+  payment_status: string;
+  pickup_name: string;
+  remaining_amount: number;
+  status: string;
+  subtotal: number;
+  tax_total: number;
+  total: number;
+  voucher_discount: number;
+};
+
+export async function loadOwnerOrders(params: {
+  businessDayId?: string;
+  dateFilter?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  page?: number;
+  paymentStatus?: string;
+  search?: string;
+  status?: string;
+} = {}): Promise<{ orders: OwnerOrder[]; total: number; page: number; totalPages: number }> {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set("status", params.status);
+  if (params.paymentStatus) qs.set("paymentStatus", params.paymentStatus);
+  if (params.search) qs.set("search", params.search);
+  if (params.businessDayId) qs.set("businessDayId", params.businessDayId);
+  if (params.dateFilter) qs.set("dateFilter", params.dateFilter);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.includeArchived) qs.set("includeArchived", "true");
+  return apiRequest(`/owner/orders?${qs.toString()}`);
+}
+
+// ─── Owner Overview ──────────────────────────
+
+export type OwnerOverviewStats = {
+  active_orders: number;
+  avg_order_value: number;
+  completed_orders: number;
+  gross_sales: number;
+  guest_orders: number;
+  net_sales: number;
+  paid_amount: number;
+  partially_paid_amount: number;
+  refunded_amount: number;
+  returning_customers: number;
+  total_items_sold: number;
+  total_receipts: number;
+  unpaid_amount: number;
+  unique_customers: number;
+};
+
+export async function loadOwnerOverview(dateFilter = "today", startDate?: string, endDate?: string): Promise<{
+  categories: Array<{ name: string; qty: number }>;
+  paymentMethods: Array<{ count: number; total: number; payment_method: string }>;
+  sizes: Array<{ name: string; qty: number }>;
+  stats: OwnerOverviewStats;
+  topProducts: Array<{ discount: number; gross_revenue: number; order_count: number; product: string; units_sold: number }>;
+}> {
+  const qs = new URLSearchParams({ dateFilter });
+  if (startDate) qs.set("startDate", startDate);
+  if (endDate) qs.set("endDate", endDate);
+  return apiRequest(`/owner/overview?${qs.toString()}`);
+}
+
+// ─── Payment Collection ──────────────────────
+
+export async function recordOwnerPayment(input: {
+  amount: number;
+  paymentMethod: string;
+  reference?: string;
+  receiptId: string;
+}): Promise<void> {
+  await apiRequest(`/owner/receipts/${encodeURIComponent(input.receiptId)}/payments`, {
+    body: JSON.stringify({ amount: input.amount, paymentMethod: input.paymentMethod, reference: input.reference }),
+    method: "POST",
+  });
+}
+
+export async function voidReceipt(receiptId: string, reason: string): Promise<void> {
+  await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/void`, {
+    body: JSON.stringify({ reason }),
+    method: "POST",
+  });
+}
+
+export async function archiveReceipt(receiptId: string, reason?: string): Promise<void> {
+  await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/archive`, {
+    body: JSON.stringify({ reason }),
+    method: "POST",
+  });
+}
+
+export async function unarchiveReceipt(receiptId: string): Promise<void> {
+  await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/unarchive`, { method: "POST", body: JSON.stringify({}) });
+}
+
+export async function overrideItemPrice(input: { newUnitPrice: number; orderItemId: string; reason: string }): Promise<void> {
+  await apiRequest(`/owner/receipts/${input.orderItemId}/price-override`, {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+
 export function subscribeToCustomerChanges(
   _customerId: string,
   onChange: () => void,

@@ -5,30 +5,44 @@ import {
   type SessionUser,
 } from "./client";
 import {
+  archiveReceipt,
+  assignOrdersToBusinessDay,
   buildWhatsAppVoucherLink,
+  BusinessDay,
   CartLine,
   changeOrderStatus,
+  closeBusinessDay,
   createCustomerVoucher,
   createStaffCustomer,
   createStaffOrder,
   confirmOrderPayment,
+  loadBusinessDayReport,
+  loadBusinessDays,
+  loadCurrentBusinessDay,
   loadCustomerDirectory,
   loadCustomerVouchers,
+  loadOwnerOrders,
+  loadOwnerOverview,
   loadStaffProfile,
   loadStaffQueues,
   loadMenu,
   loadVoucherRequests,
   MenuItem,
+  OwnerOrder,
+  OwnerOverviewStats,
   OwnerVoucher,
   QueueOrder,
+  recordOwnerPayment,
   reviewVoucherRequest,
   runEndDay,
   searchCustomerByPhone,
   signInStaff,
   signOutCustomer,
   StaffProfile,
+  startBusinessDay,
   subscribeToStaffQueues,
   VoucherRequest,
+  voidReceipt,
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
@@ -127,7 +141,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     [],
   );
   const [tab, setTab] = useState<
-    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu" | "voucher_requests"
+    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu" | "voucher_requests" | "orders_receipts" | "end_day" | "analytics"
   >("cashier");
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
@@ -372,6 +386,33 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
             Voucher Requests
           </button>
         ) : null}
+        {canOverview ? (
+          <button
+            className={tab === "orders_receipts" ? "active" : ""}
+            onClick={() => setTab("orders_receipts")}
+            type="button"
+          >
+            Orders &amp; Receipts
+          </button>
+        ) : null}
+        {canOverview ? (
+          <button
+            className={tab === "analytics" ? "active" : ""}
+            onClick={() => setTab("analytics")}
+            type="button"
+          >
+            Analytics
+          </button>
+        ) : null}
+        {profile?.role === "owner" ? (
+          <button
+            className={tab === "end_day" ? "active" : ""}
+            onClick={() => setTab("end_day")}
+            type="button"
+          >
+            End of Day
+          </button>
+        ) : null}
         {canKitchen ? (
           <button
             className={tab === "kitchen" ? "active" : ""}
@@ -503,6 +544,15 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       ) : null}
       {tab === "voucher_requests" && profile?.role === "owner" ? (
         <OwnerVoucherRequests onError={setMessage} />
+      ) : null}
+      {tab === "orders_receipts" && canOverview ? (
+        <OwnerOrdersReceipts onError={setMessage} userRole={profile?.role || "cashier"} />
+      ) : null}
+      {tab === "analytics" && canOverview ? (
+        <OwnerAnalytics onError={setMessage} />
+      ) : null}
+      {tab === "end_day" && profile?.role === "owner" ? (
+        <OwnerEndDay onError={setMessage} onRefreshQueues={() => profile ? refreshQueues(profile.role) : Promise.resolve()} />
       ) : null}
       {paymentOrder ? (
         <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
@@ -1609,6 +1659,513 @@ function OwnerVoucherRequests({ onError }: { onError: (msg: string) => void }) {
             </div>
           </div>
         </div>
+      ) : null}
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// OWNER ORDERS & RECEIPTS
+// ═══════════════════════════════════════════════════
+
+type OrdersTab = "all" | "active" | "completed" | "paid" | "unpaid" | "partially_paid";
+
+function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => void; userRole: string }) {
+  const [orders, setOrders] = useState<OwnerOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<OrdersTab>("all");
+  const [selectedOrder, setSelectedOrder] = useState<OwnerOrder | null>(null);
+  const [payModal, setPayModal] = useState<OwnerOrder | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("cash_at_cashier");
+  const [payBusy, setPayBusy] = useState(false);
+  const [voidModal, setVoidModal] = useState<OwnerOrder | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidBusy, setVoidBusy] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState<string | null>(null);
+
+  const loadOrders = useCallback(async (p: number, paymentFilter?: string, searchVal?: string) => {
+    setLoading(true);
+    try {
+      const params: Record<string, unknown> = { limit: 50, page: p };
+      if (paymentFilter && paymentFilter !== "all") {
+        if (paymentFilter === "active") params.status = "pending_confirmation,confirmed,accepted,preparing,ready,picked_up";
+        else if (paymentFilter === "completed") params.status = "closed";
+        else if (paymentFilter === "paid") params.paymentStatus = "paid";
+        else if (paymentFilter === "unpaid") params.paymentStatus = "unpaid";
+        else if (paymentFilter === "partially_paid") params.paymentStatus = "partially_paid";
+      }
+      if (searchVal) params.search = searchVal;
+      const result = await loadOwnerOrders(params);
+      setOrders(result.orders);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => { void loadOrders(1, tab, search); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function switchTab(newTab: OrdersTab) {
+    setTab(newTab);
+    setPage(1);
+    await loadOrders(1, newTab, search);
+  }
+
+  async function doSearch(val: string) {
+    setSearch(val);
+    setPage(1);
+    await loadOrders(1, tab, val);
+  }
+
+  async function recordPayment() {
+    if (!payModal || !payAmount) return;
+    const amount = Number(payAmount.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) { onError("Invalid amount."); return; }
+    setPayBusy(true);
+    try {
+      await recordOwnerPayment({ amount, paymentMethod: payMethod, receiptId: payModal.id });
+      setPayModal(null);
+      setPayAmount("");
+      await loadOrders(page, tab, search);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setPayBusy(false);
+    }
+  }
+
+  async function doVoid() {
+    if (!voidModal || !voidReason.trim()) return;
+    setVoidBusy(true);
+    try {
+      await voidReceipt(voidModal.id, voidReason.trim());
+      setVoidModal(null);
+      setVoidReason("");
+      await loadOrders(page, tab, search);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setVoidBusy(false);
+    }
+  }
+
+  async function doArchive(orderId: string) {
+    setArchiveBusy(orderId);
+    try {
+      await archiveReceipt(orderId, "Archived by owner");
+      await loadOrders(page, tab, search);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setArchiveBusy(null);
+    }
+  }
+
+  function printReceipt(order: OwnerOrder) {
+    const items = Array.isArray(order.item_summary) ? order.item_summary : [];
+    const html = buildReceiptPrintHtml({
+      customerName: order.customer_name || order.pickup_name,
+      items: items.map((item) => ({ itemName: item.itemName, qty: item.quantity, size: item.size, total: Number(item.totalPrice || 0), unitPrice: Number(item.unitPrice || 0) })),
+      notes: order.customer_notes,
+      orderDateTime: order.created_at ? new Date(order.created_at).toLocaleString() : "",
+      orderPlace: "Joy Corner",
+      outstandingAmount: order.remaining_amount,
+      paidAmount: order.paid_amount,
+      paymentStatus: order.payment_status?.replace(/_/g, " ") || "unpaid",
+      receiptNumber: order.order_number,
+      staff: order.creator_name || "Joy Corner",
+      subtotal: order.subtotal,
+      total: order.total,
+    });
+    const w = window.open("", "_blank", "width=900,height=800");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  return (
+    <section className="portal-section">
+      <header className="staff-queue-header">
+        <div>
+          <p className="eyebrow">Financial Operations</p>
+          <h2>Orders &amp; Receipts</h2>
+          <p className="muted">{total} receipts total</p>
+        </div>
+      </header>
+      <div className="customer-directory-filters" style={{ marginBottom: "1rem" }}>
+        <label className="menu-search staff-search" style={{ flex: 1 }}>
+          <span className="sr-only">Search orders</span>
+          <input onChange={(e) => void doSearch(e.target.value)} placeholder="Search by receipt #, customer name, phone…" type="search" value={search} />
+        </label>
+      </div>
+      <div className="category-rail staff-category-rail" style={{ margin: "0 0 1rem" }}>
+        {(["all", "active", "completed", "paid", "unpaid", "partially_paid"] as const).map((t) => (
+          <button aria-pressed={tab === t} className={tab === t ? "active" : ""} key={t} onClick={() => void switchTab(t)} type="button">
+            {t === "all" ? "All" : t === "active" ? "Active" : t === "completed" ? "Completed" : t === "paid" ? "Paid" : t === "unpaid" ? "Unpaid" : "Partially Paid"}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p className="muted">Loading orders…</p>
+      ) : !orders.length ? (
+        <div className="auth-staff-note"><p>No orders found.</p></div>
+      ) : (
+        <div className="queue-grid">
+          {orders.map((order) => (
+            <article className="queue-ticket" key={order.id} onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)} style={{ cursor: "pointer" }}>
+              <header>
+                <div>
+                  <strong>{order.order_number}</strong>
+                  <small>{order.customer_name || order.pickup_name}</small>
+                </div>
+                <div className="queue-statuses">
+                  <span className={`status-pill status-${order.status}`}>{statusLabel(order.status as OperationalOrderStatus)}</span>
+                  <span className={`payment-badge payment-${order.payment_status}`}>{order.payment_status?.replace(/_/g, " ")}</span>
+                </div>
+              </header>
+              {selectedOrder?.id === order.id ? (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <dl className="queue-payment-summary">
+                    <div><dt>Total</dt><dd>{money.format(order.total)}</dd></div>
+                    <div><dt>Paid</dt><dd>{money.format(order.paid_amount)}</dd></div>
+                    <div><dt>Remaining</dt><dd>{money.format(order.remaining_amount)}</dd></div>
+                  </dl>
+                  <ul style={{ fontSize: "0.8125rem", margin: "8px 0" }}>
+                    {order.item_summary.map((item, i) => (
+                      <li key={i}>{item.quantity} × {item.itemName} · {item.size} — {money.format(item.unitPrice)}/ea</li>
+                    ))}
+                  </ul>
+                  <div style={{ fontSize: "0.8125rem", color: "var(--joy-text-secondary)", marginBottom: 8 }}>
+                    {order.created_at && <span>{new Date(order.created_at).toLocaleString()} · </span>}
+                    {order.customer_phone && <span>{order.customer_name} — {order.customer_phone} · </span>}
+                    {order.creator_name && <span>By: {order.creator_name}</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="button-secondary" onClick={() => printReceipt(order)} type="button">Print</button>
+                    {order.payment_status !== "paid" && order.status !== "cancelled" && order.status !== "rejected" ? (
+                      <button onClick={() => { setPayModal(order); setPayAmount(order.remaining_amount > 0 ? order.remaining_amount.toFixed(2) : ""); }} type="button">
+                        Record Payment ({money.format(order.remaining_amount)})
+                      </button>
+                    ) : null}
+                    {userRole === "owner" && order.status !== "cancelled" && order.status !== "rejected" ? (
+                      <button className="button-danger" onClick={() => setVoidModal(order)} type="button" style={{ fontSize: "0.8125rem" }}>Void</button>
+                    ) : null}
+                    {userRole === "owner" && !order.archived ? (
+                      <button className="button-secondary" disabled={archiveBusy === order.id} onClick={() => void doArchive(order.id)} type="button" style={{ fontSize: "0.8125rem" }}>
+                        {archiveBusy === order.id ? "Archiving…" : "Archive"}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+      {totalPages > 1 ? (
+        <div className="customer-directory-pagination">
+          <button disabled={page <= 1} onClick={() => { setPage((p) => p - 1); void loadOrders(page - 1, tab, search); }} type="button">Previous</button>
+          <span className="muted">Page {page} of {totalPages}</span>
+          <button disabled={page >= totalPages} onClick={() => { setPage((p) => p + 1); void loadOrders(page + 1, tab, search); }} type="button">Next</button>
+        </div>
+      ) : null}
+      {payModal ? (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true">
+          <div className="payment-modal">
+            <header>
+              <p className="eyebrow">Collect Payment</p>
+              <h2>{payModal.order_number}</h2>
+              <p className="muted">Total: {money.format(payModal.total)} · Paid: {money.format(payModal.paid_amount)} · Remaining: {money.format(payModal.remaining_amount)}</p>
+            </header>
+            <label>Amount (EGP)
+              <input autoFocus inputMode="decimal" min="0.01" onChange={(e) => setPayAmount(e.target.value)} step="0.01" type="number" value={payAmount} />
+            </label>
+            <label>Method
+              <select onChange={(e) => setPayMethod(e.target.value)} value={payMethod}>
+                <option value="cash_at_cashier">Cash</option>
+                <option value="card_at_branch">Card</option>
+                <option value="instapay">InstaPay</option>
+                <option value="manual_transfer">Transfer</option>
+              </select>
+            </label>
+            <div className="payment-modal-actions">
+              <button className="button-secondary" disabled={payBusy} onClick={() => setPayModal(null)} type="button">Cancel</button>
+              <button disabled={payBusy || !payAmount} onClick={() => void recordPayment()} type="button">{payBusy ? "Recording…" : "Record Payment"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {voidModal ? (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true">
+          <div className="payment-modal">
+            <header>
+              <p className="eyebrow">Void Receipt</p>
+              <h2>{voidModal.order_number}</h2>
+            </header>
+            <label>Reason (required)
+              <input autoFocus onChange={(e) => setVoidReason(e.target.value)} value={voidReason} />
+            </label>
+            <div className="payment-modal-actions">
+              <button className="button-secondary" disabled={voidBusy} onClick={() => setVoidModal(null)} type="button">Cancel</button>
+              <button className="button-danger" disabled={voidBusy || !voidReason.trim()} onClick={() => void doVoid()} type="button">{voidBusy ? "Voiding…" : "Void Receipt"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// OWNER ANALYTICS
+// ═══════════════════════════════════════════════════
+
+function OwnerAnalytics({ onError }: { onError: (msg: string) => void }) {
+  const [stats, setStats] = useState<OwnerOverviewStats | null>(null);
+  const [topProducts, setTopProducts] = useState<Array<{ discount: number; gross_revenue: number; order_count: number; product: string; units_sold: number }>>([]);
+  const [categories, setCategories] = useState<Array<{ name: string; qty: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState("today");
+
+  const load = useCallback(async (filter: string) => {
+    setLoading(true);
+    try {
+      const data = await loadOwnerOverview(filter);
+      setStats(data.stats);
+      setTopProducts(data.topProducts);
+      setCategories(data.categories);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => { void load(dateFilter); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function switchFilter(f: string) {
+    setDateFilter(f);
+    await load(f);
+  }
+
+  return (
+    <section className="portal-section">
+      <header className="staff-queue-header">
+        <div>
+          <p className="eyebrow">Business Intelligence</p>
+          <h2>Sales Analytics</h2>
+        </div>
+      </header>
+      <div className="category-rail staff-category-rail" style={{ margin: "0 0 1rem" }}>
+        {(["today", "yesterday", "this_week", "this_month"] as const).map((f) => (
+          <button aria-pressed={dateFilter === f} className={dateFilter === f ? "active" : ""} key={f} onClick={() => void switchFilter(f)} type="button">
+            {f === "today" ? "Today" : f === "yesterday" ? "Yesterday" : f === "this_week" ? "This Week" : "This Month"}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p className="muted">Loading analytics…</p>
+      ) : stats ? (
+        <>
+          <div className="staff-metric-grid">
+            <div className="kpi-card"><small>Gross Sales</small><strong>{money.format(Number(stats.gross_sales || 0))}</strong></div>
+            <div className="kpi-card"><small>Net Sales</small><strong>{money.format(Number(stats.net_sales || 0))}</strong></div>
+            <div className="kpi-card"><small>Paid</small><strong>{money.format(Number(stats.paid_amount || 0))}</strong></div>
+            <div className="kpi-card"><small>Unpaid</small><strong>{money.format(Number(stats.unpaid_amount || 0))}</strong></div>
+            <div className="kpi-card"><small>Receipts</small><strong>{stats.total_receipts || 0}</strong></div>
+            <div className="kpi-card"><small>Completed</small><strong>{stats.completed_orders || 0}</strong></div>
+            <div className="kpi-card"><small>Active</small><strong>{stats.active_orders || 0}</strong></div>
+            <div className="kpi-card"><small>Avg Order</small><strong>{money.format(Number(stats.avg_order_value || 0))}</strong></div>
+            <div className="kpi-card"><small>Items Sold</small><strong>{stats.total_items_sold || 0}</strong></div>
+            <div className="kpi-card"><small>Customers</small><strong>{stats.unique_customers || 0}</strong></div>
+          </div>
+          <h3 style={{ marginTop: "1.5rem" }}>Top Products by Quantity</h3>
+          {topProducts.length ? (
+            <div className="staff-table">
+              <div className="staff-table-row heading">
+                <span>#</span><span>Product</span><span>Units</span><span>Orders</span><span>Revenue</span>
+              </div>
+              {topProducts.map((p, i) => (
+                <div className="staff-table-row" key={i}>
+                  <span>{i + 1}</span>
+                  <span><strong>{p.product}</strong></span>
+                  <span>{p.units_sold}</span>
+                  <span>{p.order_count}</span>
+                  <span>{money.format(Number(p.gross_revenue || 0))}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="muted">No sales data for this period.</p>}
+          {categories.length ? (
+            <>
+              <h3 style={{ marginTop: "1.5rem" }}>Popular Categories</h3>
+              <div className="staff-table">
+                <div className="staff-table-row heading"><span>Category</span><span>Units Sold</span></div>
+                {categories.map((c, i) => (
+                  <div className="staff-table-row" key={i}>
+                    <span><strong>{c.name}</strong></span>
+                    <span>{c.qty}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// OWNER END OF DAY
+// ═══════════════════════════════════════════════════
+
+function OwnerEndDay({ onError, onRefreshQueues }: { onError: (msg: string) => void; onRefreshQueues: () => Promise<void> }) {
+  const [currentDay, setCurrentDay] = useState<BusinessDay | null>(null);
+  const [history, setHistory] = useState<BusinessDay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [closing, setClosing] = useState(false);
+  const [showReport, setShowReport] = useState<Record<string, unknown> | null>(null);
+  const [closeNotes, setCloseNotes] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [bd, days] = await Promise.all([loadCurrentBusinessDay(), loadBusinessDays()]);
+      setCurrentDay(bd);
+      setHistory(days);
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleCloseDay() {
+    if (!currentDay) return;
+    setClosing(true);
+    try {
+      await closeBusinessDay(currentDay.id, closeNotes.trim() || undefined);
+      const report = await loadBusinessDayReport(currentDay.id);
+      setShowReport(report);
+      setCloseNotes("");
+      await load();
+      await onRefreshQueues();
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  async function handleStartDay() {
+    try {
+      await startBusinessDay();
+      await load();
+    } catch (error) {
+      onError(getMessage(error));
+    }
+  }
+
+  async function handleAssignOrders() {
+    setAssigning(true);
+    try {
+      await assignOrdersToBusinessDay();
+      await load();
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  return (
+    <section className="portal-section">
+      <header className="staff-queue-header">
+        <div>
+          <p className="eyebrow">Business Day Management</p>
+          <h2>End of Day</h2>
+        </div>
+      </header>
+      {loading ? (
+        <p className="muted">Loading business day status…</p>
+      ) : currentDay ? (
+        <div className="staff-overview">
+          <div className="staff-metric-grid">
+            <div className="kpi-card"><small>Status</small><strong style={{ color: "var(--joy-success)" }}>OPEN</strong></div>
+            <div className="kpi-card"><small>Date</small><strong>{currentDay.business_date}</strong></div>
+            <div className="kpi-card"><small>Opened</small><strong>{new Date(currentDay.opened_at).toLocaleTimeString()}</strong></div>
+            <div className="kpi-card"><small>Receipts</small><strong>{currentDay.receipt_count}</strong></div>
+          </div>
+          <div style={{ margin: "1rem 0" }}>
+            <button className="button-secondary" disabled={assigning} onClick={() => void handleAssignOrders()} type="button" style={{ marginRight: 8 }}>
+              {assigning ? "Assigning…" : "Assign Today's Orders"}
+            </button>
+          </div>
+          <label>
+            Closing Note (optional)
+            <textarea onChange={(e) => setCloseNotes(e.target.value)} rows={2} value={closeNotes} />
+          </label>
+          <button disabled={closing} onClick={() => void handleCloseDay()} type="button" style={{ marginTop: 8 }}>
+            {closing ? "Closing Business Day…" : "End Business Day"}
+          </button>
+        </div>
+      ) : (
+        <div className="staff-overview">
+          <p style={{ marginBottom: 16 }}>No business day is currently open.</p>
+          <button onClick={() => void handleStartDay()} type="button">Start New Business Day</button>
+        </div>
+      )}
+      {showReport ? (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true">
+          <div className="payment-modal" style={{ maxWidth: 600, maxHeight: "80vh", overflow: "auto" }}>
+            <header>
+              <p className="eyebrow">Daily Report</p>
+              <h2>Business Day Closed</h2>
+              <p>{String(showReport.business_date || "")}</p>
+            </header>
+            <div style={{ padding: 16, fontSize: "0.875rem" }}>
+              <p><strong>Order Count:</strong> {String(showReport.order_count || 0)}</p>
+              <p><strong>Gross Sales:</strong> {money.format(Number(showReport.gross_sales || 0))}</p>
+              <p><strong>Paid Amount:</strong> {money.format(Number(showReport.paid_amount || 0))}</p>
+              <p><strong>Unpaid:</strong> {money.format(Number(showReport.unpaid_amount || 0))}</p>
+              <p><strong>Refunded:</strong> {money.format(Number(showReport.refunded_amount || 0))}</p>
+              {showReport.notes ? <p><strong>Notes:</strong> {String(showReport.notes)}</p> : null}
+            </div>
+            <div className="payment-modal-actions">
+              <button onClick={() => setShowReport(null)} type="button">Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {history.length ? (
+        <>
+          <h3 style={{ marginTop: "1.5rem" }}>Business Day History</h3>
+          <div className="staff-table">
+            <div className="staff-table-row heading">
+              <span>Date</span><span>Status</span><span>Receipts</span><span>Gross Sales</span><span>Paid</span><span>Unpaid</span>
+            </div>
+            {history.map((bd) => (
+              <div className="staff-table-row" key={bd.id}>
+                <span><strong>{bd.business_date}</strong></span>
+                <span><span className={`status-pill status-${bd.status === "OPEN" ? "confirmed" : "closed"}`}>{bd.status}</span></span>
+                <span>{bd.receipt_count}</span>
+                <span>{money.format(Number(bd.gross_sales || 0))}</span>
+                <span>{money.format(Number(bd.paid_amount || 0))}</span>
+                <span>{money.format(Number(bd.unpaid_amount || 0))}</span>
+              </div>
+            ))}
+          </div>
+        </>
       ) : null}
     </section>
   );

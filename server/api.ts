@@ -1208,6 +1208,490 @@ app.post("/api/customer/voucher-requests/:id/cancel", authenticate, requireRoles
   res.json({ ok: true });
 }));
 
+// ─────────────────────────────────────────────────────
+// BUSINESS DAY MANAGEMENT
+// ─────────────────────────────────────────────────────
+
+async function getCurrentBusinessDay() {
+  const rows = await query<Record<string, unknown>>(
+    "select * from business_days where status='OPEN' order by opened_at desc limit 1",
+  );
+  return rows[0] || null;
+}
+
+app.get("/api/owner/business-days/current", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (_req, res) => {
+  const bd = await getCurrentBusinessDay();
+  res.json({ businessDay: bd });
+}));
+
+app.get("/api/owner/business-days", authenticate, requireRoles("owner","manager"), asyncRoute(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 30, 100);
+  const rows = await query<Record<string, unknown>>(
+    "select * from business_days order by business_date desc limit $1", [limit],
+  );
+  res.json({ businessDays: rows });
+}));
+
+app.post("/api/owner/business-days/start", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const existing = await getCurrentBusinessDay();
+  if (existing) throw new HttpError(409, "A business day is already open.");
+  const businessDate = String(req.body?.businessDate || getCairoBusinessDate());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) throw new HttpError(400, "Business date must use YYYY-MM-DD.");
+  const duplicate = await query<{ id: string }>(
+    "select id from business_days where business_date=$1", [businessDate],
+  );
+  if (duplicate[0]) throw new HttpError(409, "A business day record already exists for this date.");
+  const [inserted] = await query<Record<string, unknown>>(
+    `insert into business_days(business_date, opened_by_user_id) values($1,$2) returning *`,
+    [businessDate, req.auth?.sub],
+  );
+  res.status(201).json({ businessDay: inserted });
+}));
+
+app.get("/api/owner/business-days/:id/report", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const bd = await query<Record<string, unknown>>("select * from business_days where id=$1", [req.params.id]);
+  if (!bd[0]) throw new HttpError(404, "Business day not found.");
+  const businessDate = String(bd[0].business_date);
+  const [orders, payments, productSummary, serviceSummary, staffSummary] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select o.id,o.order_number,o.pickup_name,o.status,o.payment_status,o.payment_method,
+              o.subtotal,o.discount_total,o.voucher_discount,o.total,
+              coalesce((select sum(p.amount) from payments p where p.order_id=o.id and not p.is_refund and not p.voided),0) as paid_amount,
+              greatest(o.total-coalesce((select sum(p.amount) from payments p where p.order_id=o.id and not p.is_refund and not p.voided),0),0) as remaining_amount,
+              o.created_at,
+              a.full_name as customer_name, a.phone as customer_phone,
+              cb.full_name as cashier_name, cr.full_name as creator_name
+       from orders o
+       left join accounts a on a.id=o.customer_id
+       left join accounts cb on cb.id=(select p.received_by from payments p where p.order_id=o.id order by p.created_at desc limit 1)
+       left join accounts cr on cr.id=o.created_by
+       where o.business_date=$1
+       order by o.created_at`,
+      [businessDate],
+    ),
+    query<Record<string, unknown>>(
+      `select payment_method,sum(amount) as total, count(*)::int as count,
+              sum(case when is_refund then amount else 0 end) as refund_total,
+              sum(case when voided then amount else 0 end) as void_total
+       from payments p where (p.created_at at time zone 'Africa/Cairo')::date=$1::date
+       group by payment_method`,
+      [businessDate],
+    ),
+    query<Record<string, unknown>>(
+      `select oi.item_name_snapshot as product, sum(oi.quantity)::int as quantity,
+              sum(oi.total_price)::numeric(12,2) as gross_revenue,
+              sum(oi.total_price - oi.quantity * oi.unit_price)::numeric(12,2) as discounts
+       from order_items oi
+       join orders o on o.id=oi.order_id
+       where o.business_date=$1 and o.status='closed' and not o.archived
+       group by oi.item_name_snapshot order by quantity desc`,
+      [businessDate],
+    ),
+    query<Record<string, unknown>>(
+      `select o.pickup_name as service_type, count(*)::int as order_count, sum(o.total)::numeric(12,2) as total
+       from orders o where o.business_date=$1 and o.status='closed' and not o.archived
+       group by o.pickup_name`,
+      [businessDate],
+    ),
+    query<Record<string, unknown>>(
+      `select cr.full_name as staff_name, count(*)::int as order_count
+       from orders o join accounts cr on cr.id=o.created_by
+       where o.business_date=$1 and o.status='closed' and not o.archived
+       group by cr.full_name order by order_count desc`,
+      [businessDate],
+    ),
+  ]);
+  const summary = bd[0];
+  const unpaidCarryForward = orders.filter((o) => String(o.payment_status) !== "paid" && String(o.status) !== "cancelled" && String(o.status) !== "voided");
+  res.json({ businessDay: summary, orders, payments, productSummary, serviceSummary, staffSummary, unpaidCarryForward });
+}));
+
+app.post("/api/owner/business-days/:id/close", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const businessDayId = req.params.id;
+  const notes = String(req.body?.notes || "").trim().slice(0, 1000) || null;
+  const report = await transaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`joy-corner-end-day:${businessDayId}`]);
+    const bd = await client.query<Record<string, unknown>>("select * from business_days where id=$1 for update", [businessDayId]);
+    const row = bd.rows[0];
+    if (!row) throw new HttpError(404, "Business day not found.");
+    if (row.status !== "OPEN") throw new HttpError(409, "This business day has already been closed.");
+    const activeOrders = await client.query<{ count: string }>(
+      `select count(*)::text as count from orders
+       where business_day_id=$1 and status not in ('closed','rejected','cancelled')`,
+      [businessDayId],
+    );
+    if (Number(activeOrders.rows[0]?.count || 0) > 0) {
+      throw new HttpError(409, `${activeOrders.rows[0]?.count} order(s) must be closed, rejected, or cancelled before End Day.`);
+    }
+    const summary = await client.query<Record<string, unknown>>(
+      `select count(*)::int as order_count,
+              count(*) filter (where status='closed')::int as closed_order_count,
+              count(*) filter (where status in ('cancelled','rejected'))::int as cancelled_order_count,
+              coalesce(sum(total) filter (where status='closed' and not archived),0)::numeric(12,2) as gross_sales,
+              coalesce(sum(total) filter (where status='closed' and not archived),0)::numeric(12,2) as net_sales,
+              coalesce(sum(voucher_discount) filter (where not archived),0)::numeric(12,2) as voucher_discounts,
+              coalesce((select sum(p.amount) from payments p
+                join orders o2 on o2.id=p.order_id where o2.business_day_id=$1 and not p.is_refund and not p.voided),0)::numeric(12,2) as paid_amount,
+              coalesce((select sum(greatest(o2.total-coalesce((select sum(p2.amount) from payments p2 where p2.order_id=o2.id and not p2.is_refund and not p2.voided),0),0)) from orders o2 where o2.business_day_id=$1 and o2.status='closed' and o2.payment_status != 'paid' and not o2.archived),0)::numeric(12,2) as unpaid_amount,
+              coalesce((select sum(o2.total) from orders o2 where o2.business_day_id=$1 and o2.payment_status='partially_paid' and o2.status='closed' and not o2.archived),0)::numeric(12,2) as partially_paid_amount,
+              coalesce((select sum(p.amount) from payments p join orders o2 on o2.id=p.order_id where o2.business_day_id=$1 and p.is_refund),0)::numeric(12,2) as refunded_amount
+       from orders where business_day_id=$1`,
+      [businessDayId],
+    );
+    const s = summary.rows[0] || {};
+    await client.query(
+      `update business_days set status='CLOSED',closed_at=now(),closed_by_user_id=$2,
+              gross_sales=$3,net_sales=$4,paid_amount=$5,unpaid_amount=$6,
+              partially_paid_amount=$7,refunded_amount=$8,
+              receipt_count=$9,order_count=$10,notes=$11,updated_at=now()
+       where id=$1`,
+      [businessDayId, req.auth?.sub, s.gross_sales || 0, s.net_sales || 0, s.paid_amount || 0,
+       s.unpaid_amount || 0, s.partially_paid_amount || 0, s.refunded_amount || 0,
+       s.order_count || 0, s.order_count || 0, notes],
+    );
+    await client.query(
+      "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'close_day','business_day',$3,$4::jsonb)",
+      [req.auth?.sub, req.auth?.role, businessDayId, JSON.stringify({ businessDate: String(row.business_date), notes })],
+    );
+    return { ...s, business_date: String(row.business_date), notes };
+  });
+  res.json({ report });
+}));
+
+// ─────────────────────────────────────────────────────
+// OWNER ORDERS & RECEIPTS
+// ─────────────────────────────────────────────────────
+
+app.get("/api/owner/orders", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+  const offset = (page - 1) * limit;
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
+  const statusFilter = String(req.query.status || "").trim();
+  const paymentStatus = String(req.query.paymentStatus || "").trim();
+  const search = String(req.query.search || "").trim();
+  const businessDayId = String(req.query.businessDayId || "").trim();
+  const dateFilter = String(req.query.dateFilter || "").trim();
+
+  if (statusFilter) {
+    const statuses = statusFilter.split(",").map((s) => s.trim()).filter(Boolean);
+    if (statuses.length) { conditions.push(`o.status = any($${paramIdx}::text[])`); params.push(statuses); paramIdx++; }
+  }
+  if (paymentStatus) {
+    const pstatuses = paymentStatus.split(",").map((s) => s.trim()).filter(Boolean);
+    if (pstatuses.length) { conditions.push(`o.payment_status = any($${paramIdx}::text[])`); params.push(pstatuses); paramIdx++; }
+  }
+  if (businessDayId) {
+    conditions.push(`o.business_day_id=$${paramIdx}`); params.push(businessDayId); paramIdx++;
+  } else if (dateFilter === "current_day") {
+    const bd = await getCurrentBusinessDay();
+    if (bd) { conditions.push(`o.business_day_id=$${paramIdx}`); params.push(bd.id); paramIdx++; }
+  } else if (dateFilter === "previous_days") {
+    const bd = await getCurrentBusinessDay();
+    if (bd) { conditions.push(`(o.business_day_id is null or o.business_day_id != $${paramIdx})`); params.push(bd.id); paramIdx++; }
+  }
+  if (search) {
+    conditions.push(`(o.order_number ilike $${paramIdx} or o.pickup_name ilike $${paramIdx} or o.customer_notes ilike $${paramIdx} or a.full_name ilike $${paramIdx} or a.phone ilike $${paramIdx} or a.email ilike $${paramIdx})`);
+    params.push(`%${search}%`); paramIdx++;
+  }
+  if (!req.query.includeArchived) {
+    conditions.push("not o.archived");
+  }
+
+  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+  const countResult = await query<{ count: string }>(
+    `select count(*)::text as count from orders o left join accounts a on a.id=o.customer_id ${where}`,
+    params,
+  );
+  const total = Number(countResult[0]?.count || 0);
+
+  const rows = await query<Record<string, unknown>>(
+    `select o.id,o.order_number,o.pickup_name,o.status,o.confirmation_status,
+            o.payment_status,o.payment_method,o.subtotal,o.discount_total,o.voucher_discount,o.tax_total,o.total,
+            coalesce((select sum(p.amount) from payments p where p.order_id=o.id and not p.is_refund and not p.voided),0) as paid_amount,
+            greatest(o.total-coalesce((select sum(p.amount) from payments p where p.order_id=o.id and not p.is_refund and not p.voided),0),0) as remaining_amount,
+            o.customer_notes,o.created_at,o.closed_at,o.archived,o.archived_at,o.archive_reason,
+            o.business_day_id,o.business_date,
+            a.full_name as customer_name,a.phone as customer_phone,a.email as customer_email,a.id as customer_id,
+            cr.full_name as creator_name,
+            coalesce(jsonb_agg(jsonb_build_object('itemName',oi.item_name_snapshot,'quantity',oi.quantity,'size',oi.size_name,
+              'unitPrice',oi.unit_price,'totalPrice',oi.total_price,'originalUnitPrice',oi.original_unit_price,
+              'overrideReason',oi.override_reason)
+              order by oi.created_at) filter (where oi.id is not null),'[]'::jsonb) as item_summary
+     from orders o
+     left join accounts a on a.id=o.customer_id
+     left join accounts cr on cr.id=o.created_by
+     left join order_items oi on oi.order_id=o.id
+     ${where}
+     group by o.id,a.id,cr.id
+     order by o.created_at desc
+     limit $${paramIdx} offset $${paramIdx + 1}`,
+    [...params, limit, offset],
+  );
+
+  const numericFields = ["subtotal","discount_total","voucher_discount","tax_total","total","paid_amount","remaining_amount"];
+  const result = rows.map((row) => Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key, numericFields.includes(key) ? Number(value) : value]),
+  ));
+
+  res.json({ orders: result, total, page, limit, totalPages: Math.ceil(total / limit) });
+}));
+
+// ─────────────────────────────────────────────────────
+// OWNER OVERVIEW ANALYTICS
+// ─────────────────────────────────────────────────────
+
+app.get("/api/owner/overview", authenticate, requireRoles("owner","manager"), asyncRoute(async (req, res) => {
+  const dateFilter = String(req.query.dateFilter || "today").trim();
+  let dateCondition: string;
+  const params: unknown[] = [];
+  const paramIdx = 1;
+
+  if (dateFilter === "yesterday") {
+    dateCondition = `(o.created_at at time zone 'Africa/Cairo')::date = (current_date at time zone 'Africa/Cairo')::date - 1`;
+  } else if (dateFilter === "this_week") {
+    dateCondition = `(o.created_at at time zone 'Africa/Cairo')::date >= (current_date at time zone 'Africa/Cairo')::date - extract(dow from current_date at time zone 'Africa/Cairo')::int`;
+  } else if (dateFilter === "this_month") {
+    dateCondition = `date_trunc('month', o.created_at at time zone 'Africa/Cairo') = date_trunc('month', current_date at time zone 'Africa/Cairo')`;
+  } else if (dateFilter === "custom" && req.query.startDate && req.query.endDate) {
+    dateCondition = `(o.created_at at time zone 'Africa/Cairo')::date >= $${paramIdx}::date and (o.created_at at time zone 'Africa/Cairo')::date <= $${paramIdx + 1}::date`;
+    params.push(String(req.query.startDate), String(req.query.endDate));
+  } else {
+    dateCondition = `(o.created_at at time zone 'Africa/Cairo')::date = (current_date at time zone 'Africa/Cairo')::date`;
+  }
+
+  const [stats, topProducts, categories, sizes, modifiers] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select
+         coalesce(sum(o.total) filter (where o.status='closed' and not o.archived),0)::numeric(12,2) as gross_sales,
+         coalesce(sum(o.total - o.voucher_discount) filter (where o.status='closed' and not o.archived),0)::numeric(12,2) as net_sales,
+         coalesce((select sum(p.amount) from payments p join orders o2 on o2.id=p.order_id where not p.is_refund and not p.voided and ${dateCondition.replace(/o\./g, "o2.")}),0)::numeric(12,2) as paid_amount,
+         coalesce(sum(greatest(o.total-coalesce((select sum(p.amount) from payments p where p.order_id=o.id and not p.is_refund and not p.voided),0),0)) filter (where o.status='closed' and o.payment_status != 'paid' and not o.archived),0)::numeric(12,2) as unpaid_amount,
+         coalesce(sum(o.total) filter (where o.status='closed' and o.payment_status='partially_paid' and not o.archived),0)::numeric(12,2) as partially_paid_amount,
+         coalesce((select sum(p.amount) from payments p join orders o2 on o2.id=p.order_id where p.is_refund and ${dateCondition.replace(/o\./g, "o2.")}),0)::numeric(12,2) as refunded_amount,
+         count(*) filter (where not o.archived and o.status not in ('cancelled','rejected'))::int as total_receipts,
+         count(*) filter (where o.status='closed' and not o.archived)::int as completed_orders,
+         count(*) filter (where o.status not in ('closed','rejected','cancelled') and not o.archived)::int as active_orders,
+         case when count(*) filter (where o.status='closed' and not o.archived) > 0
+           then (coalesce(sum(o.total) filter (where o.status='closed' and not o.archived),0) / count(*) filter (where o.status='closed' and not o.archived))::numeric(12,2)
+           else 0 end as avg_order_value,
+         coalesce(sum(oi.quantity) filter (where o.status='closed' and not o.archived),0)::int as total_items_sold,
+         count(distinct o.customer_id) filter (where o.status='closed' and not o.archived and o.customer_id is not null)::int as unique_customers,
+         count(distinct o.customer_id) filter (where o.status='closed' and not o.archived and o.customer_id is not null and
+           (select count(*) from orders o3 where o3.customer_id=o.customer_id and o3.created_at < o.created_at) > 0)::int as returning_customers,
+         count(*) filter (where o.status='closed' and not o.archived and o.customer_id is null)::int as guest_orders
+       from orders o
+       left join order_items oi on oi.order_id=o.id
+       where ${dateCondition}`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `select oi.item_name_snapshot as product, sum(oi.quantity)::int as units_sold,
+              count(distinct oi.order_id)::int as order_count,
+              sum(oi.total_price)::numeric(12,2) as gross_revenue,
+              sum(oi.total_price - oi.quantity * oi.unit_price)::numeric(12,2) as discounts
+       from order_items oi
+       join orders o on o.id=oi.order_id
+       where o.status='closed' and not o.archived and ${dateCondition}
+       group by oi.item_name_snapshot order by units_sold desc limit 10`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `select oi.item_name_snapshot as product, oi.quantity, oi.total_price
+       from order_items oi join orders o on o.id=oi.order_id
+       where o.status='closed' and not o.archived and ${dateCondition}`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `select oi.item_name_snapshot as product, sum(oi.quantity)::int as units_sold
+       from order_items oi join orders o on o.id=oi.order_id
+       where o.status='closed' and not o.archived and ${dateCondition}
+       group by oi.item_name_snapshot order by units_sold desc`,
+      params,
+    ),
+    query<Record<string, unknown>>(
+      `select o.payment_method, count(*)::int as count, coalesce(sum(o.total),0)::numeric(12,2) as total
+       from orders o where o.status='closed' and not o.archived and ${dateCondition}
+       group by o.payment_method`,
+      params,
+    ),
+  ]);
+
+  const catMap = new Map<string, number>();
+  const sizeMap = new Map<string, number>();
+  categories.forEach((r) => { catMap.set(String(r.product), Number(r.units_sold)); });
+  sizes.forEach((r) => { sizeMap.set(String(r.product), Number(r.units_sold)); });
+
+  res.json({
+    stats: stats[0] || {},
+    topProducts,
+    categories: Array.from(catMap.entries()).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty),
+    sizes: Array.from(sizeMap.entries()).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty),
+    paymentMethods: modifiers,
+  });
+}));
+
+// ─────────────────────────────────────────────────────
+// TOP SELLING ANALYTICS
+// ─────────────────────────────────────────────────────
+
+app.get("/api/owner/analytics/products", authenticate, requireRoles("owner","manager"), asyncRoute(async (req, res) => {
+  const dateStart = String(req.query.startDate || "").trim();
+  const dateEnd = String(req.query.endDate || "").trim();
+  const categoryFilter = String(req.query.category || "").trim();
+  let dateCondition = "o.status='closed' and not o.archived";
+  const params: unknown[] = [];
+  let paramIdx = 1;
+  if (dateStart && dateEnd) {
+    dateCondition += ` and (o.created_at at time zone 'Africa/Cairo')::date >= $${paramIdx}::date and (o.created_at at time zone 'Africa/Cairo')::date <= $${paramIdx + 1}::date`;
+    params.push(dateStart, dateEnd);
+    paramIdx += 2;
+  }
+  if (categoryFilter) {
+    dateCondition += ` and oi.category_name_snapshot=$${paramIdx}`;
+    params.push(categoryFilter);
+  }
+  const rows = await query<Record<string, unknown>>(
+    `select oi.item_name_snapshot as product, oi.category_name_snapshot as category,
+            sum(oi.quantity)::int as units_sold,
+            count(distinct oi.order_id)::int as order_count,
+            sum(oi.total_price)::numeric(12,2) as gross_revenue,
+            sum(oi.quantity * oi.unit_price)::numeric(12,2) as net_revenue,
+            sum(oi.total_price - oi.quantity * oi.unit_price)::numeric(12,2) as discounts,
+            avg(oi.unit_price)::numeric(12,2) as avg_selling_price,
+            max(o.created_at) as last_sold_at
+     from order_items oi
+     join orders o on o.id=oi.order_id
+     where ${dateCondition}
+     group by oi.item_name_snapshot, oi.category_name_snapshot
+     order by net_revenue desc`,
+    params,
+  );
+  res.json({ products: rows.map((r, i) => ({ ...r, rank: i + 1 })) });
+}));
+
+// ─────────────────────────────────────────────────────
+// PAYMENT COLLECTION & VOID/REFUND
+// ─────────────────────────────────────────────────────
+
+app.post("/api/owner/receipts/:id/payments", authenticate, requireRoles("owner","cashier"), asyncRoute(async (req, res) => {
+  const amount = Number(req.body?.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "Payment amount must be greater than zero.");
+  const paymentMethod = String(req.body?.paymentMethod || "cash_at_cashier").trim();
+  const reference = String(req.body?.reference || "").trim().slice(0, 200) || null;
+  await transaction(async (client) => {
+    const orderResult = await client.query<Record<string, unknown>>("select * from orders where id=$1 for update", [req.params.id]);
+    const order = orderResult.rows[0];
+    if (!order) throw new HttpError(404, "Order not found.");
+    if (["cancelled","rejected"].includes(String(order.status))) throw new HttpError(409, "Cannot record payment for a cancelled or rejected order.");
+    const paidResult = await client.query<{ paid: string }>(
+      "select coalesce(sum(amount),0)::text as paid from payments where order_id=$1 and not is_refund and not voided", [req.params.id],
+    );
+    const paidBefore = Number(paidResult.rows[0]?.paid || 0);
+    const remaining = Math.max(0, Number(order.total) - paidBefore);
+    if (amount > remaining + 0.01) throw new HttpError(409, "Payment exceeds the remaining balance.");
+    const sequence = await client.query<{ value: string }>("select nextval('payment_number_seq')::text as value");
+    const paymentNumber = `PAY-${String(sequence.rows[0]?.value || "0").padStart(6, "0")}`;
+    await client.query(
+      `insert into payments(payment_number,order_id,amount,payment_method,reference,received_by) values($1,$2,$3,$4,$5,$6)`,
+      [paymentNumber, req.params.id, amount, paymentMethod, reference, req.auth?.sub],
+    );
+    const newPaid = paidBefore + amount;
+    const paymentStatus = newPaid >= Number(order.total) - 0.01 ? "paid" : "partially_paid";
+    await client.query("update orders set payment_status=$2,payment_method=$3 where id=$1", [req.params.id, paymentStatus, paymentMethod]);
+    await client.query("insert into reporting_outbox(topic,entity_id,payload) values('payments',$1,$2::jsonb)", [req.params.id, JSON.stringify({ amount, paymentStatus })]);
+    await client.query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'record_payment','order',$3,$4::jsonb)", [req.auth?.sub, req.auth?.role, req.params.id, JSON.stringify({ amount, paymentMethod, paymentNumber, reference })]);
+  });
+  res.json({ ok: true });
+}));
+
+app.post("/api/owner/receipts/:id/void", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const reason = String(req.body?.reason || "").trim();
+  if (!reason) throw new HttpError(400, "A void reason is required.");
+  await transaction(async (client) => {
+    const order = await client.query<Record<string, unknown>>("select * from orders where id=$1 for update", [req.params.id]);
+    if (!order.rows[0]) throw new HttpError(404, "Order not found.");
+    if (String(order.rows[0].status) === "voided") throw new HttpError(409, "Order is already voided.");
+    await client.query(`update orders set status='cancelled',cancellation_reason=$2 where id=$1`, [req.params.id, `VOIDED: ${reason}`]);
+    await client.query(
+      "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'void','order',$3,$4::jsonb)",
+      [req.auth?.sub, req.auth?.role, req.params.id, JSON.stringify({ reason })],
+    );
+  });
+  res.json({ ok: true });
+}));
+
+app.post("/api/owner/receipts/:id/archive", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const reason = String(req.body?.reason || "").trim();
+  await query(
+    `update orders set archived=true,archived_at=now(),archived_by_user_id=$2,archive_reason=$3 where id=$1`,
+    [req.params.id, req.auth?.sub, reason || null],
+  );
+  await query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'archive','order',$3,$4::jsonb)", [req.auth?.sub, req.auth?.role, req.params.id, JSON.stringify({ reason })]);
+  res.json({ ok: true });
+}));
+
+app.post("/api/owner/receipts/:id/unarchive", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  await query(
+    `update orders set archived=false,archived_at=null,archived_by_user_id=null,archive_reason=null where id=$1`,
+    [req.params.id],
+  );
+  res.json({ ok: true });
+}));
+
+app.post("/api/owner/receipts/:id/price-override", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const { orderItemId, newUnitPrice, reason } = req.body || {};
+  if (!orderItemId || !Number.isFinite(Number(newUnitPrice)) || Number(newUnitPrice) <= 0) throw new HttpError(400, "Invalid override data.");
+  if (!reason || !String(reason).trim()) throw new HttpError(400, "Override reason is required.");
+  await transaction(async (client) => {
+    const item = await client.query<Record<string, unknown>>(
+      "select * from order_items where id=$1 for update", [orderItemId],
+    );
+    if (!item.rows[0]) throw new HttpError(404, "Order item not found.");
+    const oldPrice = Number(item.rows[0].unit_price);
+    const newPrice = Number(newUnitPrice);
+    const qty = Number(item.rows[0].quantity);
+    const totalDiff = (newPrice - oldPrice) * qty;
+    await client.query(
+      `update order_items set original_unit_price=$2,unit_price=$3,
+              total_price=$3 * quantity + modifiers_total,
+              override_reason=$4,overridden_by_user_id=$5,overridden_at=now()
+       where id=$1`,
+      [orderItemId, oldPrice, newPrice, String(reason).trim(), req.auth?.sub],
+    );
+    const order = await client.query<Record<string, unknown>>(
+      "select * from orders where id=$1 for update", [item.rows[0].order_id],
+    );
+    if (order.rows[0]) {
+      const newSubtotal = Number(order.rows[0].subtotal) + totalDiff;
+      const newTotal = Math.max(0, newSubtotal - Number(order.rows[0].voucher_discount));
+      await client.query("update orders set subtotal=$2,total=$3 where id=$1", [item.rows[0].order_id, newSubtotal, newTotal]);
+    }
+    await client.query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'price_override','order_item',$3,$4::jsonb)", [req.auth?.sub, req.auth?.role, orderItemId, JSON.stringify({ oldPrice, newPrice, qty, totalDiff, reason, orderNumber: order.rows[0]?.order_number })]);
+  });
+  res.json({ ok: true });
+}));
+
+// ─────────────────────────────────────────────────────
+// ASSIGN BUSINESS DAY TO EXISTING ORDERS (migration helper)
+// ─────────────────────────────────────────────────────
+
+app.post("/api/owner/business-days/assign-orders", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
+  const bd = await getCurrentBusinessDay();
+  if (!bd) throw new HttpError(409, "No open business day found.");
+  const updated = await query(
+    `update orders set business_day_id=$1, business_date=$2
+     where business_day_id is null and (created_at at time zone 'Africa/Cairo')::date=$2::date`,
+    [bd.id, bd.business_date],
+  );
+  res.json({ ok: true, assigned: (updated as unknown as { rowCount: number }).rowCount || 0 });
+}));
+
+// ─────────────────────────────────────────────────────
+
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (error instanceof HttpError) {
     res.status(error.status).json({ error: error.message });
