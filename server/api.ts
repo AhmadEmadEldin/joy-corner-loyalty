@@ -16,6 +16,7 @@ import {
   query,
   transaction,
 } from "./neon";
+import { getMenuSyncResult, clearMenuSyncCache, menuSyncCacheInfo } from "./menuSync";
 
 dotenv.config({ path: [".env.local", ".env"] });
 
@@ -884,6 +885,57 @@ app.post("/api/admin/end-day", authenticate, requireRoles("owner", "manager"), a
 
 app.get("/api/owner/menu", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
   res.json({ items: await menuItems(true) });
+}));
+
+app.get("/api/menu/sync", asyncRoute(async (_req, res) => {
+  try {
+    const result = await getMenuSyncResult();
+    res.json({
+      products: result.products,
+      categories: result.categories,
+      lastSyncedAt: result.lastSyncedAt,
+      productCount: result.productCount,
+      categoryCount: result.categoryCount,
+      unavailableCount: result.unavailableCount,
+      errors: result.errors,
+      fromCache: result.fromCache,
+    });
+  } catch (error) {
+    const fallback = await menuItems(false);
+    res.json({
+      products: [],
+      categories: [],
+      lastSyncedAt: null,
+      productCount: fallback.length,
+      categoryCount: 0,
+      unavailableCount: 0,
+      errors: [error instanceof Error ? error.message : "Menu sync unavailable"],
+      fromCache: true,
+      fallbackItems: fallback,
+    });
+  }
+}));
+
+app.post("/api/owner/menu/sync/refresh", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
+  clearMenuSyncCache();
+  const result = await getMenuSyncResult(true);
+  res.json({
+    ok: true,
+    lastSyncedAt: result.lastSyncedAt,
+    productCount: result.productCount,
+    categoryCount: result.categoryCount,
+    unavailableCount: result.unavailableCount,
+    errors: result.errors,
+  });
+}));
+
+app.get("/api/owner/menu/sync/status", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
+  const info = menuSyncCacheInfo();
+  res.json({
+    cached: info.cached,
+    expiresAt: info.expiresAt,
+    productCount: info.productCount,
+  });
 }));
 
 app.patch("/api/owner/menu/items/:id", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {

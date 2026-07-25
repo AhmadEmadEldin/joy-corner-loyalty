@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <rect width="800" height="600" fill="#FAF3E8"/>
+  <g opacity="0.15" fill="#6B4634">
+    <!-- Coffee beans pattern -->
+    <ellipse cx="120" cy="180" rx="18" ry="28" transform="rotate(-20 120 180)"/>
+    <path d="M120 155c0 0 2 25 0 50" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="200" cy="320" rx="16" ry="24" transform="rotate(15 200 320)"/>
+    <path d="M200 298c0 0 2 22 0 44" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="680" cy="150" rx="15" ry="22" transform="rotate(-30 680 150)"/>
+    <path d="M680 130c0 0 2 20 0 40" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="600" cy="400" rx="20" ry="30" transform="rotate(10 600 400)"/>
+    <path d="M600 372c0 0 2 28 0 56" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="350" cy="500" rx="14" ry="20" transform="rotate(-15 350 500)"/>
+    <path d="M350 482c0 0 2 18 0 36" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="500" cy="100" rx="17" ry="26" transform="rotate(25 500 100)"/>
+    <path d="M500 76c0 0 2 24 0 48" stroke="#3B241B" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="80" cy="450" rx="13" ry="19" transform="rotate(-10 80 450)"/>
+    <ellipse cx="720" cy="500" rx="16" ry="24" transform="rotate(20 720 500)"/>
+  </g>
+  <!-- Subtle mountain/hill silhouettes -->
+  <g opacity="0.06" fill="#3B241B">
+    <path d="M0 500 Q100 420 200 460 Q300 380 400 440 Q500 360 600 420 Q700 380 800 450 L800 600 L0 600Z"/>
+    <path d="M0 540 Q150 480 300 520 Q450 460 600 500 Q700 470 800 510 L800 600 L0 600Z"/>
+  </g>
+</svg>

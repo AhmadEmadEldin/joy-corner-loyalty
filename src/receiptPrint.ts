@@ -53,21 +53,52 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
     <title>${escapeHtml(title)}</title>
     <style>
       @page { size: A4; margin: 14mm; }
-      body { font-family: Arial, sans-serif; margin: 0; color: #1f140e; background: #fff; }
-      .page { max-width: 800px; margin: 0 auto; padding: 20px; }
-      .header { border-bottom: 2px solid #1f140e; padding-bottom: 8px; margin-bottom: 16px; }
-      .brand { font-size: 26px; font-weight: 900; letter-spacing: 1px; }
-      .sub { color: #6b5b4f; margin-top: 6px; }
-      .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 12px 0 20px; font-size: 14px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-      th, td { border-bottom: 1px solid #e5dfd8; padding: 8px 6px; text-align: left; }
-      th { background: #f6efe8; font-size: 13px; text-transform: uppercase; }
-      .totals { margin-top: 12px; display: grid; gap: 6px; font-size: 15px; }
+      body { font-family: "Inter", Arial, sans-serif; margin: 0; color: #241814; background: #fff; }
+      .page {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #fffaf2;
+      }
+      .page::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(184,121,62,0.04) 0%, rgba(107,70,52,0.06) 50%, rgba(184,121,62,0.03) 100%);
+        background-image: url("/brand/joy-corner-receipt-farm.webp");
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        opacity: 0.06;
+        pointer-events: none;
+        z-index: -2;
+      }
+      .page::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 250, 242, 0.72);
+        pointer-events: none;
+        z-index: -1;
+      }
+      .header { border-bottom: 2px solid #2A1812; padding-bottom: 8px; margin-bottom: 16px; position: relative; z-index: 1; }
+      .brand { font-family: "Fraunces", Georgia, serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; color: #2A1812; }
+      .sub { color: #74645D; margin-top: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+      .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 12px 0 20px; font-size: 14px; position: relative; z-index: 1; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; position: relative; z-index: 1; }
+      th, td { border-bottom: 1px solid #DFD2C4; padding: 8px 6px; text-align: left; }
+      th { background: #EEE1D0; font-size: 13px; text-transform: uppercase; color: #6B4634; }
+      .totals { margin-top: 12px; display: grid; gap: 6px; font-size: 15px; position: relative; z-index: 1; }
       .totals div { display: flex; justify-content: space-between; }
       .strong { font-weight: 800; font-size: 16px; }
-      .actions { margin-top: 20px; display: flex; gap: 10px; }
-      .actions button { border: 0; border-radius: 6px; background: #1f140e; color: #fff; padding: 10px 14px; cursor: pointer; }
-      @media print { .actions { display: none; } }
+      .actions { margin-top: 20px; display: flex; gap: 10px; position: relative; z-index: 1; }
+      .actions button { border: 0; border-radius: 6px; background: #2A1812; color: #fff; padding: 10px 14px; cursor: pointer; font-size: 14px; }
+      .actions button:hover { background: #3B241B; }
+      .footer-note { margin-top: 24px; text-align: center; font-size: 12px; color: #74645D; position: relative; z-index: 1; }
+      @media print { .actions { display: none; } .page::before { opacity: 0; } .page::after { opacity: 0; } }
     </style>
   </head>
   <body>
@@ -112,7 +143,7 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
       <div class="totals">
         <div><span>Subtotal</span><strong>${money(data.subtotal || 0)} EGP</strong></div>
         <div><span>Discount</span><strong>${money(data.discountPercentage || 0)}%</strong></div>
-        <div><span>Total</span><strong>${money(data.total || 0)} EGP</strong></div>
+        <div class="strong"><span>Total</span><strong>${money(data.total || 0)} EGP</strong></div>
         <div><span>Paid</span><strong>${money(data.paidAmount || 0)} EGP</strong></div>
         <div><span>Remaining</span><strong>${money(data.outstandingAmount || 0)} EGP</strong></div>
         ${
@@ -123,6 +154,7 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         <div><span>Status</span><strong>${escapeHtml(data.paymentStatus || "")}</strong></div>
       </div>
       ${data.notes ? `<div class="totals"><div><span>Notes</span><strong>${escapeHtml(data.notes)}</strong></div></div>` : ""}
+      <p class="footer-note">Thank you for choosing Joy Corner. Your time, your coffee.</p>
       <div class="actions">
         <button onclick="window.print()">Save as PDF</button>
         <button onclick="window.close()">Close</button>

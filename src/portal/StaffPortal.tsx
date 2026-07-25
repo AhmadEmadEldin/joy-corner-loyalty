@@ -206,36 +206,44 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     }
   }
 
-  async function collect(order: QueueOrder) {
+  const [paymentOrder, setPaymentOrder] = useState<QueueOrder | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentBusy, setPaymentBusy] = useState(false);
+
+  function openPayment(order: QueueOrder) {
     const remaining = order.remaining_amount ?? order.total ?? 0;
-    const entered = window.prompt(
-      `Payment received for ${order.order_number} (remaining ${money.format(remaining)}):`,
-      remaining.toFixed(2),
-    );
-    if (entered === null) return;
-    const amount = Number(entered.trim().replace(",", "."));
+    setPaymentOrder(order);
+    setPaymentAmount(remaining > 0 ? remaining.toFixed(2) : "");
+  }
+
+  async function submitPayment() {
+    if (!paymentOrder) return;
+    const remaining = paymentOrder.remaining_amount ?? paymentOrder.total ?? 0;
+    const amount = Number(paymentAmount.trim().replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0 || amount > remaining + 0.01) {
       setMessage(`Enter a payment between ${money.format(0.01)} and ${money.format(remaining)}.`);
       return;
     }
-    setBusyOrder(order.order_id);
+    setPaymentBusy(true);
     try {
       await confirmOrderPayment({
         amount,
-        orderId: order.order_id,
-        paymentMethod: (order.payment_method || "cash_at_cashier") as
+        orderId: paymentOrder.order_id,
+        paymentMethod: (paymentOrder.payment_method || "cash_at_cashier") as
           | "cash_at_cashier"
           | "card_at_branch"
           | "instapay"
           | "manual_transfer",
         reference: "",
       });
-      setMessage(`${money.format(amount)} recorded for ${order.order_number}.`);
+      setMessage(`${money.format(amount)} recorded for ${paymentOrder.order_number}.`);
+      setPaymentOrder(null);
+      setPaymentAmount("");
       if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
     } finally {
-      setBusyOrder(null);
+      setPaymentBusy(false);
     }
   }
 
@@ -246,9 +254,10 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       return;
     }
     receiptWindow.opener = null;
+    const items = Array.isArray(order.item_summary) ? order.item_summary : [];
     receiptWindow.document.write(buildReceiptPrintHtml({
       customerName: order.pickup_name,
-      items: order.item_summary.map((item) => ({
+      items: items.map((item) => ({
         itemName: item.itemName || item.name || "Item",
         qty: item.quantity || 1,
         size: item.size || "",
@@ -415,7 +424,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
                 </>
               ) : null}
               {order.status !== "pending_confirmation" && order.payment_status !== "paid" ? (
-                <button onClick={() => void collect(order)} type="button">
+                <button onClick={() => openPayment(order)} type="button">
                   Record payment ({money.format(order.remaining_amount ?? order.total ?? 0)} due)
                 </button>
               ) : null}
@@ -474,6 +483,57 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       ) : null}
       {tab === "menu" && profile?.role === "owner" ? (
         <OwnerMenuManager />
+      ) : null}
+      {paymentOrder ? (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+          <div className="payment-modal">
+            <header>
+              <p className="eyebrow">Record payment</p>
+              <h2 id="payment-modal-title">{paymentOrder.order_number}</h2>
+              <p className="muted">
+                Remaining: {money.format(paymentOrder.remaining_amount ?? paymentOrder.total ?? 0)}
+              </p>
+            </header>
+            <label>
+              Payment amount (EGP)
+              <input
+                autoFocus
+                inputMode="decimal"
+                min="0.01"
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                step="0.01"
+                type="number"
+                value={paymentAmount}
+              />
+            </label>
+            <label>
+              Payment method
+              <select defaultValue={paymentOrder.payment_method || "cash_at_cashier"}>
+                <option value="cash_at_cashier">Cash</option>
+                <option value="card_at_branch">Card</option>
+                <option value="instapay">InstaPay</option>
+                <option value="manual_transfer">Transfer</option>
+              </select>
+            </label>
+            <div className="payment-modal-actions">
+              <button
+                className="button-secondary"
+                disabled={paymentBusy}
+                onClick={() => { setPaymentOrder(null); setPaymentAmount(""); }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={paymentBusy || !paymentAmount}
+                onClick={() => void submitPayment()}
+                type="button"
+              >
+                {paymentBusy ? "Recording…" : "Record payment"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );
@@ -731,9 +791,7 @@ function Queue({
         ? order.status === "pending_confirmation"
         : order.status === "confirmed";
     if (view === "ready") return order.status === "ready";
-    return !["pending_confirmation", "confirmed", "ready"].includes(
-      order.status,
-    );
+    return !["pending_confirmation", "ready"].includes(order.status);
   });
   return (
     <section className="portal-section">

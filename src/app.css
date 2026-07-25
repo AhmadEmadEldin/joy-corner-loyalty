@@ -4484,3 +4484,98 @@ tbody tr:hover {
     justify-self: start;
   }
 }
+
+/* Payment Modal */
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 19, 13, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.payment-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 18px 46px rgba(36, 24, 13, 0.14);
+  display: grid;
+  gap: 16px;
+}
+
+.payment-modal header {
+  margin-bottom: 0;
+}
+
+.payment-modal header h2 {
+  margin: 4px 0;
+}
+
+.payment-modal .muted {
+  color: #766650;
+  margin: 0;
+}
+
+.payment-modal label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b3829;
+}
+
+.payment-modal input,
+.payment-modal select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #eadfce;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.payment-modal input:focus,
+.payment-modal select:focus {
+  outline: none;
+  border-color: #B8793E;
+  box-shadow: 0 0 0 3px rgba(217, 173, 99, 0.24);
+}
+
+.payment-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.payment-modal-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-size: 0.9rem;
+}
+
+.payment-modal-actions button:last-child {
+  background: #B8793E;
+  color: #fff;
+}
+
+.payment-modal-actions button:last-child:hover {
+  background: #a06a30;
+}
+
+.payment-modal-actions .button-secondary {
+  background: transparent;
+  border: 1px solid #eadfce;
+  color: #4b3829;
+}
+
+.payment-modal-actions .button-secondary:hover {
+  background: #f6eddd;
+}
