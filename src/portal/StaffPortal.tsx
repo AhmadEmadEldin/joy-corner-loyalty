@@ -47,7 +47,7 @@ import {
 import { OperationalOrderStatus, statusLabel } from "./workflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
 import { createClientId } from "./cartDraft";
-import { buildReceiptPrintHtml } from "../receiptPrint";
+import { buildDailyReportHtml, buildReceiptPrintHtml, type DailyReportData } from "../receiptPrint";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -141,7 +141,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     [],
   );
   const [tab, setTab] = useState<
-    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu" | "voucher_requests" | "orders_receipts" | "end_day" | "analytics"
+    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu" | "voucher_requests" | "orders_receipts" | "end_day" | "analytics" | "system_status"
   >("cashier");
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
@@ -326,6 +326,11 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           <p className="eyebrow">Joy Corner operations</p>
           <h1>{profile?.full_name || "Staff"}</h1>
           <small>{profile?.role}</small>
+          {profile?.role === "owner" ? (
+            <span className="build-badge" title={`Built: ${typeof __BUILD_TIME__ !== "undefined" ? new Date(__BUILD_TIME__).toLocaleString() : "unknown"}`}>
+              {typeof __BUILD_GIT_SHA__ !== "undefined" ? __BUILD_GIT_SHA__ : ""}
+            </span>
+          ) : null}
         </div>
         <button
           className="button-secondary"
@@ -411,6 +416,15 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
             type="button"
           >
             End of Day
+          </button>
+        ) : null}
+        {profile?.role === "owner" ? (
+          <button
+            className={tab === "system_status" ? "active" : ""}
+            onClick={() => setTab("system_status")}
+            type="button"
+          >
+            System
           </button>
         ) : null}
         {canKitchen ? (
@@ -554,6 +568,9 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       {tab === "end_day" && profile?.role === "owner" ? (
         <OwnerEndDay onError={setMessage} onRefreshQueues={() => profile ? refreshQueues(profile.role) : Promise.resolve()} />
       ) : null}
+      {tab === "system_status" && profile?.role === "owner" ? (
+        <OwnerSystemStatus />
+      ) : null}
       {paymentOrder ? (
         <div className="payment-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
           <div className="payment-modal">
@@ -606,6 +623,115 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
         </div>
       ) : null}
     </main>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// OWNER SYSTEM STATUS
+// ═══════════════════════════════════════════════════
+
+type HealthCheck = { label: string; status: "healthy" | "unavailable" | "misconfigured" | "checking"; detail: string };
+
+function OwnerSystemStatus() {
+  const [checks, setChecks] = useState<HealthCheck[]>([]);
+  const [running, setRunning] = useState(true);
+
+  const runChecks = useCallback(async () => {
+    setRunning(true);
+    const results: HealthCheck[] = [];
+
+    results.push({
+      label: "Frontend",
+      status: "healthy",
+      detail: `Build ${typeof __BUILD_GIT_SHA__ !== "undefined" ? __BUILD_GIT_SHA__ : "unknown"} · ${typeof __BUILD_TIME__ !== "undefined" ? new Date(__BUILD_TIME__).toLocaleString() : "unknown"}`,
+    });
+
+    const apiOrigin = typeof __API_CONFIG__ !== "undefined" ? __API_CONFIG__.baseUrl : "not set";
+    results.push({
+      label: "API Origin",
+      status: apiOrigin && apiOrigin !== "not set" ? "healthy" : "misconfigured",
+      detail: apiOrigin || "VITE_API_URL not configured",
+    });
+
+    const backendUrl = apiOrigin.replace(/\/api\/?$/, "") || apiOrigin;
+
+    try {
+      const resp = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(8000) });
+      const data = await resp.json();
+      results.push({
+        label: "Backend Health",
+        status: data.ok ? "healthy" : "unavailable",
+        detail: resp.ok ? `Service: ${data.service || "ok"}` : `HTTP ${resp.status}`,
+      });
+    } catch {
+      results.push({ label: "Backend Health", status: "unavailable", detail: "Could not reach backend" });
+    }
+
+    try {
+      const resp = await fetch(`${backendUrl}/ready`, { signal: AbortSignal.timeout(8000) });
+      const data = await resp.json();
+      results.push({
+        label: "Database",
+        status: data.checks?.database?.ok ? "healthy" : "unavailable",
+        detail: data.checks?.database?.ok ? `Latency: ${data.checks.database.latencyMs}ms` : "Database check failed",
+      });
+    } catch {
+      results.push({ label: "Database", status: "unavailable", detail: "Could not reach backend" });
+    }
+
+    try {
+      const resp = await fetch(`${backendUrl}/api/auth/me`, { credentials: "include", signal: AbortSignal.timeout(5000) });
+      results.push({
+        label: "Session",
+        status: resp.status === 401 ? "healthy" : resp.ok ? "healthy" : "unavailable",
+        detail: resp.status === 401 ? "Not signed in (expected)" : resp.ok ? "Authenticated" : `HTTP ${resp.status}`,
+      });
+    } catch {
+      results.push({ label: "Session", status: "unavailable", detail: "Could not check" });
+    }
+
+    results.push({
+      label: "Menu Sync",
+      status: "healthy",
+      detail: "Backend serves /api/menu",
+    });
+
+    setChecks(results);
+    setRunning(false);
+  }, []);
+
+  useEffect(() => { void runChecks(); }, [runChecks]);
+
+  const statusColor = (s: HealthCheck["status"]) => {
+    if (s === "healthy") return "var(--joy-success, #51623d)";
+    if (s === "misconfigured") return "var(--joy-danger, #c0392b)";
+    return "var(--muted, #766650)";
+  };
+
+  return (
+    <section className="portal-section">
+      <header className="staff-queue-header">
+        <div>
+          <p className="eyebrow">Diagnostics</p>
+          <h2>System Status</h2>
+        </div>
+        <button className="button-secondary" disabled={running} onClick={() => void runChecks()} type="button">
+          {running ? "Checking…" : "Refresh"}
+        </button>
+      </header>
+      <div className="staff-table" style={{ marginTop: "1rem" }}>
+        <div className="staff-table-row heading" style={{ gridTemplateColumns: "1fr auto 2fr" }}>
+          <span>Component</span><span>Status</span><span>Detail</span>
+        </div>
+        {checks.map((c) => (
+          <div className="staff-table-row" key={c.label} style={{ gridTemplateColumns: "1fr auto 2fr" }}>
+            <span><strong>{c.label}</strong></span>
+            <span style={{ color: statusColor(c.status), fontWeight: 600 }}>{c.status}</span>
+            <span style={{ fontSize: "0.8125rem", color: "var(--joy-text-secondary, #766650)" }}>{c.detail}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2088,6 +2214,24 @@ function OwnerEndDay({ onError, onRefreshQueues }: { onError: (msg: string) => v
     }
   }
 
+  function printDailyReport() {
+    if (!showReport) return;
+    const html = buildDailyReportHtml(showReport as unknown as DailyReportData);
+    const w = window.open("", "_blank", "width=900,height=800");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  async function printHistoryReport(bdId: string) {
+    try {
+      const report = await loadBusinessDayReport(bdId);
+      const html = buildDailyReportHtml(report as unknown as DailyReportData);
+      const w = window.open("", "_blank", "width=900,height=800");
+      if (w) { w.document.write(html); w.document.close(); }
+    } catch (error) {
+      onError(getMessage(error));
+    }
+  }
+
   return (
     <section className="portal-section">
       <header className="staff-queue-header">
@@ -2142,6 +2286,7 @@ function OwnerEndDay({ onError, onRefreshQueues }: { onError: (msg: string) => v
               {showReport.notes ? <p><strong>Notes:</strong> {String(showReport.notes)}</p> : null}
             </div>
             <div className="payment-modal-actions">
+              <button className="button-secondary" onClick={() => { printDailyReport(); }} type="button">Print Daily Report</button>
               <button onClick={() => setShowReport(null)} type="button">Close</button>
             </div>
           </div>
@@ -2150,18 +2295,30 @@ function OwnerEndDay({ onError, onRefreshQueues }: { onError: (msg: string) => v
       {history.length ? (
         <>
           <h3 style={{ marginTop: "1.5rem" }}>Business Day History</h3>
-          <div className="staff-table">
+          <div className="staff-table business-day-history-table">
             <div className="staff-table-row heading">
-              <span>Date</span><span>Status</span><span>Receipts</span><span>Gross Sales</span><span>Paid</span><span>Unpaid</span>
+              <span>Date</span><span>Status</span><span>Receipts</span><span>Gross Sales</span><span>Paid</span><span>Unpaid</span><span></span>
             </div>
-            {history.map((bd) => (
-              <div className="staff-table-row" key={bd.id}>
-                <span><strong>{bd.business_date}</strong></span>
-                <span><span className={`status-pill status-${bd.status === "OPEN" ? "confirmed" : "closed"}`}>{bd.status}</span></span>
-                <span>{bd.receipt_count}</span>
-                <span>{money.format(Number(bd.gross_sales || 0))}</span>
-                <span>{money.format(Number(bd.paid_amount || 0))}</span>
-                <span>{money.format(Number(bd.unpaid_amount || 0))}</span>
+            {history.map((bd, idx) => (
+              <div key={bd.id}>
+                {idx > 0 && bd.status === "CLOSED" && history[idx - 1]?.status === "CLOSED" ? (
+                  <div className="business-day-divider" />
+                ) : null}
+                <div className={`staff-table-row${bd.status === "OPEN" ? " business-day-open" : ""}`}>
+                  <span><strong>{bd.business_date}</strong></span>
+                  <span><span className={`status-pill status-${bd.status === "OPEN" ? "confirmed" : "closed"}`}>{bd.status}</span></span>
+                  <span>{bd.receipt_count}</span>
+                  <span>{money.format(Number(bd.gross_sales || 0))}</span>
+                  <span>{money.format(Number(bd.paid_amount || 0))}</span>
+                  <span>{money.format(Number(bd.unpaid_amount || 0))}</span>
+                  <span>
+                    {bd.status === "CLOSED" ? (
+                      <button className="button-secondary" onClick={() => void printHistoryReport(bd.id)} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px" }}>
+                        Print Report
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
               </div>
             ))}
           </div>

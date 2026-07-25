@@ -4760,6 +4760,50 @@ tbody tr:hover {
   background: var(--color-surface);
 }
 
+.business-day-history-table .staff-table-row {
+  grid-template-columns: 1fr 0.7fr 0.5fr 1fr 1fr 1fr auto;
+}
+
+.business-day-divider {
+  border-top: 2px dashed #D9AD63;
+  margin: 12px 0;
+  opacity: 0.6;
+  position: relative;
+}
+
+.business-day-divider::after {
+  content: "closed";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #B8793E;
+}
+
+.staff-table-row.business-day-open {
+  background: rgba(81, 98, 61, 0.06);
+  border-left: 3px solid #51623d;
+}
+
+.build-badge {
+  display: inline-block;
+  font-family: monospace;
+  font-size: 0.65rem;
+  background: rgba(79, 47, 31, 0.08);
+  border: 1px solid rgba(79, 47, 31, 0.15);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  color: #8a7963;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+}
+
 .customer-voucher-panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

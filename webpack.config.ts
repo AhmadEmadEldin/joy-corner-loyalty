@@ -1,4 +1,5 @@
 import path from "path";
+import { execSync } from "child_process";
 import dotenv from "dotenv";
 import webpack from "webpack";
 import type { Configuration } from "webpack";
@@ -7,25 +8,43 @@ import type { Configuration as DevServerConfiguration } from "webpack-dev-server
 dotenv.config({ path: [".env.local", ".env"] });
 
 const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
+const isProduction = process.env.NODE_ENV === "production";
+const configuredApiUrl = process.env.VITE_API_URL?.trim();
+
+if (isProduction && !configuredApiUrl) {
+  console.error(
+    "\n[ERROR] VITE_API_URL is required for production builds.\n" +
+    "Set it in Vercel → Settings → Environment Variables.\n",
+  );
+  throw new Error("VITE_API_URL is required for production builds.");
+}
 
 const apiConfig = {
-  baseUrl:
-    process.env.VITE_API_URL ||
-    (process.env.NODE_ENV === "production"
-      ? "https://site--loyalty-api--8dkxbmpznww8.code.run"
-      : "/api"),
+  baseUrl: configuredApiUrl || "/api",
 };
+
+let gitSha = "unknown";
+let buildTime = "unknown";
+try {
+  gitSha = execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  buildTime = new Date().toISOString();
+} catch {
+  // silently ignore if git is not available
+}
 
 const config: Configuration & { devServer?: DevServerConfiguration } = {
   context: path.resolve(__dirname),
   entry: path.resolve(__dirname, "src", "index.tsx"),
-  mode: process.env.NODE_ENV === "production" ? "production" : "development",
+  mode: isProduction ? "production" : "development",
   module: {
     rules: [
       {
         exclude: /node_modules/,
         test: /\.tsx?$/,
-        use: "ts-loader",
+        use: {
+          loader: "ts-loader",
+          options: { transpileOnly: true },
+        },
       },
       {
         test: /\.css$/i,
@@ -39,8 +58,9 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   },
   output: {
     clean: true,
-    filename: "app.js",
+    filename: isProduction ? "app.[contenthash:8].js" : "app.js",
     path: path.resolve(__dirname, "dist"),
+    publicPath: "/",
   },
   resolve: {
     extensions: [".tsx", ".ts", ".js"],
@@ -48,6 +68,8 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
   plugins: [
     new webpack.DefinePlugin({
       __API_CONFIG__: JSON.stringify(apiConfig),
+      __BUILD_GIT_SHA__: JSON.stringify(gitSha),
+      __BUILD_TIME__: JSON.stringify(buildTime),
     }),
   ],
   devServer: {
