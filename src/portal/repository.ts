@@ -368,6 +368,135 @@ export async function removeOwnerMenuImage(
   await apiRequest(`/owner/menu/items/${encodeURIComponent(itemId)}/image`, { method: "DELETE" });
 }
 
+export type OwnerVoucher = {
+  description: string | null;
+  expiresAt: string | null;
+  fixedValue: number | null;
+  id: string;
+  issuedAt: string;
+  percentageValue: number | null;
+  status: string;
+  voucherCode: string;
+  voucherType: string;
+};
+
+export async function loadCustomerVouchers(customerId: string): Promise<OwnerVoucher[]> {
+  return (
+    await apiRequest<{ vouchers: OwnerVoucher[] }>(
+      `/owner/customers/${encodeURIComponent(customerId)}/vouchers`,
+    )
+  ).vouchers;
+}
+
+export async function createCustomerVoucher(input: {
+  customerId: string;
+  description?: string;
+  expiresInDays?: number;
+  fixedValue?: number;
+  freeItemId?: string;
+  percentageValue?: number;
+  voucherType: "fixed" | "percentage" | "free_item";
+}): Promise<{ customer: { fullName: string; phone: string | null }; voucher: OwnerVoucher }> {
+  const { customerId, ...body } = input;
+  return apiRequest(`/owner/customers/${encodeURIComponent(customerId)}/vouchers`, {
+    body: JSON.stringify(body),
+    method: "POST",
+  });
+}
+
+export function buildWhatsAppVoucherLink(
+  phone: string | null,
+  code: string,
+  description: string | null,
+  customerName: string,
+): string {
+  const label = description || `${code} voucher`;
+  const text = `Hi ${customerName}! 🎉\n\nYou've received a voucher from Joy Corner:\n*${label}*\nVoucher code: *${code}*\n\nShow this code at checkout to redeem. Valid at any Joy Corner branch.\n\n— Joy Corner Team`;
+  const digits = (phone || "").replace(/\D/g, "");
+  const num = digits.startsWith("20") ? digits : digits.length >= 8 ? `20${digits}` : "";
+  return num
+    ? `https://wa.me/${num}?text=${encodeURIComponent(text)}`
+    : `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+export async function revokeVoucher(voucherId: string): Promise<void> {
+  await apiRequest(`/owner/vouchers/${encodeURIComponent(voucherId)}/revoke`, { method: "POST" });
+}
+
+export type VoucherRequest = {
+  createdAt: string;
+  createdVoucherId: string | null;
+  customerEmail: string | null;
+  customerId: string;
+  customerName: string;
+  customerPhone: string | null;
+  freeRewards: number;
+  id: string;
+  loyaltyPoints: number;
+  orderCount: number;
+  rejectionReason: string | null;
+  requestedByUserId: string;
+  requestedRewardType: string | null;
+  requestReason: string | null;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  status: "APPROVED" | "CANCELLED" | "FULFILLED" | "PENDING" | "REJECTED";
+  updatedAt: string;
+};
+
+export async function loadVoucherRequests(status?: string): Promise<VoucherRequest[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return (await apiRequest<{ requests: VoucherRequest[] }>(`/owner/voucher-requests${qs}`)).requests;
+}
+
+export async function reviewVoucherRequest(input: {
+  action: "APPROVE" | "REJECT";
+  customerId?: string;
+  description?: string;
+  expiresInDays?: number;
+  fixedValue?: number;
+  freeItemId?: string;
+  percentageValue?: number;
+  rejectionReason?: string;
+  requestId: string;
+  voucherType?: string;
+}): Promise<{ voucher?: OwnerVoucher; status: string }> {
+  const { requestId, ...body } = input;
+  return apiRequest(`/owner/voucher-requests/${encodeURIComponent(requestId)}`, {
+    body: JSON.stringify(body),
+    method: "PATCH",
+  });
+}
+
+export type CustomerVoucherRequest = {
+  createdAt: string;
+  createdVoucherId: string | null;
+  id: string;
+  rejectionReason: string | null;
+  requestedRewardType: string | null;
+  requestReason: string | null;
+  status: "APPROVED" | "CANCELLED" | "FULFILLED" | "PENDING" | "REJECTED";
+  updatedAt: string;
+};
+
+export async function createVoucherRequest(input: {
+  requestedRewardType?: string;
+  requestReason?: string;
+}): Promise<{ request: CustomerVoucherRequest }> {
+  return apiRequest("/customer/voucher-requests", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+
+export async function loadCustomerVoucherRequests(): Promise<CustomerVoucherRequest[]> {
+  return (await apiRequest<{ requests: CustomerVoucherRequest[] }>("/customer/voucher-requests")).requests;
+}
+
+export async function cancelVoucherRequest(requestId: string): Promise<void> {
+  await apiRequest(`/customer/voucher-requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" });
+}
+
 export type CustomerDashboard = {
   notifications: CustomerNotification[];
   orderItems: CustomerOrderItem[];

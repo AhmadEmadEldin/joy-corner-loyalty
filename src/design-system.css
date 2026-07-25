@@ -1,37 +1,55 @@
 /* ==========================================================================
    Joy Corner Design System
-   A comprehensive, production-ready CSS design system for the Joy Corner
-   Loyalty application. Import this file BEFORE app.css in index.tsx.
+   Premium specialty coffee brand design tokens and component library.
+   Import this file BEFORE app.css in index.tsx.
    ========================================================================== */
 
-/* --------------------------------------------------------------------------
-   1. Google Fonts
-   -------------------------------------------------------------------------- */
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;0,9..144,900;1,9..144,400;1,9..144,600&family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap");
-
-/* ==========================================================================
-   2. Custom Properties
-   ========================================================================== */
 :root {
-  /* ------------------------------------------------------------------
-     Brand Colors
-     ------------------------------------------------------------------ */
-  --joy-espresso: #2A1812;
-  --joy-dark-roast: #3B241B;
-  --joy-coffee: #6B4634;
-  --joy-caramel: #B8793E;
-  --joy-copper: #C98B52;
-  --joy-cream: #FAF3E8;
-  --joy-oat: #EEE1D0;
-  --joy-sand: #D8C2A8;
-  --joy-surface: #FFFDF9;
-  --joy-text: #241814;
-  --joy-muted-text: #74645D;
-  --joy-border: #DFD2C4;
+  /* Brand Colors */
+  --joy-espresso-950: #21130F;
+  --joy-espresso-900: #2C1A14;
+  --joy-espresso-800: #3B241B;
+  --joy-coffee-700: #5C3A2A;
+  --joy-coffee-600: #6F4935;
+  --joy-caramel-500: #B9783D;
+  --joy-caramel-400: #CE9258;
+  --joy-copper-400: #C98955;
+  --joy-cream-50: #FFFCF7;
+  --joy-cream-100: #FAF3E8;
+  --joy-oat-200: #EEE1D0;
+  --joy-sand-300: #D8C2A8;
 
-  /* ------------------------------------------------------------------
-     Status Colors
-     ------------------------------------------------------------------ */
+  /* Semantic Colors */
+  --joy-text-primary: #241814;
+  --joy-text-secondary: #6F625C;
+  --joy-text-tertiary: #9A8D85;
+  --joy-border: #DED2C5;
+  --joy-surface: #FFFDF9;
+  --joy-surface-alt: #F7F1E8;
+  --joy-surface-muted: #F0E8DC;
+
+  /* Legacy aliases for backward compatibility */
+  --joy-espresso: var(--joy-espresso-900);
+  --joy-dark-roast: var(--joy-espresso-800);
+  --joy-coffee: var(--joy-coffee-700);
+  --joy-caramel: var(--joy-caramel-500);
+  --joy-copper: var(--joy-copper-400);
+  --joy-cream: var(--joy-cream-100);
+  --joy-oat: var(--joy-oat-200);
+  --joy-sand: var(--joy-sand-300);
+  --joy-text: var(--joy-text-primary);
+  --joy-muted-text: var(--joy-text-secondary);
+
+  /* Status Colors */
+  --joy-success: #2F7A50;
+  --joy-success-bg: #EDFBF3;
+  --joy-warning: #B87920;
+  --joy-warning-bg: #FEF8EC;
+  --joy-danger: #B63A3A;
+  --joy-danger-bg: #FDF0F0;
+  --joy-info: #356D91;
+  --joy-info-bg: #EDF5FB;
+
   --status-new: #3B6F8F;
   --status-confirmed: #76558E;
   --status-accepted: #A96F20;
@@ -40,67 +58,72 @@
   --status-picked-up: #68706C;
   --status-cancelled: #A63D3D;
 
-  /* ------------------------------------------------------------------
-     Payment Colors
-     ------------------------------------------------------------------ */
   --payment-paid: #287A55;
   --payment-unpaid: #B33A3A;
   --payment-partial: #B87920;
 
-  /* ------------------------------------------------------------------
-     Typography
-     ------------------------------------------------------------------ */
+  /* Typography */
   --font-brand: "Fraunces", Georgia, serif;
   --font-ui: "Inter", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
 
-  /* ------------------------------------------------------------------
-     Spacing
-     ------------------------------------------------------------------ */
+  /* Spacing */
+  --space-2xs: 2px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
   --space-2xl: 48px;
+  --space-3xl: 64px;
 
-  /* ------------------------------------------------------------------
-     Border Radii
-     ------------------------------------------------------------------ */
+  /* Border Radii */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
   --radius-full: 999px;
 
-  /* ------------------------------------------------------------------
-     Shadows
-     ------------------------------------------------------------------ */
-  --shadow-sm: 0 1px 3px rgba(36, 24, 13, 0.06);
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(36, 24, 13, 0.04);
+  --shadow-sm: 0 1px 3px rgba(36, 24, 13, 0.06), 0 1px 2px rgba(36, 24, 13, 0.04);
   --shadow-md: 0 4px 12px rgba(36, 24, 13, 0.08);
   --shadow-lg: 0 8px 24px rgba(36, 24, 13, 0.1);
   --shadow-xl: 0 16px 48px rgba(36, 24, 13, 0.14);
+  --shadow-focus: 0 0 0 3px rgba(185, 120, 61, 0.25);
 
-  /* ------------------------------------------------------------------
-     Transitions
-     ------------------------------------------------------------------ */
+  /* Transitions */
   --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
-  --transition-slow: 400ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Z-index */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
 }
 
-/* ==========================================================================
-   3. Dark Mode Preparation
-   ========================================================================== */
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Brand Colors – inverted / dark palette */
     --joy-surface: #1A1210;
-    --joy-text: #F0E6DA;
-    --joy-muted-text: #A89888;
+    --joy-surface-alt: #221A14;
+    --joy-surface-muted: #2E221A;
+    --joy-text-primary: #F0E6DA;
+    --joy-text-secondary: #A89888;
+    --joy-text-tertiary: #7A6E64;
     --joy-border: #3A2E24;
-    --joy-cream: #2A1E16;
-    --joy-oat: #2E221A;
-    --joy-sand: #3E3028;
+    --joy-cream-50: #1A1210;
+    --joy-cream-100: #221A14;
+    --joy-oat-200: #2E221A;
+    --joy-sand-300: #3E3028;
+    --joy-success-bg: #0F2A1A;
+    --joy-warning-bg: #2A1E0A;
+    --joy-danger-bg: #2A0F0F;
+    --joy-info-bg: #0F1E2A;
   }
 }
 
@@ -123,13 +146,20 @@ html {
 
 body {
   margin: 0;
-  color: var(--joy-text);
+  color: var(--joy-text-primary);
   background-color: var(--joy-surface);
   font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
 }
 
 /* ---------- Headings ---------- */
@@ -147,7 +177,7 @@ h1,
 h2 {
   font-family: var(--font-brand);
   font-weight: 700;
-  color: var(--joy-espresso);
+  color: var(--joy-espresso-900);
 }
 
 h3,
@@ -156,7 +186,7 @@ h5,
 h6 {
   font-family: var(--font-ui);
   font-weight: 700;
-  color: var(--joy-dark-roast);
+  color: var(--joy-espresso-800);
 }
 
 h1 { font-size: 2rem; }
@@ -172,18 +202,18 @@ p {
 }
 
 a {
-  color: var(--joy-copper);
+  color: var(--joy-copper-400);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: var(--joy-caramel);
+  color: var(--joy-caramel-500);
 }
 
 small {
   font-size: 0.8125rem;
-  color: var(--joy-muted-text);
+  color: var(--joy-text-secondary);
 }
 
 /* ---------- Tabular numerals for prices / numbers ---------- */
@@ -240,77 +270,77 @@ ol {
 
 /* ---------- Primary (caramel background) ---------- */
 .jc-btn-primary {
-  background-color: var(--joy-caramel);
+  background-color: var(--joy-caramel-500);
   color: #fff;
 }
 
 .jc-btn-primary:hover {
-  background-color: #a66a33;
-  box-shadow: 0 4px 14px rgba(184, 121, 62, 0.35);
+  background-color: #a36835;
+  box-shadow: 0 4px 14px rgba(185, 120, 61, 0.35);
 }
 
 .jc-btn-primary:active {
   transform: scale(0.98);
-  box-shadow: 0 1px 4px rgba(184, 121, 62, 0.25);
+  box-shadow: 0 1px 4px rgba(185, 120, 61, 0.25);
 }
 
 /* ---------- Secondary (cream background) ---------- */
 .jc-btn-secondary {
-  background-color: var(--joy-cream);
+  background-color: var(--joy-cream-50);
   border-color: var(--joy-border);
-  color: var(--joy-coffee);
+  color: var(--joy-coffee-700);
 }
 
 .jc-btn-secondary:hover {
-  background-color: var(--joy-oat);
+  background-color: var(--joy-oat-200);
   box-shadow: var(--shadow-sm);
 }
 
 .jc-btn-secondary:active {
-  background-color: var(--joy-sand);
+  background-color: var(--joy-sand-300);
   transform: scale(0.98);
 }
 
 /* ---------- Outline (transparent background, coffee border) ---------- */
 .jc-btn-outline {
   background-color: transparent;
-  border-color: var(--joy-coffee);
-  color: var(--joy-coffee);
+  border-color: var(--joy-coffee-700);
+  color: var(--joy-coffee-700);
 }
 
 .jc-btn-outline:hover {
-  background-color: rgba(107, 70, 52, 0.06);
-  border-color: var(--joy-dark-roast);
-  color: var(--joy-dark-roast);
+  background-color: rgba(92, 58, 42, 0.06);
+  border-color: var(--joy-espresso-800);
+  color: var(--joy-espresso-800);
 }
 
 .jc-btn-outline:active {
-  background-color: rgba(107, 70, 52, 0.1);
+  background-color: rgba(92, 58, 42, 0.1);
 }
 
 /* ---------- Ghost (transparent, no border) ---------- */
 .jc-btn-ghost {
   background-color: transparent;
-  color: var(--joy-coffee);
+  color: var(--joy-coffee-700);
 }
 
 .jc-btn-ghost:hover {
-  background-color: rgba(107, 70, 52, 0.06);
+  background-color: rgba(92, 58, 42, 0.06);
 }
 
 .jc-btn-ghost:active {
-  background-color: rgba(107, 70, 52, 0.1);
+  background-color: rgba(92, 58, 42, 0.1);
 }
 
 /* ---------- Danger ---------- */
 .jc-btn-danger {
-  background-color: var(--payment-unpaid);
+  background-color: var(--joy-danger);
   color: #fff;
 }
 
 .jc-btn-danger:hover {
   background-color: #9a3030;
-  box-shadow: 0 4px 14px rgba(179, 58, 58, 0.3);
+  box-shadow: 0 4px 14px rgba(182, 58, 58, 0.3);
 }
 
 .jc-btn-danger:active {
@@ -320,13 +350,13 @@ ol {
 
 /* ---------- Success ---------- */
 .jc-btn-success {
-  background-color: var(--payment-paid);
+  background-color: var(--joy-success);
   color: #fff;
 }
 
 .jc-btn-success:hover {
-  background-color: #216a49;
-  box-shadow: 0 4px 14px rgba(40, 122, 85, 0.3);
+  background-color: #266842;
+  box-shadow: 0 4px 14px rgba(47, 122, 80, 0.3);
 }
 
 .jc-btn-success:active {
@@ -358,9 +388,9 @@ ol {
 }
 
 .jc-btn:focus-visible {
-  outline: 2px solid var(--joy-caramel);
+  outline: 2px solid var(--joy-caramel-500);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(184, 121, 62, 0.2);
+  box-shadow: var(--shadow-focus);
 }
 
 .jc-btn:active:not(:disabled) {
@@ -435,7 +465,7 @@ ol {
 
 .jc-card-footer {
   align-items: center;
-  background-color: var(--joy-cream);
+  background-color: var(--joy-cream-50);
   border-top: 1px solid var(--joy-border);
   display: flex;
   gap: var(--space-sm);
@@ -559,7 +589,7 @@ ol {
 
 /* ---------- Labels ---------- */
 .jc-label {
-  color: var(--joy-muted-text);
+  color: var(--joy-text-secondary);
   display: grid;
   font-family: var(--font-ui);
   font-size: 0.75rem;
@@ -573,10 +603,10 @@ ol {
 .jc-select,
 .jc-textarea {
   appearance: none;
-  background-color: #fff;
+  background-color: var(--joy-surface);
   border: 1px solid var(--joy-border);
   border-radius: var(--radius-md);
-  color: var(--joy-text);
+  color: var(--joy-text-primary);
   font-family: var(--font-ui);
   font-size: 0.9375rem;
   line-height: 1.3;
@@ -590,22 +620,22 @@ ol {
 
 .jc-input::placeholder,
 .jc-textarea::placeholder {
-  color: var(--joy-muted-text);
-  opacity: 0.6;
+  color: var(--joy-text-tertiary);
+  opacity: 0.7;
 }
 
 .jc-input:hover,
 .jc-select:hover,
 .jc-textarea:hover {
-  border-color: var(--joy-sand);
+  border-color: var(--joy-sand-300);
 }
 
 /* ---------- Focus states with caramel ring ---------- */
 .jc-input:focus,
 .jc-select:focus,
 .jc-textarea:focus {
-  border-color: var(--joy-caramel);
-  box-shadow: 0 0 0 3px rgba(184, 121, 62, 0.2);
+  border-color: var(--joy-caramel-500);
+  box-shadow: var(--shadow-focus);
   outline: 0;
 }
 
@@ -640,7 +670,7 @@ ol {
 
 /* ---------- Sidebar (desktop) ---------- */
 .jc-sidebar {
-  background-color: var(--joy-espresso);
+  background-color: var(--joy-espresso-950);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
@@ -666,7 +696,7 @@ ol {
   background: transparent;
   border: 0;
   border-radius: var(--radius-md);
-  color: var(--joy-oat);
+  color: var(--joy-oat-200);
   display: flex;
   font-family: var(--font-ui);
   font-size: 0.875rem;
@@ -687,14 +717,14 @@ ol {
 
 .jc-sidebar nav a.active,
 .jc-sidebar nav button.active {
-  background-color: var(--joy-caramel);
+  background-color: var(--joy-caramel-500);
   color: #fff;
 }
 
 /* ---------- Bottom Navigation (mobile) ---------- */
 .jc-bottom-nav {
   align-items: stretch;
-  background: linear-gradient(180deg, rgba(42, 24, 18, 0.96), rgba(59, 36, 27, 0.98));
+  background: linear-gradient(180deg, rgba(33, 19, 15, 0.96), rgba(44, 26, 20, 0.98));
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   bottom: 0;
   display: none;
@@ -713,7 +743,7 @@ ol {
   background: transparent;
   border: 0;
   border-radius: var(--radius-md);
-  color: var(--joy-sand);
+  color: var(--joy-sand-300);
   display: flex;
   flex-direction: column;
   font-family: var(--font-ui);
@@ -729,13 +759,13 @@ ol {
 
 .jc-bottom-nav a.active,
 .jc-bottom-nav button.active {
-  color: var(--joy-copper);
+  color: var(--joy-copper-400);
 }
 
 /* ---------- Tabs (horizontal tab bar) ---------- */
 .jc-tabs {
   align-items: center;
-  background: var(--joy-cream);
+  background: var(--joy-cream-50);
   border: 1px solid var(--joy-border);
   border-radius: var(--radius-lg);
   display: flex;
@@ -755,7 +785,7 @@ ol {
   background: transparent;
   border: 0;
   border-radius: var(--radius-md);
-  color: var(--joy-coffee);
+  color: var(--joy-coffee-700);
   flex: 1;
   font-family: var(--font-ui);
   font-size: 0.8125rem;
@@ -773,14 +803,14 @@ ol {
 
 .jc-tabs button:hover,
 .jc-tabs a:hover {
-  background-color: var(--joy-oat);
-  color: var(--joy-dark-roast);
+  background-color: var(--joy-oat-200);
+  color: var(--joy-espresso-800);
 }
 
 .jc-tabs button.active,
 .jc-tabs a.active {
-  background-color: var(--joy-espresso);
-  color: var(--joy-cream);
+  background-color: var(--joy-espresso-900);
+  color: var(--joy-cream-50);
 }
 
 /* ==========================================================================
@@ -803,8 +833,8 @@ ol {
 }
 
 .jc-table th {
-  background-color: var(--joy-cream);
-  color: var(--joy-muted-text);
+  background-color: var(--joy-cream-50);
+  color: var(--joy-text-secondary);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -816,7 +846,7 @@ ol {
 }
 
 .jc-table td {
-  color: var(--joy-text);
+  color: var(--joy-text-primary);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -828,12 +858,12 @@ ol {
 }
 
 .jc-table tbody tr:nth-child(even) {
-  background-color: rgba(250, 243, 232, 0.45);
+  background-color: rgba(250, 243, 232, 0.35);
 }
 
 .jc-table tbody tr:hover {
   background-color: rgba(238, 225, 208, 0.5);
-  box-shadow: inset 3px 0 0 var(--joy-copper);
+  box-shadow: inset 3px 0 0 var(--joy-copper-400);
 }
 
 /* ==========================================================================
@@ -841,13 +871,13 @@ ol {
    ========================================================================== */
 .jc-modal-overlay {
   align-items: center;
-  background: rgba(36, 24, 13, 0.55);
+  background: rgba(33, 19, 15, 0.55);
   display: flex;
   inset: 0;
   justify-content: center;
   padding: var(--space-lg);
   position: fixed;
-  z-index: 200;
+  z-index: var(--z-modal);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
@@ -910,7 +940,7 @@ ol {
    ========================================================================== */
 .jc-toast {
   align-items: center;
-  background-color: var(--joy-espresso);
+  background-color: var(--joy-espresso-900);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   color: #fff;

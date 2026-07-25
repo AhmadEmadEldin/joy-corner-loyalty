@@ -664,11 +664,24 @@ app.get("/api/staff/queues", authenticate, requireRoles("owner","manager","cashi
 
 app.get("/api/staff/customers", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (_req, res) => {
   const rows = await query<Record<string, unknown>>(
-    `select id,full_name as "fullName",email,phone,customer_number as "customerNumber",
-            marketing_consent as "marketingConsent",
-            marketing_consent_at as "marketingConsentAt",
-            created_at as "createdAt"
-     from accounts where role='customer' and active=true order by full_name`,
+    `select a.id,a.full_name as "fullName",a.email,a.phone,a.customer_number as "customerNumber",
+            a.marketing_consent as "marketingConsent",
+            a.marketing_consent_at as "marketingConsentAt",
+            a.created_at as "createdAt",
+            coalesce(s.order_count,0)::int as "orderCount",
+            coalesce(s.total_spend,0)::numeric as "totalSpend",
+            s.last_order_at as "lastOrderAt",
+            coalesce(r.points_balance,0)::int as "loyaltyPoints",
+            coalesce(r.free_rewards_available,0)::int as "freeRewards"
+     from accounts a
+     left join lateral (
+       select count(*)::int as order_count,
+              sum(o.total)::numeric as total_spend,
+              max(o.created_at) as last_order_at
+       from orders o where o.customer_id=a.id
+     ) s on true
+     left join rewards_accounts r on r.customer_id=a.id
+     where a.role='customer' and a.active=true order by a.full_name`,
   );
   res.json({ customers: rows });
 }));
@@ -974,6 +987,224 @@ app.put("/api/owner/menu/items/:id/image", authenticate, requireRoles("owner"), 
 
 app.delete("/api/owner/menu/items/:id/image", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
   await query("update menu_items set image_content_type=null,image_bytes=null where id=$1", [req.params.id]);
+  res.json({ ok: true });
+}));
+
+function generateVoucherCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "JC-";
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+app.get("/api/owner/customers/:id/vouchers", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const customerId = req.params.id;
+  const customer = await query<{ id: string }>("select id from accounts where id=$1 and role='customer'", [customerId]);
+  if (!customer[0]) throw new HttpError(404, "Customer not found.");
+  const rows = await query<Record<string, unknown>>(
+    `select id,voucher_code as "voucherCode",voucher_type as "voucherType",
+            fixed_value as "fixedValue",percentage_value as "percentageValue",
+            status,expires_at as "expiresAt",issued_at as "issuedAt",
+            description
+     from vouchers where customer_id=$1 order by issued_at desc`,
+    [customerId],
+  );
+  res.json({ vouchers: rows });
+}));
+
+app.post("/api/owner/customers/:id/vouchers", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const customerId = req.params.id;
+  const customer = await query<{ id: string; full_name: string; phone: string | null }>(
+    "select id,full_name,phone from accounts where id=$1 and role='customer'", [customerId],
+  );
+  if (!customer[0]) throw new HttpError(404, "Customer not found.");
+  const voucherType = String(req.body?.voucherType || "fixed").trim();
+  if (!["fixed", "percentage", "free_item"].includes(voucherType)) {
+    throw new HttpError(400, "Voucher type must be fixed, percentage, or free_item.");
+  }
+  const description = String(req.body?.description || "").trim().slice(0, 200) || null;
+  let fixedValue: number | null = null;
+  let percentageValue: number | null = null;
+  let freeItemId: string | null = null;
+  if (voucherType === "fixed") {
+    fixedValue = Number(req.body?.fixedValue);
+    if (!Number.isFinite(fixedValue) || fixedValue! <= 0) throw new HttpError(400, "Fixed value must be greater than zero.");
+  } else if (voucherType === "percentage") {
+    percentageValue = Number(req.body?.percentageValue);
+    if (!Number.isFinite(percentageValue) || percentageValue! <= 0 || percentageValue! > 100) {
+      throw new HttpError(400, "Percentage must be between 1 and 100.");
+    }
+  } else {
+    freeItemId = String(req.body?.freeItemId || "").trim() || null;
+  }
+  const expiresInDays = Number(req.body?.expiresInDays);
+  const expiresAt = Number.isFinite(expiresInDays) && expiresInDays > 0
+    ? new Date(Date.now() + expiresInDays * 86400_000).toISOString()
+    : null;
+  const code = generateVoucherCode();
+  const [inserted] = await query<Record<string, unknown>>(
+    `insert into vouchers(customer_id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,expires_at,description)
+     values($1,$2,$3,$4,$5,$6,$7,$8)
+     returning id,voucher_code as "voucherCode",voucher_type as "voucherType",
+               fixed_value as "fixedValue",percentage_value as "percentageValue",
+               status,expires_at as "expiresAt",issued_at as "issuedAt",description`,
+    [customerId, code, voucherType, fixedValue, percentageValue, freeItemId, expiresAt, description],
+  );
+  if (!inserted) throw new HttpError(500, "Failed to create voucher.");
+  await query("insert into reporting_outbox(topic,entity_id,payload) values('vouchers',$1,'{}'::jsonb)", [inserted.id]);
+  await query(
+    "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'create','voucher',$3,$4::jsonb)",
+    [req.auth?.sub, req.auth?.role, inserted.id, JSON.stringify({ customerId, code, voucherType })],
+  );
+  res.status(201).json({
+    voucher: inserted,
+    customer: { fullName: customer[0].full_name, phone: customer[0].phone },
+  });
+}));
+
+app.post("/api/owner/vouchers/:id/revoke", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const voucherId = req.params.id;
+  const rows = await query<Record<string, unknown>>(
+    "select id,status from vouchers where id=$1", [voucherId],
+  );
+  if (!rows[0]) throw new HttpError(404, "Voucher not found.");
+  if (rows[0].status !== "active") throw new HttpError(400, "Only active vouchers can be revoked.");
+  await query("update vouchers set status='revoked' where id=$1", [voucherId]);
+  await query("insert into reporting_outbox(topic,entity_id,payload) values('vouchers',$1,'{}'::jsonb)", [voucherId]);
+  await query(
+    "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'revoke','voucher',$3,$4::jsonb)",
+    [req.auth?.sub, req.auth?.role, voucherId, JSON.stringify({})],
+  );
+  res.json({ ok: true });
+}));
+
+app.get("/api/owner/voucher-requests", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const statusFilter = String(req.query.status || "").trim().toUpperCase();
+  const validStatuses = ["PENDING", "APPROVED", "REJECTED", "CANCELLED", "FULFILLED"];
+  const where = statusFilter && validStatuses.includes(statusFilter) ? "where vr.status=$1" : "";
+  const params = statusFilter && validStatuses.includes(statusFilter) ? [statusFilter] : [];
+  const rows = await query<Record<string, unknown>>(
+    `select vr.id,vr.customer_id as "customerId",vr.requested_by_user_id as "requestedByUserId",
+            vr.request_reason as "requestReason",vr.requested_reward_type as "requestedRewardType",
+            vr.status,vr.reviewed_by_user_id as "reviewedByUserId",vr.reviewed_at as "reviewedAt",
+            vr.rejection_reason as "rejectionReason",vr.created_voucher_id as "createdVoucherId",
+            vr.created_at as "createdAt",vr.updated_at as "updatedAt",
+            a.full_name as "customerName",a.email as "customerEmail",a.phone as "customerPhone",
+            ra.points_balance as "loyaltyPoints",ra.eligible_purchase_count as "orderCount",
+            ra.free_rewards_available as "freeRewards"
+     from voucher_requests vr
+     join accounts a on a.id=vr.customer_id
+     left join rewards_accounts ra on ra.customer_id=vr.customer_id
+     ${where}
+     order by vr.created_at desc limit 100`, params,
+  );
+  res.json({ requests: rows });
+}));
+
+app.patch("/api/owner/voucher-requests/:id", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const requestId = req.params.id;
+  const action = String(req.body?.action || "").trim().toUpperCase();
+  if (!["APPROVE", "REJECT"].includes(action)) throw new HttpError(400, "Action must be APPROVE or REJECT.");
+  const rows = await query<Record<string, unknown>>(
+    "select id,customer_id as \"customerId\",status from voucher_requests where id=$1", [requestId],
+  );
+  if (!rows[0]) throw new HttpError(404, "Voucher request not found.");
+  if (rows[0].status !== "PENDING") throw new HttpError(400, "Only pending requests can be reviewed.");
+  if (action === "REJECT") {
+    const rejectionReason = String(req.body?.rejectionReason || "").trim().slice(0, 500) || null;
+    await query(
+      "update voucher_requests set status='REJECTED',reviewed_by_user_id=$2,reviewed_at=now(),rejection_reason=$3,updated_at=now() where id=$1",
+      [requestId, req.auth?.sub, rejectionReason],
+    );
+    res.json({ ok: true, status: "REJECTED" });
+    return;
+  }
+  const voucherType = String(req.body?.voucherType || "fixed").trim();
+  if (!["fixed", "percentage", "free_item"].includes(voucherType)) {
+    throw new HttpError(400, "Voucher type must be fixed, percentage, or free_item.");
+  }
+  const description = String(req.body?.description || "").trim().slice(0, 200) || null;
+  let fixedValue: number | null = null;
+  let percentageValue: number | null = null;
+  let freeItemId: string | null = null;
+  if (voucherType === "fixed") {
+    fixedValue = Number(req.body?.fixedValue);
+    if (!Number.isFinite(fixedValue) || fixedValue! <= 0) throw new HttpError(400, "Fixed value must be greater than zero.");
+  } else if (voucherType === "percentage") {
+    percentageValue = Number(req.body?.percentageValue);
+    if (!Number.isFinite(percentageValue) || percentageValue! <= 0 || percentageValue! > 100) {
+      throw new HttpError(400, "Percentage must be between 1 and 100.");
+    }
+  } else {
+    freeItemId = String(req.body?.freeItemId || "").trim() || null;
+  }
+  const expiresInDays = Number(req.body?.expiresInDays);
+  const expiresAt = Number.isFinite(expiresInDays) && expiresInDays > 0
+    ? new Date(Date.now() + expiresInDays * 86400_000).toISOString()
+    : null;
+  const code = generateVoucherCode();
+  const customerId = String(rows[0].customerId);
+  const [inserted] = await query<Record<string, unknown>>(
+    `insert into vouchers(customer_id,voucher_code,voucher_type,fixed_value,percentage_value,free_item_id,expires_at,description)
+     values($1,$2,$3,$4,$5,$6,$7,$8)
+     returning id,voucher_code as "voucherCode",voucher_type as "voucherType",
+               fixed_value as "fixedValue",percentage_value as "percentageValue",
+               status,expires_at as "expiresAt",issued_at as "issuedAt",description`,
+    [customerId, code, voucherType, fixedValue, percentageValue, freeItemId, expiresAt, description],
+  );
+  if (!inserted) throw new HttpError(500, "Failed to create voucher.");
+  await query(
+    "update voucher_requests set status='FULFILLED',reviewed_by_user_id=$2,reviewed_at=now(),created_voucher_id=$3,updated_at=now() where id=$1",
+    [requestId, req.auth?.sub, inserted.id],
+  );
+  await query("insert into reporting_outbox(topic,entity_id,payload) values('vouchers',$1,'{}'::jsonb)", [inserted.id]);
+  await query("insert into reporting_outbox(topic,entity_id,payload) values('voucher_requests',$1,'{}'::jsonb)", [requestId]);
+  await query(
+    "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'approve','voucher_request',$3,$4::jsonb)",
+    [req.auth?.sub, req.auth?.role, requestId, JSON.stringify({ customerId, code, voucherType })],
+  );
+  res.json({ ok: true, status: "FULFILLED", voucher: inserted });
+}));
+
+app.post("/api/customer/voucher-requests", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
+  const userId = req.auth?.sub;
+  const requestReason = String(req.body?.requestReason || "").trim().slice(0, 500) || null;
+  const requestedRewardType = String(req.body?.requestedRewardType || "").trim().slice(0, 100) || null;
+  const existing = await query<{ id: string }>(
+    "select id from voucher_requests where customer_id=$1 and status='PENDING' limit 1", [userId],
+  );
+  if (existing[0]) throw new HttpError(400, "You already have a pending voucher request.");
+  const [inserted] = await query<Record<string, unknown>>(
+    `insert into voucher_requests(customer_id,requested_by_user_id,request_reason,requested_reward_type)
+     values($1,$1,$2,$3) returning id,status,created_at as "createdAt"`,
+    [userId, requestReason, requestedRewardType],
+  );
+  if (!inserted) throw new HttpError(500, "Failed to create request.");
+  await query("insert into reporting_outbox(topic,entity_id,payload) values('voucher_requests',$1,'{}'::jsonb)", [inserted.id]);
+  res.status(201).json({ request: inserted });
+}));
+
+app.get("/api/customer/voucher-requests", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
+  const userId = req.auth?.sub;
+  const rows = await query<Record<string, unknown>>(
+    `select id,status,request_reason as "requestReason",requested_reward_type as "requestedRewardType",
+            rejection_reason as "rejectionReason",created_voucher_id as "createdVoucherId",
+            created_at as "createdAt",updated_at as "updatedAt"
+     from voucher_requests where customer_id=$1 order by created_at desc limit 50`,
+    [userId],
+  );
+  res.json({ requests: rows });
+}));
+
+app.post("/api/customer/voucher-requests/:id/cancel", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
+  const userId = req.auth?.sub;
+  const requestId = req.params.id;
+  const rows = await query<{ id: string; status: string }>(
+    "select id,status from voucher_requests where id=$1 and customer_id=$2", [requestId, userId],
+  );
+  if (!rows[0]) throw new HttpError(404, "Request not found.");
+  if (rows[0].status !== "PENDING") throw new HttpError(400, "Only pending requests can be cancelled.");
+  await query("update voucher_requests set status='CANCELLED',updated_at=now() where id=$1", [requestId]);
   res.json({ ok: true });
 }));
 

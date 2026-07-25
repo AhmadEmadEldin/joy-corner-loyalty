@@ -22,9 +22,13 @@ import {
   CustomerOrderModifier,
   CustomerProfile,
   CustomerVoucher,
+  CustomerVoucherRequest,
   changeOrderStatus,
+  cancelVoucherRequest,
+  createVoucherRequest,
   loadCustomerDashboard,
   loadCustomerProfile,
+  loadCustomerVoucherRequests,
   loadMenu,
   markNotificationRead,
   MenuItem,
@@ -209,6 +213,8 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
     points_balance: 0,
   });
   const [vouchers, setVouchers] = useState<CustomerVoucher[]>([]);
+  const [voucherRequests, setVoucherRequests] = useState<CustomerVoucherRequest[]>([]);
+  const [requestBusy, setRequestBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -247,14 +253,16 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextMenu, nextProfile, dashboard] = await Promise.all([
+      const [nextMenu, nextProfile, dashboard, reqs] = await Promise.all([
         loadMenu(),
         loadCustomerProfile(),
         loadCustomerDashboard(),
+        loadCustomerVoucherRequests().catch(() => []),
       ]);
       setMenu(nextMenu);
       setProfile(nextProfile);
       applyDashboard(dashboard);
+      setVoucherRequests(reqs);
       setMessage("");
     } catch (error) {
       setMessage(errorMessage(error));
@@ -443,8 +451,40 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
           selectedOrderId={selectedOrderId}
         />
       ) : null}
-      {section === "rewards" ? <RewardsPanel rewards={rewards} /> : null}
-      {section === "vouchers" ? <VouchersPanel vouchers={vouchers} /> : null}
+      {section === "rewards" ? (
+        <RewardsPanel
+          onRequestVoucher={async (reason) => {
+            setRequestBusy(true);
+            try {
+              await createVoucherRequest({ requestReason: reason });
+              const reqs = await loadCustomerVoucherRequests().catch(() => []);
+              setVoucherRequests(reqs);
+              setMessage("Voucher request submitted. The owner will review it shortly.");
+            } catch (error) {
+              setMessage(errorMessage(error));
+            } finally {
+              setRequestBusy(false);
+            }
+          }}
+          requestBusy={requestBusy}
+          rewards={rewards}
+        />
+      ) : null}
+      {section === "vouchers" ? (
+        <VouchersPanel
+          onCancelRequest={async (id) => {
+            try {
+              await cancelVoucherRequest(id);
+              const reqs = await loadCustomerVoucherRequests().catch(() => []);
+              setVoucherRequests(reqs);
+            } catch (error) {
+              setMessage(errorMessage(error));
+            }
+          }}
+          requests={voucherRequests}
+          vouchers={vouchers}
+        />
+      ) : null}
       {section === "notifications" ? (
         <NotificationsPanel
           notifications={notifications}
@@ -545,14 +585,20 @@ function CustomerHome({
 
 function RewardsPanel({
   rewards,
+  onRequestVoucher,
+  requestBusy,
 }: {
   rewards: {
     eligible_purchase_count: number;
     free_rewards_available: number;
     points_balance: number;
   };
+  onRequestVoucher: (reason?: string) => Promise<void>;
+  requestBusy: boolean;
 }) {
   const progress = rewards.eligible_purchase_count % 7;
+  const [showRequest, setShowRequest] = useState(false);
+  const [reason, setReason] = useState("");
   return (
     <section className="portal-section customer-detail-page">
       <p className="eyebrow">Joy Corner Loyalty</p>
@@ -578,32 +624,135 @@ function RewardsPanel({
         Every seven paid eligible drinks unlocks one free reward after the order
         is closed.
       </p>
+      <div style={{ marginTop: "var(--space-lg)" }}>
+        {!showRequest ? (
+          <button className="button-primary" onClick={() => setShowRequest(true)} type="button">
+            Request a Voucher
+          </button>
+        ) : (
+          <div className="voucher-request-panel">
+            <h3>Request a Voucher</h3>
+            <p className="muted" style={{ fontSize: "0.875rem", marginBottom: "var(--space-md)" }}>
+              Tell us what reward you'd like. The owner will review your eligibility.
+            </p>
+            <label style={{ display: "grid", gap: "var(--space-xs)", fontSize: "0.8125rem", color: "var(--joy-text-secondary)", fontWeight: 600 }}>
+              Reason or preferred reward (optional)
+              <input
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Birthday treat, free latte…"
+                value={reason}
+              />
+            </label>
+            <div style={{ display: "flex", gap: "var(--space-sm)", marginTop: "var(--space-sm)" }}>
+              <button className="button-secondary" onClick={() => setShowRequest(false)} type="button">Cancel</button>
+              <button
+                className="button-primary"
+                disabled={requestBusy}
+                onClick={() => { void onRequestVoucher(reason.trim() || undefined).then(() => { setShowRequest(false); setReason(""); }); }}
+                type="button"
+              >
+                {requestBusy ? "Submitting…" : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
 
-function VouchersPanel({ vouchers }: { vouchers: CustomerVoucher[] }) {
+function VouchersPanel({
+  vouchers,
+  requests,
+  onCancelRequest,
+}: {
+  vouchers: CustomerVoucher[];
+  requests: CustomerVoucherRequest[];
+  onCancelRequest: (id: string) => Promise<void>;
+}) {
+  const [tab, setTab] = useState<"active" | "used" | "expired" | "requests">("active");
+  const now = new Date();
+  const activeVouchers = vouchers.filter((v) => v.status === "active" && (!v.expires_at || new Date(v.expires_at) > now));
+  const usedVouchers = vouchers.filter((v) => v.status === "redeemed");
+  const expiredVouchers = vouchers.filter((v) => v.status === "expired" || (v.expires_at && new Date(v.expires_at) <= now && v.status === "active"));
+
   return (
     <section className="portal-section customer-detail-page">
       <p className="eyebrow">Saved offers</p>
       <h2>Your vouchers</h2>
-      {vouchers.length ? (
-        <div className="voucher-grid">
-          {vouchers.map((voucher) => (
-            <article className="voucher-card" key={voucher.id}>
-              <span>{voucher.status}</span>
-              <strong>{voucher.voucher_code}</strong>
-              <p>{voucher.voucher_type.replace(/_/g, " ")}</p>
-              <small>
-                {voucher.expires_at
-                  ? `Expires ${new Date(voucher.expires_at).toLocaleDateString()}`
-                  : "No expiry"}
-              </small>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="muted">No vouchers yet.</p>
+      <div className="category-rail" style={{ marginBottom: "var(--space-md)" }}>
+        {(["active", "used", "expired", "requests"] as const).map((t) => (
+          <button
+            key={t}
+            className={tab === t ? "active" : ""}
+            onClick={() => setTab(t)}
+            type="button"
+          >
+            {t === "active" ? `Active (${activeVouchers.length})` : t === "used" ? `Used (${usedVouchers.length})` : t === "expired" ? `Expired (${expiredVouchers.length})` : `Requests (${requests.length})`}
+          </button>
+        ))}
+      </div>
+      {tab === "active" && (
+        activeVouchers.length ? (
+          <div className="voucher-grid">
+            {activeVouchers.map((v) => (
+              <article className="voucher-card" key={v.id}>
+                <span>{v.status}</span>
+                <strong>{v.voucher_code}</strong>
+                <p>{v.voucher_type.replace(/_/g, " ")}</p>
+                <small>{v.expires_at ? `Expires ${new Date(v.expires_at).toLocaleDateString()}` : "No expiry"}</small>
+              </article>
+            ))}
+          </div>
+        ) : <p className="muted">No active vouchers.</p>
+      )}
+      {tab === "used" && (
+        usedVouchers.length ? (
+          <div className="voucher-grid">
+            {usedVouchers.map((v) => (
+              <article className="voucher-card voucher-used" key={v.id}>
+                <span>{v.status}</span>
+                <strong>{v.voucher_code}</strong>
+                <p>{v.voucher_type.replace(/_/g, " ")}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p className="muted">No used vouchers.</p>
+      )}
+      {tab === "expired" && (
+        expiredVouchers.length ? (
+          <div className="voucher-grid">
+            {expiredVouchers.map((v) => (
+              <article className="voucher-card voucher-expired" key={v.id}>
+                <span>{v.status}</span>
+                <strong>{v.voucher_code}</strong>
+                <p>{v.voucher_type.replace(/_/g, " ")}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p className="muted">No expired vouchers.</p>
+      )}
+      {tab === "requests" && (
+        requests.length ? (
+          <div style={{ display: "grid", gap: "var(--space-md)" }}>
+            {requests.map((r) => (
+              <article className="voucher-request-card" key={r.id}>
+                <span className={`request-status ${r.status.toLowerCase()}`}>{r.status}</span>
+                {r.requestReason ? <span className="request-reason">"{r.requestReason}"</span> : null}
+                {r.rejectionReason ? <span style={{ fontSize: "0.8125rem", color: "var(--joy-danger)" }}>Rejection: {r.rejectionReason}</span> : null}
+                {r.createdVoucherId ? <span style={{ fontSize: "0.8125rem", color: "var(--joy-success)" }}>Voucher has been issued</span> : null}
+                <span className="request-date">{new Date(r.createdAt).toLocaleString()}</span>
+                {r.status === "PENDING" ? (
+                  <div className="request-actions">
+                    <button className="button-secondary" onClick={() => void onCancelRequest(r.id)} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px" }}>
+                      Cancel Request
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : <p className="muted">No voucher requests yet.</p>
       )}
     </section>
   );

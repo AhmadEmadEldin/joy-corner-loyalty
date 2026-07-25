@@ -17,6 +17,18 @@ const latte: MenuItem = {
   ],
 };
 
+const smoothie: MenuItem = {
+  available: true,
+  category: "Smoothies",
+  description: "Fresh fruit blend",
+  id: "smoothie",
+  image_url: null,
+  loyalty_eligible: false,
+  modifiers: [],
+  name: "Berry Smoothie",
+  sizes: [{ id: "reg", price: 55, size_name: "Regular" }],
+};
+
 const unavailable: MenuItem = {
   ...latte,
   available: false,
@@ -116,5 +128,120 @@ describe("CustomerMenu", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(document.body.style.overflow).toBe("");
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+describe("Category navigation", () => {
+  it("renders category rail from menu data", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte, smoothie]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Menu categories" });
+    expect(nav).toBeTruthy();
+    const allBtn = screen.getByRole("button", { name: "All" });
+    expect(allBtn).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hot Coffee" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Smoothies" })).toBeTruthy();
+  });
+
+  it("selecting a category shows only matching products", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte, smoothie]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Smoothies" }));
+    expect(screen.getByText("Berry Smoothie")).toBeTruthy();
+    expect(screen.queryByText("Caffè Latte")).toBeNull();
+  });
+
+  it("All category shows all available products", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte, smoothie]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByText("Caffè Latte")).toBeTruthy();
+    expect(screen.getByText("Berry Smoothie")).toBeTruthy();
+  });
+
+  it("categories deduplicated from menu data", () => {
+    const duplicateMenu: MenuItem[] = [
+      { ...latte, id: "a" },
+      { ...latte, id: "b" },
+      smoothie,
+    ];
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={duplicateMenu}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Menu categories" });
+    const buttons = nav.querySelectorAll("button");
+    const labels = Array.from(buttons).map((b) => b.textContent);
+    expect(labels).toEqual(["All", "Hot Coffee", "Smoothies"]);
+  });
+
+  it("category rail has category-rail CSS class", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Menu categories" });
+    expect(nav.className).toContain("category-rail");
+  });
+});
+
+describe("Font and design system classes", () => {
+  it("category-rail nav uses design system CSS class", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Menu categories" });
+    expect(nav.className).toContain("category-rail");
+  });
+
+  it("product cards use kiosk-product-card class", () => {
+    render(
+      <CustomerMenu
+        cart={[]}
+        loading={false}
+        menu={[latte]}
+        onCartChange={jest.fn()}
+        onCheckout={jest.fn()}
+      />,
+    );
+    const card = screen.getByRole("article");
+    expect(card.className).toContain("kiosk-product-card");
   });
 });
