@@ -9,7 +9,11 @@ dotenv.config({ path: [".env.local", ".env"] });
 const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
 
 const apiConfig = {
-  baseUrl: process.env.VITE_API_URL || "/api",
+  baseUrl:
+    process.env.VITE_API_URL ||
+    (process.env.NODE_ENV === "production"
+      ? "https://site--loyalty-api--8dkxbmpznww8.code.run"
+      : "/api"),
 };
 
 const config: Configuration & { devServer?: DevServerConfiguration } = {
