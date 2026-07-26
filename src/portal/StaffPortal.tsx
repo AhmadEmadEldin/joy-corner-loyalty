@@ -653,7 +653,9 @@ function OwnerSystemStatus() {
       detail: apiOrigin || "VITE_API_URL not configured",
     });
 
-    const backendUrl = apiOrigin.replace(/\/api\/?$/, "") || apiOrigin;
+    const backendUrl = apiOrigin.startsWith("http")
+      ? (apiOrigin.replace(/\/api\/?$/, "") || apiOrigin)
+      : "";
 
     try {
       const resp = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(8000) });

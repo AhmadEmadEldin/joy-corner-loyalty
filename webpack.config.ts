@@ -11,14 +11,6 @@ const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
 const isProduction = process.env.NODE_ENV === "production";
 const configuredApiUrl = process.env.VITE_API_URL?.trim();
 
-if (isProduction && !configuredApiUrl) {
-  console.error(
-    "\n[ERROR] VITE_API_URL is required for production builds.\n" +
-    "Set it in Vercel → Settings → Environment Variables.\n",
-  );
-  throw new Error("VITE_API_URL is required for production builds.");
-}
-
 const apiConfig = {
   baseUrl: configuredApiUrl || "/api",
 };

@@ -18,7 +18,7 @@ export function RootApp() {
       <main className="joy-portal center-state" role="alert">
         <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
         <h1>Backend connection required</h1>
-        <p>Add <code>VITE_API_URL</code>, then restart the app.</p>
+        <p>API configuration is missing. Restart the app.</p>
       </main>
     );
   }

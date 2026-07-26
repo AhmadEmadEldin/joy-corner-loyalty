@@ -20,6 +20,7 @@
     "reconcile:end-day": "tsx ./scripts/reconcile_end_day.ts",
     "check": "npm run lint:types && npm run lint && npm test && npm run build",
     "start": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js serve --config webpack.config.ts --mode development",
+    "start:production": "tsx ./server/api.ts",
     "sync:reporting": "tsx ./scripts/sync_neon_reporting.ts",
     "verify:api-workflow": "tsx ./scripts/verify_api_workflow.ts",
     "test": "jest --no-cache --passWithNoTests",

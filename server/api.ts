@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { promisify } from "node:util";
 import dotenv from "dotenv";
 import express, {
@@ -1701,6 +1702,32 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Request failed", message);
   res.status(500).json({ error: isProduction ? "The server could not complete the request." : message });
 });
+
+// ─────────────────────────────────────────────────────
+// STATIC FILE SERVING (same-origin production)
+// ─────────────────────────────────────────────────────
+
+if (isProduction) {
+  const distPath = path.resolve(process.cwd(), "dist");
+
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "API route not found." });
+  });
+
+  app.use(express.static(distPath, { index: false }));
+
+  app.use((_req, res, next) => {
+    if (/\.\w{2,5}$/.test(_req.path)) {
+      res.status(404).json({ error: "Not found." });
+      return;
+    }
+    next();
+  });
+
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
 
 async function seedStaffAccounts(): Promise<void> {
   const staff = [
