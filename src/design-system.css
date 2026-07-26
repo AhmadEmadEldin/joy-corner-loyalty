@@ -19,14 +19,14 @@
   --joy-oat-200: #EEE1D0;
   --joy-sand-300: #D8C2A8;
 
-  /* Semantic Colors */
-  --joy-text-primary: #241814;
-  --joy-text-secondary: #6F625C;
-  --joy-text-tertiary: #9A8D85;
-  --joy-border: #DED2C5;
-  --joy-surface: #FFFDF9;
-  --joy-surface-alt: #F7F1E8;
-  --joy-surface-muted: #F0E8DC;
+  /* Semantic Colors — Dark-first (design spec) */
+  --joy-text-primary: #F0E6DA;
+  --joy-text-secondary: #A89888;
+  --joy-text-tertiary: #7A6E64;
+  --joy-border: #3A2E24;
+  --joy-surface: #1A1210;
+  --joy-surface-alt: #221A14;
+  --joy-surface-muted: #2E221A;
 
   /* Legacy aliases for backward compatibility */
   --joy-espresso: var(--joy-espresso-900);
@@ -41,14 +41,14 @@
   --joy-muted-text: var(--joy-text-secondary);
 
   /* Status Colors */
-  --joy-success: #2F7A50;
-  --joy-success-bg: #EDFBF3;
-  --joy-warning: #B87920;
-  --joy-warning-bg: #FEF8EC;
-  --joy-danger: #B63A3A;
-  --joy-danger-bg: #FDF0F0;
-  --joy-info: #356D91;
-  --joy-info-bg: #EDF5FB;
+  --joy-success: #387A52;
+  --joy-success-bg: #0F2A1A;
+  --joy-warning: #C67B2D;
+  --joy-warning-bg: #2A1E0A;
+  --joy-danger: #B8463D;
+  --joy-danger-bg: #2A0F0F;
+  --joy-info: #3882F6;
+  --joy-info-bg: #0F1E2A;
 
   --status-new: #3B6F8F;
   --status-confirmed: #76558E;
@@ -63,8 +63,8 @@
   --payment-partial: #B87920;
 
   /* Typography */
-  --font-brand: "Fraunces", Georgia, serif;
-  --font-ui: "Inter", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-brand: "Playfair Display", Georgia, serif;
+  --font-ui: "Poppins", "Noto Sans Arabic", system-ui, sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
 
   /* Spacing */
@@ -107,23 +107,23 @@
   --z-toast: 500;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --joy-surface: #1A1210;
-    --joy-surface-alt: #221A14;
-    --joy-surface-muted: #2E221A;
-    --joy-text-primary: #F0E6DA;
-    --joy-text-secondary: #A89888;
-    --joy-text-tertiary: #7A6E64;
-    --joy-border: #3A2E24;
-    --joy-cream-50: #1A1210;
-    --joy-cream-100: #221A14;
-    --joy-oat-200: #2E221A;
-    --joy-sand-300: #3E3028;
-    --joy-success-bg: #0F2A1A;
-    --joy-warning-bg: #2A1E0A;
-    --joy-danger-bg: #2A0F0F;
-    --joy-info-bg: #0F1E2A;
+    --joy-surface: #FFFDF9;
+    --joy-surface-alt: #F7F1E8;
+    --joy-surface-muted: #F0E8DC;
+    --joy-text-primary: #241814;
+    --joy-text-secondary: #6F625C;
+    --joy-text-tertiary: #9A8D85;
+    --joy-border: #DED2C5;
+    --joy-cream-50: #FFFCF7;
+    --joy-cream-100: #FAF3E8;
+    --joy-oat-200: #EEE1D0;
+    --joy-sand-300: #D8C2A8;
+    --joy-success-bg: #EDFBF3;
+    --joy-warning-bg: #FEF8EC;
+    --joy-danger-bg: #FDF0F0;
+    --joy-info-bg: #EDF5FB;
   }
 }
 
