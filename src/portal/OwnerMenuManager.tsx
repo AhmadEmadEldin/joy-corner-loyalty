@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  createOwnerMenuItem,
   loadOwnerMenu,
   OwnerMenuItem,
   removeOwnerMenuImage,
@@ -17,6 +18,7 @@ export function OwnerMenuManager() {
   const [selected, setSelected] = useState<OwnerMenuItem | null>(null);
   const [query, setQuery] = useState("");
   const [missingOnly, setMissingOnly] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [message, setMessage] = useState("Loading owner menu…");
 
   async function refresh(preferredId?: string) {
@@ -48,6 +50,17 @@ export function OwnerMenuManager() {
     );
   }, [items, missingOnly, query]);
 
+  const categories = useMemo(
+    () => {
+      const seen = new Map<string, string>();
+      items.forEach((item) => {
+        if (!seen.has(item.category)) seen.set(item.category, item.category_id);
+      });
+      return Array.from(seen.entries()).map(([name, id]) => ({ id, name }));
+    },
+    [items],
+  );
+
   return (
     <section className="portal-section owner-menu-manager">
       <header className="owner-menu-header">
@@ -77,6 +90,9 @@ export function OwnerMenuManager() {
             />
             Missing images only
           </label>
+          <button onClick={() => setShowCreate(!showCreate)} type="button">
+            {showCreate ? "Cancel" : "Add product"}
+          </button>
         </div>
       </header>
       {message ? (
@@ -85,6 +101,16 @@ export function OwnerMenuManager() {
         </p>
       ) : null}
       <div className="owner-menu-layout">
+        {showCreate ? (
+          <OwnerMenuCreator
+            categories={categories}
+            onCancel={() => setShowCreate(false)}
+            onCreated={async (id) => {
+              setShowCreate(false);
+              await refresh(id);
+            }}
+          />
+        ) : null}
         <div aria-label="Menu products" className="owner-menu-list">
           {filtered.map((item) => (
             <button
@@ -104,6 +130,13 @@ export function OwnerMenuManager() {
               <span>
                 <strong>{item.name}</strong>
                 <small>{item.category}</small>
+                {item.availability_state !== "available" ? (
+                  <small className={`availability-badge availability-badge--${item.availability_state}`}>
+                    {item.availability_state === "sold_out" ? "Sold out"
+                      : item.availability_state === "temporarily_unavailable" ? "Paused"
+                      : "Archived"}
+                  </small>
+                ) : null}
               </span>
               {!item.image_url ? <em>Image needed</em> : null}
             </button>
@@ -146,8 +179,11 @@ function OwnerMenuEditor({
     setMessage("");
     try {
       await updateOwnerMenuItem({
-        active: form.get("active") === "on",
-        available: form.get("available") === "on",
+        availabilityState: String(form.get("availabilityState") || "available") as
+          | "available"
+          | "temporarily_unavailable"
+          | "sold_out"
+          | "archived",
         description: String(form.get("description") || ""),
         id: item.id,
         loyaltyEligible: form.get("loyaltyEligible") === "on",
@@ -155,6 +191,7 @@ function OwnerMenuEditor({
         preparationStation: String(form.get("preparationStation")) as
           | "barista"
           | "kitchen",
+        sortOrder: Number(form.get("sortOrder") ?? 0),
       });
       await onChanged();
       setMessage("Product details saved.");
@@ -248,18 +285,28 @@ function OwnerMenuEditor({
         </select>
       </label>
       <fieldset className="owner-menu-flags">
-        <legend>Visibility and rewards</legend>
+        <legend>Availability and display</legend>
         <label>
-          <input defaultChecked={item.active} name="active" type="checkbox" />{" "}
-          Active
+          Availability
+          <select
+            defaultValue={item.availability_state}
+            name="availabilityState"
+          >
+            <option value="available">Available</option>
+            <option value="temporarily_unavailable">Temporarily unavailable</option>
+            <option value="sold_out">Sold out</option>
+            <option value="archived">Archived</option>
+          </select>
         </label>
         <label>
+          Display order
           <input
-            defaultChecked={item.available}
-            name="available"
-            type="checkbox"
-          />{" "}
-          Available now
+            defaultValue={item.sort_order}
+            min="0"
+            name="sortOrder"
+            step="1"
+            type="number"
+          />
         </label>
         <label>
           <input
@@ -300,6 +347,89 @@ function OwnerMenuEditor({
       <button disabled={busy} type="submit">
         {busy ? "Saving…" : "Save product"}
       </button>
+      {message ? (
+        <p aria-live="polite" role="status">
+          {message}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function OwnerMenuCreator({
+  categories,
+  onCancel,
+  onCreated,
+}: {
+  categories: Array<{ id: string; name: string }>;
+  onCancel: () => void;
+  onCreated: (id: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await createOwnerMenuItem({
+        categoryId: String(form.get("categoryId") || ""),
+        description: String(form.get("description") || ""),
+        loyaltyEligible: form.get("loyaltyEligible") === "on",
+        name: String(form.get("name") || ""),
+        preparationStation: String(form.get("preparationStation")) as
+          | "barista"
+          | "kitchen",
+      });
+      onCreated(result.id);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="owner-menu-editor" onSubmit={submit}>
+      <h3>New product</h3>
+      <label>
+        Product name
+        <input maxLength={120} name="name" required />
+      </label>
+      <label>
+        Category
+        <select name="categoryId" required>
+          <option value="">Select category…</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>{cat.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Description
+        <textarea maxLength={500} name="description" rows={3} />
+      </label>
+      <label>
+        Preparation station
+        <select defaultValue="barista" name="preparationStation">
+          <option value="barista">Barista</option>
+          <option value="kitchen">Kitchen</option>
+        </select>
+      </label>
+      <label>
+        <input defaultChecked name="loyaltyEligible" type="checkbox" /> Loyalty
+        eligible
+      </label>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button disabled={busy} type="submit">
+          {busy ? "Creating…" : "Create product"}
+        </button>
+        <button disabled={busy} onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
       {message ? (
         <p aria-live="polite" role="status">
           {message}

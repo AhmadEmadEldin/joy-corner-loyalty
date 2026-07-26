@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   restoreSession,
   subscribeToSession,
@@ -37,7 +37,7 @@ import {
   runEndDay,
   searchCustomerByPhone,
   signInStaff,
-  signOutCustomer,
+  signOut,
   StaffProfile,
   startBusinessDay,
   subscribeToStaffQueues,
@@ -46,6 +46,7 @@ import {
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
+import { ProductImage } from "./ProductImage";
 import { createClientId } from "./cartDraft";
 import { buildDailyReportHtml, buildReceiptPrintHtml, type DailyReportData } from "../receiptPrint";
 
@@ -84,6 +85,7 @@ export function StaffPortal() {
 function StaffAccess() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -120,7 +122,19 @@ function StaffAccess() {
           </label>
           <label>
             Password
-            <input name="password" required type="password" />
+            <div className="password-toggle">
+              <input
+                name="password"
+                required
+                type={showPassword ? "text" : "password"}
+              />
+              <button
+                onClick={() => setShowPassword(!showPassword)}
+                type="button"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
           <button disabled={busy} type="submit">
             {busy ? "Signing in…" : "Sign in"}
@@ -197,10 +211,10 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     let refreshTimer: number | undefined;
     const unsubscribe = subscribeToStaffQueues(role, () => {
       window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(
-        () => void refreshQueues(role),
-        150,
-      );
+      refreshTimer = window.setTimeout(() => {
+        void refreshQueues(role);
+        void loadMenu().then(setMenu).catch(() => undefined);
+      }, 150);
     });
     return () => {
       window.clearTimeout(refreshTimer);
@@ -216,9 +230,17 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     setBusyOrder(order.order_id);
     try {
       await changeOrderStatus(order.order_id, next, reason);
-      if (next === "confirmed") {
-        setMessage(`Order ${order.order_number} confirmed and sent to the barista.`);
-      }
+      const labels: Partial<Record<OperationalOrderStatus, string>> = {
+        confirmed: `Order ${order.order_number} confirmed and sent to the barista.`,
+        rejected: `Order ${order.order_number} rejected.`,
+        cancelled: `Order ${order.order_number} cancelled.`,
+        accepted: `Order ${order.order_number} accepted.`,
+        preparing: `Order ${order.order_number} is now being prepared.`,
+        ready: `Order ${order.order_number} is ready for pickup.`,
+        picked_up: `Order ${order.order_number} marked as picked up.`,
+        closed: `Order ${order.order_number} completed.`,
+      };
+      setMessage(labels[next] || `Order ${order.order_number} updated.`);
       if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
@@ -229,12 +251,14 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
 
   const [paymentOrder, setPaymentOrder] = useState<QueueOrder | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("cash_at_cashier");
   const [paymentBusy, setPaymentBusy] = useState(false);
 
   function openPayment(order: QueueOrder) {
     const remaining = order.remaining_amount ?? order.total ?? 0;
     setPaymentOrder(order);
     setPaymentAmount(remaining > 0 ? remaining.toFixed(2) : "");
+    setPaymentMethod(order.payment_method || "cash_at_cashier");
   }
 
   async function submitPayment() {
@@ -250,7 +274,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       await confirmOrderPayment({
         amount,
         orderId: paymentOrder.order_id,
-        paymentMethod: (paymentOrder.payment_method || "cash_at_cashier") as
+        paymentMethod: paymentMethod as
           | "cash_at_cashier"
           | "card_at_branch"
           | "instapay"
@@ -260,6 +284,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       setMessage(`${money.format(amount)} recorded for ${paymentOrder.order_number}.`);
       setPaymentOrder(null);
       setPaymentAmount("");
+      setPaymentMethod("cash_at_cashier");
       if (profile) await refreshQueues(profile.role);
     } catch (error) {
       setMessage(getMessage(error));
@@ -322,19 +347,26 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
   return (
     <main className="joy-portal">
       <header className="portal-header">
-        <div>
-          <p className="eyebrow">Joy Corner operations</p>
-          <h1>{profile?.full_name || "Staff"}</h1>
-          <small>{profile?.role}</small>
-          {profile?.role === "owner" ? (
-            <span className="build-badge" title={`Built: ${typeof __BUILD_TIME__ !== "undefined" ? new Date(__BUILD_TIME__).toLocaleString() : "unknown"}`}>
-              {typeof __BUILD_GIT_SHA__ !== "undefined" ? __BUILD_GIT_SHA__ : ""}
-            </span>
-          ) : null}
+        <div style={{ alignItems: "center", display: "flex", gap: 12 }}>
+          <img
+            alt="Joy Corner"
+            src="/assets/joy-corner-mark.png"
+            style={{ height: 40, width: 40, borderRadius: "50%" }}
+          />
+          <div>
+            <p className="eyebrow">Joy Corner operations</p>
+            <h1>{profile?.full_name || "Staff"}</h1>
+            <small>{profile?.role}</small>
+            {profile?.role === "owner" ? (
+              <span className="build-badge" title={`Built: ${typeof __BUILD_TIME__ !== "undefined" ? new Date(__BUILD_TIME__).toLocaleString() : "unknown"}`}>
+                {typeof __BUILD_GIT_SHA__ !== "undefined" ? __BUILD_GIT_SHA__ : ""}
+              </span>
+            ) : null}
+          </div>
         </div>
         <button
           className="button-secondary"
-          onClick={() => void signOutCustomer()}
+          onClick={() => void signOut()}
           type="button"
         >
           Sign out
@@ -456,7 +488,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           endingDay={endingDay}
         />
       ) : null}
-      {tab === "new_order" ? (
+      {tab === "new_order" && canCreate ? (
         <StaffOrderForm
           customers={customers}
           onCreated={async (orderNumber) => {
@@ -484,9 +516,14 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
                   <button
                     className="button-danger"
                     onClick={() => {
-                      const reason =
-                        window.prompt("Reason for rejection?") || "";
-                      if (reason) void move(order, "rejected", reason);
+                      const reason = window.prompt("Reason for rejection?");
+                      if (reason !== null) {
+                        if (reason.trim()) {
+                          void move(order, "rejected", reason.trim());
+                        } else {
+                          setMessage("Rejection reason is required.");
+                        }
+                      }
                     }}
                     type="button"
                   >
@@ -504,7 +541,12 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
               </button>
               {order.status === "picked_up" ? (
                 <button
-                  onClick={() => void move(order, "closed")}
+                  className="button-danger"
+                  onClick={() => {
+                    if (window.confirm(`Close order ${order.order_number}? This cannot be undone.`)) {
+                      void move(order, "closed");
+                    }
+                  }}
                   type="button"
                 >
                   Close
@@ -538,7 +580,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           }}
         />
       ) : null}
-      {tab === "customers" ? (
+      {tab === "customers" && canCashier ? (
         <StaffCustomerDirectory
           customers={customers}
           userRole={profile?.role || "cashier"}
@@ -595,7 +637,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
             </label>
             <label>
               Payment method
-              <select defaultValue={paymentOrder.payment_method || "cash_at_cashier"}>
+              <select onChange={(e) => setPaymentMethod(e.target.value)} value={paymentMethod}>
                 <option value="cash_at_cashier">Cash</option>
                 <option value="card_at_branch">Card</option>
                 <option value="instapay">InstaPay</option>
@@ -758,6 +800,7 @@ function StaffOrderForm({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [category, setCategory] = useState("All");
   const [menuQuery, setMenuQuery] = useState("");
+  const [sizePickerItem, setSizePickerItem] = useState<MenuItem | null>(null);
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
@@ -777,9 +820,7 @@ function StaffOrderForm({
           item.description.toLocaleLowerCase().includes(search)),
     );
   }, [category, menu, menuQuery]);
-  function add(item: MenuItem) {
-    const size = item.sizes[0];
-    if (!size) return;
+  function addWithSize(item: MenuItem, size: MenuSize) {
     setCart((current) => {
       const found = current.find((line) => line.size.id === size.id);
       return found
@@ -798,6 +839,29 @@ function StaffOrderForm({
             },
           ];
     });
+  }
+  function add(item: MenuItem) {
+    const size = item.sizes[0];
+    if (!size) return;
+    if (item.sizes.length > 1) {
+      setSizePickerItem(item);
+      return;
+    }
+    addWithSize(item, size);
+  }
+  function updateLineQuantity(lineId: string, delta: number) {
+    setCart((current) => {
+      return current
+        .map((line) =>
+          line.lineId === lineId
+            ? { ...line, quantity: Math.max(0, line.quantity + delta) }
+            : line,
+        )
+        .filter((line) => line.quantity > 0);
+    });
+  }
+  function removeLine(lineId: string) {
+    setCart((current) => current.filter((line) => line.lineId !== lineId));
   }
   async function searchCustomer() {
     if (!customerPhone.trim()) return;
@@ -902,22 +966,35 @@ function StaffOrderForm({
             ))}
           </nav>
           <div className="compact-menu">
-            {filteredMenu.map((item) => (
-              <button
-                disabled={!item.sizes.length}
-                key={item.id}
-                onClick={() => add(item)}
-                type="button"
-              >
-                <strong>{item.name}</strong>
-                {item.description ? <small className="menu-item-desc">{item.description}</small> : null}
-                <small className="menu-item-price">
-                  {item.sizes[0]
-                    ? money.format(item.sizes[0].price)
-                    : "Unavailable"}
-                </small>
-              </button>
-            ))}
+            {filteredMenu.map((item) => {
+              const isUnavailable = item.availability_state !== "available";
+              return (
+                <button
+                  aria-disabled={isUnavailable || !item.sizes.length}
+                  className={isUnavailable ? "compact-menu-item--unavailable" : ""}
+                  disabled={isUnavailable || !item.sizes.length}
+                  key={item.id}
+                  onClick={() => add(item)}
+                  type="button"
+                >
+                  <ProductImage alt={item.name} size="sm" src={item.image_url} />
+                  <strong>{item.name}</strong>
+                  {item.description ? <small className="menu-item-desc">{item.description}</small> : null}
+                  <small className="menu-item-price">
+                    {item.sizes[0]
+                      ? money.format(item.sizes[0].price)
+                      : "Unavailable"}
+                  </small>
+                  {isUnavailable ? (
+                    <small className="menu-item-unavailable-label">
+                      {item.availability_state === "sold_out" ? "Sold out"
+                        : item.availability_state === "temporarily_unavailable" ? "Paused"
+                        : "Unavailable"}
+                    </small>
+                  ) : null}
+                </button>
+              );
+            })}
             {filteredMenu.length === 0 && menu.length > 0 ? (
               <div className="empty-menu-state">
                 <p>No items in this category.</p>
@@ -985,19 +1062,31 @@ function StaffOrderForm({
             <textarea name="customerNotes" />
           </label>
           <div className="staff-cart">
-            {cart.map((line) => (
-              <span key={line.size.id}>
-                {line.quantity} × {line.item.name}
-              </span>
-            ))}
-            <strong>
-              {money.format(
-                cart.reduce(
-                  (sum, line) => sum + line.quantity * line.size.price,
-                  0,
-                ),
-              )}
-            </strong>
+            {cart.length === 0 ? (
+              <p className="muted" style={{ padding: "0.5rem 0" }}>No items in cart. Click a menu item to add.</p>
+            ) : (
+              cart.map((line) => (
+                <div key={line.lineId} className="staff-cart-line">
+                  <div className="staff-cart-line-info">
+                    <strong>{line.item.name}</strong>
+                    <small>{line.size.sizeName} — {money.format(line.size.price)}</small>
+                  </div>
+                  <div className="staff-cart-line-actions">
+                    <button className="button-secondary" onClick={() => updateLineQuantity(line.lineId, -1)} type="button" style={{ padding: "0.2rem 0.5rem", minWidth: "2rem" }}>−</button>
+                    <span style={{ minWidth: "2rem", textAlign: "center" }}>{line.quantity}</span>
+                    <button className="button-secondary" onClick={() => updateLineQuantity(line.lineId, 1)} type="button" style={{ padding: "0.2rem 0.5rem", minWidth: "2rem" }}>+</button>
+                    <button className="button-danger" onClick={() => removeLine(line.lineId)} type="button" style={{ padding: "0.2rem 0.5rem", marginLeft: "0.25rem" }}>✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+            {cart.length > 0 ? (
+              <strong style={{ borderTop: "1px solid var(--border, #ccc)", paddingTop: "0.5rem", marginTop: "0.5rem", display: "block" }}>
+                Total: {money.format(
+                  cart.reduce((sum, line) => sum + line.quantity * line.size.price, 0),
+                )}
+              </strong>
+            ) : null}
           </div>
           <button disabled={busy || !cart.length} type="submit">
             {busy ? "Creating…" : "Create and send to kitchen"}
@@ -1005,6 +1094,32 @@ function StaffOrderForm({
         </form>
       </div>
       {message ? <p role="status">{message}</p> : null}
+      {sizePickerItem ? (
+        <div className="payment-modal-overlay" role="dialog" aria-modal="true" onClick={() => setSizePickerItem(null)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <header>
+              <p className="eyebrow">Select size</p>
+              <h2>{sizePickerItem.name}</h2>
+            </header>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {sizePickerItem.sizes.map((size) => (
+                <button
+                  key={size.id}
+                  onClick={() => { addWithSize(sizePickerItem, size); setSizePickerItem(null); }}
+                  style={{ display: "flex", justifyContent: "space-between", padding: "0.75rem 1rem", borderRadius: "6px", border: "1px solid var(--border, #ccc)", background: "var(--surface, #fff)", cursor: "pointer" }}
+                  type="button"
+                >
+                  <span>{size.sizeName}</span>
+                  <strong>{money.format(size.price)}</strong>
+                </button>
+              ))}
+            </div>
+            <div className="payment-modal-actions" style={{ marginTop: "1rem" }}>
+              <button className="button-secondary" onClick={() => setSizePickerItem(null)} type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1036,7 +1151,17 @@ function Queue({
         : order.status === "confirmed";
     if (view === "ready") return order.status === "ready";
     return !["pending_confirmation", "ready"].includes(order.status);
+  }).sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return ta - tb;
   });
+  const viewCounts = {
+    all: orders.length,
+    new: orders.filter((o) => view === "new" ? true : variant === "cashier" ? o.status === "pending_confirmation" : o.status === "confirmed").length,
+    current: orders.filter((o) => !["pending_confirmation", "ready", "closed", "rejected", "cancelled"].includes(o.status)).length,
+    ready: orders.filter((o) => o.status === "ready").length,
+  };
   return (
     <section className="portal-section">
       <header className="staff-queue-header">
@@ -1052,7 +1177,7 @@ function Queue({
               onClick={() => setView(option)}
               type="button"
             >
-              {option} {option === "all" ? `(${orders.length})` : ""}
+              {option} ({viewCounts[option]})
             </button>
           ))}
         </div>
@@ -1262,6 +1387,10 @@ function StaffCustomerDirectory({
       return;
     }
     setExpandedId(customerId);
+    setVoucherType("fixed");
+    setVoucherValue("");
+    setVoucherDesc("");
+    setVoucherExpiry("");
     if (canManageVouchers) {
       setVoucherLoading(true);
       try {
@@ -1775,7 +1904,7 @@ function OwnerVoucherRequests({ onError }: { onError: (msg: string) => void }) {
               </label>
             </div>
             <div className="payment-modal-actions">
-              <button className="button-secondary" onClick={() => setShowApproveModal(null)} type="button">Cancel</button>
+              <button className="button-secondary" onClick={() => { setShowApproveModal(null); setApproveForm({ description: "", expiresInDays: "30", fixedValue: "", percentageValue: "", voucherType: "fixed" }); }} type="button">Cancel</button>
               <button
                 className="button-primary"
                 disabled={reviewBusy || (!Number(approveForm.fixedValue) && !Number(approveForm.percentageValue))}
@@ -1796,7 +1925,7 @@ function OwnerVoucherRequests({ onError }: { onError: (msg: string) => void }) {
 // OWNER ORDERS & RECEIPTS
 // ═══════════════════════════════════════════════════
 
-type OrdersTab = "all" | "active" | "completed" | "paid" | "unpaid" | "partially_paid";
+type OrdersTab = "all" | "active" | "completed" | "paid" | "unpaid" | "partially_paid" | "archived";
 
 function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => void; userRole: string }) {
   const [orders, setOrders] = useState<OwnerOrder[]>([]);
@@ -1826,6 +1955,7 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
         else if (paymentFilter === "paid") params.paymentStatus = "paid";
         else if (paymentFilter === "unpaid") params.paymentStatus = "unpaid";
         else if (paymentFilter === "partially_paid") params.paymentStatus = "partially_paid";
+        else if (paymentFilter === "archived") params.includeArchived = true;
       }
       if (searchVal) params.search = searchVal;
       const result = await loadOwnerOrders(params);
@@ -1847,10 +1977,13 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
     await loadOrders(1, newTab, search);
   }
 
-  async function doSearch(val: string) {
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function doSearch(val: string) {
     setSearch(val);
     setPage(1);
-    await loadOrders(1, tab, val);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => { void loadOrders(1, tab, val); }, 300);
   }
 
   async function recordPayment() {
@@ -1933,9 +2066,9 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
         </label>
       </div>
       <div className="category-rail staff-category-rail" style={{ margin: "0 0 1rem" }}>
-        {(["all", "active", "completed", "paid", "unpaid", "partially_paid"] as const).map((t) => (
+        {(["all", "active", "completed", "paid", "unpaid", "partially_paid", "archived"] as const).map((t) => (
           <button aria-pressed={tab === t} className={tab === t ? "active" : ""} key={t} onClick={() => void switchTab(t)} type="button">
-            {t === "all" ? "All" : t === "active" ? "Active" : t === "completed" ? "Completed" : t === "paid" ? "Paid" : t === "unpaid" ? "Unpaid" : "Partially Paid"}
+            {t === "all" ? "All" : t === "active" ? "Active" : t === "completed" ? "Completed" : t === "paid" ? "Paid" : t === "unpaid" ? "Unpaid" : t === "archived" ? "Archived" : "Partially Paid"}
           </button>
         ))}
       </div>
@@ -1977,7 +2110,7 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="button-secondary" onClick={() => printReceipt(order)} type="button">Print</button>
                     {order.payment_status !== "paid" && order.status !== "cancelled" && order.status !== "rejected" ? (
-                      <button onClick={() => { setPayModal(order); setPayAmount(order.remaining_amount > 0 ? order.remaining_amount.toFixed(2) : ""); }} type="button">
+                      <button onClick={() => { setPayModal(order); setPayAmount(order.remaining_amount > 0 ? order.remaining_amount.toFixed(2) : ""); setPayMethod(order.payment_method || "cash_at_cashier"); }} type="button">
                         Record Payment ({money.format(order.remaining_amount)})
                       </button>
                     ) : null}
@@ -1998,9 +2131,9 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
       )}
       {totalPages > 1 ? (
         <div className="customer-directory-pagination">
-          <button disabled={page <= 1} onClick={() => { setPage((p) => p - 1); void loadOrders(page - 1, tab, search); }} type="button">Previous</button>
+          <button disabled={page <= 1} onClick={() => { const p = page - 1; setPage(p); void loadOrders(p, tab, search); }} type="button">Previous</button>
           <span className="muted">Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => { setPage((p) => p + 1); void loadOrders(page + 1, tab, search); }} type="button">Next</button>
+          <button disabled={page >= totalPages} onClick={() => { const p = page + 1; setPage(p); void loadOrders(p, tab, search); }} type="button">Next</button>
         </div>
       ) : null}
       {payModal ? (
@@ -2040,7 +2173,7 @@ function OwnerOrdersReceipts({ onError, userRole }: { onError: (msg: string) => 
               <input autoFocus onChange={(e) => setVoidReason(e.target.value)} value={voidReason} />
             </label>
             <div className="payment-modal-actions">
-              <button className="button-secondary" disabled={voidBusy} onClick={() => setVoidModal(null)} type="button">Cancel</button>
+              <button className="button-secondary" disabled={voidBusy} onClick={() => { setVoidModal(null); setVoidReason(""); }} type="button">Cancel</button>
               <button className="button-danger" disabled={voidBusy || !voidReason.trim()} onClick={() => void doVoid()} type="button">{voidBusy ? "Voiding…" : "Void Receipt"}</button>
             </div>
           </div>
@@ -2196,6 +2329,7 @@ function OwnerEndDay({ onError, onRefreshQueues }: { onError: (msg: string) => v
   }
 
   async function handleStartDay() {
+    if (!window.confirm("Start a new business day? Orders will be linked to this day until it is closed.")) return;
     try {
       await startBusinessDay();
       await load();

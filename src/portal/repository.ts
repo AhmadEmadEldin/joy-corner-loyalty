@@ -14,11 +14,13 @@ export type CustomerProfile = {
   favorite_drink: string | null;
   full_name: string;
   id: string;
+  marketing_consent: boolean;
   phone: string | null;
 };
 export type MenuSize = { id: string; price: number; size_name: string };
 export type MenuModifier = { id: string; name: string; price: number };
 export type MenuItem = {
+  availability_state: "available" | "temporarily_unavailable" | "sold_out" | "archived";
   available: boolean;
   category: string;
   description: string;
@@ -140,7 +142,7 @@ export type QueueOrder = {
 
 export function staffQueueTables(
   role: StaffProfile["role"],
-): Array<"cashier_order_queue" | "kitchen_order_queue"> {
+): Array<"cashier_order_queue" | "kitchen_order_queue" | "orders" | "notifications" | "menu"> {
   return [
     ...(["owner", "manager", "cashier"].includes(role)
       ? (["cashier_order_queue"] as const)
@@ -148,6 +150,10 @@ export function staffQueueTables(
     ...(["owner", "manager", "barista"].includes(role)
       ? (["kitchen_order_queue"] as const)
       : []),
+    ...(["owner", "manager"].includes(role)
+      ? (["orders", "notifications"] as const)
+      : []),
+    "menu",
   ];
 }
 
@@ -190,16 +196,18 @@ export async function signInCustomer(email: string, password: string): Promise<v
   setSession(result.user);
 }
 
-export async function signOutCustomer(): Promise<void> {
+export async function signOut(): Promise<void> {
   await apiRequest("/auth/logout", { method: "POST" }).catch(() => undefined);
   clearSession();
 }
+
+export const signOutCustomer = signOut;
 
 export async function signInStaff(email: string, password: string): Promise<void> {
   await signInCustomer(email, password);
   const profile = await loadStaffProfile();
   if (profile.role === "customer") {
-    await signOutCustomer();
+    await signOut();
     throw new Error("This account does not have staff access.");
   }
 }
@@ -314,17 +322,31 @@ export async function loadOwnerMenu(): Promise<OwnerMenuItem[]> {
 }
 
 export async function updateOwnerMenuItem(input: {
-  active: boolean;
-  available: boolean;
+  availabilityState?: "available" | "temporarily_unavailable" | "sold_out" | "archived";
   description: string;
   id: string;
   loyaltyEligible: boolean;
   name: string;
   preparationStation: "barista" | "kitchen";
+  sortOrder?: number;
 }): Promise<void> {
   await apiRequest(`/owner/menu/items/${encodeURIComponent(input.id)}`, {
     body: JSON.stringify(input),
     method: "PATCH",
+  });
+}
+
+export async function createOwnerMenuItem(input: {
+  categoryId: string;
+  description?: string;
+  loyaltyEligible?: boolean;
+  name: string;
+  preparationStation?: "barista" | "kitchen";
+  sortOrder?: number;
+}): Promise<{ id: string }> {
+  return apiRequest<{ id: string }>("/owner/menu/items", {
+    body: JSON.stringify(input),
+    method: "POST",
   });
 }
 
@@ -541,7 +563,7 @@ export async function createStaffOrder(input: {
   pickupName: string;
 }): Promise<{ orderId: string; orderNumber: string }> {
   return apiRequest("/orders/staff", {
-    body: JSON.stringify({ ...input, cart: undefined, items: cartPayload(input.cart) }),
+    body: JSON.stringify({ ...input, cart: undefined, items: cartPayload(input.cart), idempotencyKey: crypto.randomUUID() }),
     method: "POST",
   });
 }
@@ -726,7 +748,7 @@ export function subscribeToCustomerChanges(
 ): () => void {
   onConnectionChange?.(true);
   const unsubscribe = subscribeToEvents(
-    ["orders", "rewards_accounts", "vouchers", "notifications"],
+    ["orders", "rewards_accounts", "vouchers", "notifications", "menu"],
     onChange,
   );
   return () => {

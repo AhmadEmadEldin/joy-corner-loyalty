@@ -2,24 +2,27 @@ import { staffQueueTables } from "./repository";
 
 describe("staffQueueTables", () => {
   it.each(["owner", "manager"] as const)(
-    "subscribes %s to both operational projections",
+    "subscribes %s to both operational projections, data topics, and menu",
     (role) => {
       expect(staffQueueTables(role)).toEqual([
         "cashier_order_queue",
         "kitchen_order_queue",
+        "orders",
+        "notifications",
+        "menu",
       ]);
     },
   );
 
-  it("keeps cashier traffic out of the kitchen projection", () => {
-    expect(staffQueueTables("cashier")).toEqual(["cashier_order_queue"]);
+  it("subscribes cashier to cashier queue and menu", () => {
+    expect(staffQueueTables("cashier")).toEqual(["cashier_order_queue", "menu"]);
   });
 
-  it("keeps barista traffic out of the cashier projection", () => {
-    expect(staffQueueTables("barista")).toEqual(["kitchen_order_queue"]);
+  it("subscribes barista to kitchen queue and menu", () => {
+    expect(staffQueueTables("barista")).toEqual(["kitchen_order_queue", "menu"]);
   });
 
-  it("does not subscribe waiters to queues they cannot read", () => {
-    expect(staffQueueTables("waiter")).toEqual([]);
+  it("subscribes waiter to menu only", () => {
+    expect(staffQueueTables("waiter")).toEqual(["menu"]);
   });
 });

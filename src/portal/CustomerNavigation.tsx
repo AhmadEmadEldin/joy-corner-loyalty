@@ -106,7 +106,7 @@ export function CustomerNavigation({
         </span>
       </button>
       <nav aria-label="Customer sections" className="customer-desktop-nav">
-        {items.slice(0, 8).map((item) => (
+        {items.map((item) => (
           <NavigationButton
             active={active === item.id}
             badge={badges[item.id]}

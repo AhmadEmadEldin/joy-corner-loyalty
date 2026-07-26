@@ -360,12 +360,15 @@ app.get("/api/events", authenticate, (req: AuthedRequest, res) => {
   const allowed = new Set<string>();
   const role = req.auth?.role;
   if (role === "customer") {
-    ["orders", "rewards_accounts", "vouchers", "notifications"].forEach((topic) => {
+    ["orders", "rewards_accounts", "vouchers", "notifications", "menu"].forEach((topic) => {
       if (requested.has(topic)) allowed.add(topic);
     });
   } else if (role) {
     if (["owner", "manager", "cashier"].includes(role) && requested.has("cashier_order_queue")) allowed.add("cashier_order_queue");
     if (["owner", "manager", "barista"].includes(role) && requested.has("kitchen_order_queue")) allowed.add("kitchen_order_queue");
+    if (["owner", "manager"].includes(role) && requested.has("orders")) allowed.add("orders");
+    if (["owner", "manager"].includes(role) && requested.has("notifications")) allowed.add("notifications");
+    if (requested.has("menu")) allowed.add("menu");
   }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Connection", "keep-alive");
@@ -384,7 +387,8 @@ async function menuItems(includeInactive: boolean) {
   const [items, sizes, modifiers, links] = await Promise.all([
     query<Record<string, unknown>>(
       `select i.id,i.category_id,i.name,i.description,i.active,i.available,
-              i.loyalty_eligible,i.preparation_station,i.sort_order,c.name as category,
+              i.availability_state,i.loyalty_eligible,i.preparation_station,i.sort_order,
+              c.name as category,
               case when i.image_bytes is null then null else '/api/menu/images/' || i.id::text end as image_url
        from menu_items i join menu_categories c on c.id=i.category_id
        where ($1::boolean or (i.active and i.available and c.active))
@@ -418,6 +422,7 @@ async function menuItems(includeInactive: boolean) {
     ...item,
     active: Boolean(item.active),
     available: Boolean(item.available),
+    availability_state: String(item.availability_state || "available"),
     id: String(item.id),
     category_id: String(item.category_id),
     loyalty_eligible: Boolean(item.loyalty_eligible),
@@ -441,8 +446,8 @@ app.get("/api/menu/images/:itemId", asyncRoute(async (req, res) => {
 app.get("/api/customer/profile", authenticate, requireRoles("customer"), asyncRoute(async (req, res) => {
   const rows = await query<Record<string, unknown>>(
     `select id,customer_number,full_name,email,phone,date_of_birth,favorite_drink,
-            marketing_consent as "marketingConsent",
-            marketing_consent_at as "marketingConsentAt"
+            marketing_consent,
+            marketing_consent_at as "marketing_consent_at"
      from accounts where id=$1`, [req.auth?.sub],
   );
   res.json({ profile: rows[0] });
@@ -818,7 +823,7 @@ app.post("/api/orders/:id/payment", authenticate, requireRoles("owner","manager"
     if (order.status === "pending_confirmation") {
       throw new HttpError(409, "Confirm the order before recording a payment.");
     }
-    const paidResult = await client.query<{ paid: string }>("select coalesce(sum(amount),0)::text as paid from payments where order_id=$1", [req.params.id]);
+    const paidResult = await client.query<{ paid: string }>("select coalesce(sum(amount),0)::text as paid from payments where order_id=$1 and not coalesce(is_refund,false) and not coalesce(voided,false)", [req.params.id]);
     const paidBefore = Number(paidResult.rows[0]?.paid || 0);
     const remaining = Math.max(0, Number(order.total) - paidBefore);
     if (amount > remaining + 0.01) throw new HttpError(409, "Payment exceeds the remaining order balance.");
@@ -910,7 +915,7 @@ app.get("/api/owner/menu", authenticate, requireRoles("owner"), asyncRoute(async
   res.json({ items: await menuItems(true) });
 }));
 
-app.get("/api/menu/sync", asyncRoute(async (_req, res) => {
+app.get("/api/menu/sync", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
   try {
     const result = await getMenuSyncResult();
     res.json({
@@ -962,18 +967,52 @@ app.get("/api/owner/menu/sync/status", authenticate, requireRoles("owner"), asyn
 }));
 
 app.patch("/api/owner/menu/items/:id", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const availabilityState = String(req.body?.availabilityState || "available");
+  const validStates = ["available", "temporarily_unavailable", "sold_out", "archived"];
+  if (!validStates.includes(availabilityState)) throw new HttpError(400, "Invalid availability state.");
+  const active = availabilityState !== "archived";
+  const available = availabilityState === "available" || availabilityState === "temporarily_unavailable";
   await query(
-    `update menu_items set name=$2,description=$3,active=$4,available=$5,loyalty_eligible=$6,preparation_station=$7 where id=$1`,
-    [req.params.id,nonEmpty(req.body?.name),String(req.body?.description || "").trim().slice(0,1000),Boolean(req.body?.active),Boolean(req.body?.available),Boolean(req.body?.loyaltyEligible),req.body?.preparationStation === "kitchen" ? "kitchen" : "barista"],
+    `update menu_items set name=$2,description=$3,active=$4,available=$5,
+            availability_state=$6,loyalty_eligible=$7,preparation_station=$8,sort_order=$9
+     where id=$1`,
+    [req.params.id,nonEmpty(req.body?.name),String(req.body?.description || "").trim().slice(0,1000),active,available,availabilityState,Boolean(req.body?.loyaltyEligible),req.body?.preparationStation === "kitchen" ? "kitchen" : "barista",Number(req.body?.sortOrder ?? 0)],
   );
   publish("menu", String(req.params.id));
   res.json({ ok: true });
 }));
 
+app.post("/api/owner/menu/items", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const name = nonEmpty(req.body?.name);
+  const categoryId = nonEmpty(req.body?.categoryId);
+  if (!categoryId) throw new HttpError(400, "Category is required.");
+  const result = await query<{ id: string }>(
+    `insert into menu_items (name,description,category_id,active,available,availability_state,loyalty_eligible,preparation_station,sort_order)
+     values ($1,$2,$3,true,true,'available',$4,$5,$6)
+     returning id`,
+    [name,String(req.body?.description || "").trim().slice(0,1000),categoryId,Boolean(req.body?.loyaltyEligible ?? true),req.body?.preparationStation === "kitchen" ? "kitchen" : "barista",Number(req.body?.sortOrder ?? 0)],
+  );
+  const itemId = String(result[0]?.id);
+  publish("menu", itemId);
+  res.json({ id: itemId });
+}));
+
 app.patch("/api/owner/menu/sizes/:id", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
   const price = Number(req.body?.price);
   if (!Number.isFinite(price) || price <= 0) throw new HttpError(400, "Price must be greater than zero.");
-  await query("update menu_item_sizes set price=$2 where id=$1", [req.params.id,price]);
+  const existing = await query<{ price: number; menu_item_id: string }>(
+    "select price, menu_item_id from menu_item_sizes where id=$1", [req.params.id],
+  );
+  if (!existing[0]) throw new HttpError(404, "Size not found.");
+  const oldPrice = Number(existing[0].price);
+  if (oldPrice === price) { res.json({ ok: true }); return; }
+  await query("update menu_item_sizes set price=$2 where id=$1", [req.params.id, price]);
+  await query(
+    `insert into price_audit_logs (entity_type,entity_id,menu_item_id,old_price,new_price,changed_by_user_id,changed_by_role)
+     values ('menu_item_size',$1,$2,$3,$4,$5,$6)`,
+    [req.params.id, existing[0].menu_item_id, oldPrice, price, req.auth?.sub, req.auth?.role],
+  );
+  publish("menu", String(existing[0].menu_item_id));
   res.json({ ok: true });
 }));
 
@@ -1303,7 +1342,7 @@ app.get("/api/owner/business-days/:id/report", authenticate, requireRoles("owner
     ),
   ]);
   const summary = bd[0];
-  const unpaidCarryForward = orders.filter((o) => String(o.payment_status) !== "paid" && String(o.status) !== "cancelled" && String(o.status) !== "voided");
+  const unpaidCarryForward = orders.filter((o) => String(o.payment_status) !== "paid" && String(o.status) !== "cancelled" && String(o.status) !== "rejected");
   res.json({ businessDay: summary, orders, payments, productSummary, serviceSummary, staffSummary, unpaidCarryForward });
 }));
 
@@ -1329,7 +1368,7 @@ app.post("/api/owner/business-days/:id/close", authenticate, requireRoles("owner
               count(*) filter (where status='closed')::int as closed_order_count,
               count(*) filter (where status in ('cancelled','rejected'))::int as cancelled_order_count,
               coalesce(sum(total) filter (where status='closed' and not archived),0)::numeric(12,2) as gross_sales,
-              coalesce(sum(total) filter (where status='closed' and not archived),0)::numeric(12,2) as net_sales,
+              coalesce(sum(total - coalesce(voucher_discount,0)) filter (where status='closed' and not archived),0)::numeric(12,2) as net_sales,
               coalesce(sum(voucher_discount) filter (where not archived),0)::numeric(12,2) as voucher_discounts,
               coalesce((select sum(p.amount) from payments p
                 join orders o2 on o2.id=p.order_id where o2.business_day_id=$1 and not p.is_refund and not p.voided),0)::numeric(12,2) as paid_amount,
@@ -1348,7 +1387,7 @@ app.post("/api/owner/business-days/:id/close", authenticate, requireRoles("owner
        where id=$1`,
       [businessDayId, req.auth?.sub, s.gross_sales || 0, s.net_sales || 0, s.paid_amount || 0,
        s.unpaid_amount || 0, s.partially_paid_amount || 0, s.refunded_amount || 0,
-       s.order_count || 0, s.order_count || 0, notes],
+       s.closed_order_count || 0, s.order_count || 0, notes],
     );
     await client.query(
       "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'close_day','business_day',$3,$4::jsonb)",
@@ -1615,7 +1654,7 @@ app.post("/api/owner/receipts/:id/void", authenticate, requireRoles("owner"), as
   await transaction(async (client) => {
     const order = await client.query<Record<string, unknown>>("select * from orders where id=$1 for update", [req.params.id]);
     if (!order.rows[0]) throw new HttpError(404, "Order not found.");
-    if (String(order.rows[0].status) === "voided") throw new HttpError(409, "Order is already voided.");
+    if (String(order.rows[0].status) === "cancelled") throw new HttpError(409, "Order is already cancelled/voided.");
     await client.query(`update orders set status='cancelled',cancellation_reason=$2 where id=$1`, [req.params.id, `VOIDED: ${reason}`]);
     await client.query(
       "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'void','order',$3,$4::jsonb)",
@@ -1640,6 +1679,7 @@ app.post("/api/owner/receipts/:id/unarchive", authenticate, requireRoles("owner"
     `update orders set archived=false,archived_at=null,archived_by_user_id=null,archive_reason=null where id=$1`,
     [req.params.id],
   );
+  await query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'unarchive','order',$3,'{}'::jsonb)", [req.auth?.sub, req.auth?.role, req.params.id]);
   res.json({ ok: true });
 }));
 

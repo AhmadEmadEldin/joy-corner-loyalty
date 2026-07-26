@@ -3,6 +3,7 @@ import { CustomerMenu, lineTotal } from "./CustomerMenu";
 import type { CartLine, MenuItem } from "./repository";
 
 const latte: MenuItem = {
+  availability_state: "available",
   available: true,
   category: "Hot Coffee",
   description: "Espresso with steamed milk",
@@ -18,6 +19,7 @@ const latte: MenuItem = {
 };
 
 const smoothie: MenuItem = {
+  availability_state: "available",
   available: true,
   category: "Smoothies",
   description: "Fresh fruit blend",
@@ -31,6 +33,7 @@ const smoothie: MenuItem = {
 
 const unavailable: MenuItem = {
   ...latte,
+  availability_state: "sold_out",
   available: false,
   category: "Desserts",
   id: "cake",
@@ -71,7 +74,7 @@ describe("CustomerMenu", () => {
       },
     );
     expect(screen.queryByText("Caffè Latte")).toBeNull();
-    expect(screen.getByText("Coffee Cake")).toBeTruthy();
+    expect(screen.getAllByText("Coffee Cake").length).toBeGreaterThan(0);
     expect(
       (
         screen.getByRole("button", {
@@ -161,7 +164,7 @@ describe("Category navigation", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Smoothies" }));
-    expect(screen.getByText("Berry Smoothie")).toBeTruthy();
+    expect(screen.getAllByText("Berry Smoothie").length).toBeGreaterThan(0);
     expect(screen.queryByText("Caffè Latte")).toBeNull();
   });
 
@@ -176,8 +179,8 @@ describe("Category navigation", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(screen.getByText("Caffè Latte")).toBeTruthy();
-    expect(screen.getByText("Berry Smoothie")).toBeTruthy();
+    expect(screen.getAllByText("Caffè Latte").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Berry Smoothie").length).toBeGreaterThan(0);
   });
 
   it("categories deduplicated from menu data", () => {

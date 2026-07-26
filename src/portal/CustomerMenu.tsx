@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, MenuItem } from "./repository";
 import { ProductCustomizer } from "./ProductCustomizer";
+import { ProductImage } from "./ProductImage";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -26,6 +27,28 @@ export function CustomerMenu({
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<CartLine | null>(null);
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  const [priceChanged, setPriceChanged] = useState(false);
+  const cartRef = useRef(cart);
+  const onCartChangeRef = useRef(onCartChange);
+  cartRef.current = cart;
+  onCartChangeRef.current = onCartChange;
+
+  useEffect(() => {
+    if (!menu.length || !cartRef.current.length) return;
+    let changed = false;
+    const updated = cartRef.current.map((line) => {
+      const current = menu.find((m) => m.id === line.item.id);
+      if (!current) return line;
+      const currentSize = current.sizes.find((s) => s.id === line.size.id);
+      if (!currentSize || currentSize.price === line.size.price) return line;
+      changed = true;
+      return { ...line, size: currentSize, item: current };
+    });
+    if (changed) {
+      setPriceChanged(true);
+      onCartChangeRef.current(updated);
+    }
+  }, [menu]);
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(menu.map((item) => item.category)))],
     [menu],
@@ -110,48 +133,62 @@ export function CustomerMenu({
             </div>
           ) : visible.length ? (
             <div className="kiosk-product-grid">
-              {visible.map((item) => (
-                <article className="kiosk-product-card" key={item.id}>
-                  <button
-                    aria-label={`Customize ${item.name}`}
-                    className="product-card-main"
-                    disabled={!item.available || !item.sizes.length}
-                    onClick={() => setSelected(item)}
-                    type="button"
-                  >
-                    <span className="product-image-wrap">
-                      <img
-                        alt={item.name}
-                        loading="lazy"
-                        onError={(event) => {
-                          event.currentTarget.src = "/assets/joy-corner-mark.png";
-                        }}
-                        src={item.image_url || "/assets/joy-corner-mark.png"}
-                      />
-                    </span>
-                    <span className="product-card-copy">
-                      <small>{item.category}</small>
-                      <strong>{item.name}</strong>
-                      <span>{item.description || "Freshly prepared to order."}</span>
-                    </span>
-                  </button>
-                  <footer>
-                    <span>
-                      {item.sizes[0]
-                        ? `From ${money.format(item.sizes[0].price)}`
-                        : "Unavailable"}
-                    </span>
-                    {item.loyalty_eligible ? <small>Reward eligible</small> : null}
+              {visible.map((item) => {
+                const isUnavailable = item.availability_state !== "available";
+                const cardClass = `kiosk-product-card${isUnavailable ? " product-card--unavailable" : ""}`;
+                const overlayLabel =
+                  item.availability_state === "temporarily_unavailable" ? "Temporarily unavailable"
+                  : item.availability_state === "sold_out" ? "Sold out"
+                  : item.availability_state === "archived" ? "Unavailable"
+                  : "";
+                return (
+                  <article className={cardClass} key={item.id}>
                     <button
-                      disabled={!item.available || !item.sizes.length}
+                      aria-disabled={isUnavailable || !item.sizes.length}
+                      aria-label={`Customize ${item.name}`}
+                      className="product-card-main"
+                      disabled={isUnavailable || !item.sizes.length}
                       onClick={() => setSelected(item)}
                       type="button"
                     >
-                      {item.available ? "Add" : "Unavailable"}
+                      <ProductImage
+                        alt={item.name}
+                        size="md"
+                        src={item.image_url}
+                      />
+                      {isUnavailable ? (
+                        <div className="product-card__availability-overlay">
+                          <span className="product-card__availability-icon">
+                            {item.availability_state === "sold_out" ? "!" : "\u23F8"}
+                          </span>
+                          <span className="product-card__availability-text">{overlayLabel}</span>
+                        </div>
+                      ) : null}
+                      <span className="product-card-copy">
+                        <small>{item.category}</small>
+                        <strong>{item.name}</strong>
+                        <span>{item.description || "Freshly prepared to order."}</span>
+                      </span>
                     </button>
-                  </footer>
-                </article>
-              ))}
+                    <footer>
+                      <span>
+                        {item.sizes[0]
+                          ? `From ${money.format(item.sizes[0].price)}`
+                          : "Unavailable"}
+                      </span>
+                      {item.loyalty_eligible ? <small>Reward eligible</small> : null}
+                      <button
+                        aria-disabled={isUnavailable || !item.sizes.length}
+                        disabled={isUnavailable || !item.sizes.length}
+                        onClick={() => setSelected(item)}
+                        type="button"
+                      >
+                        {isUnavailable ? overlayLabel : "Add"}
+                      </button>
+                    </footer>
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="empty-menu-state">
@@ -166,11 +203,13 @@ export function CustomerMenu({
         <CartPanel
           cart={cart}
           onCheckout={onCheckout}
+          onDismissPriceChange={() => setPriceChanged(false)}
           onEdit={(line) => {
             setEditing(line);
             setSelected(line.item);
           }}
           onQuantity={updateQuantity}
+          priceChanged={priceChanged}
           total={total}
         />
       </div>
@@ -203,14 +242,18 @@ export function lineTotal(line: CartLine): number {
 function CartPanel({
   cart,
   onCheckout,
+  onDismissPriceChange,
   onEdit,
   onQuantity,
+  priceChanged,
   total,
 }: {
   cart: CartLine[];
   onCheckout: () => void;
+  onDismissPriceChange: () => void;
   onEdit: (line: CartLine) => void;
   onQuantity: (lineId: string, quantity: number) => void;
+  priceChanged: boolean;
   total: number;
 }) {
   return (
@@ -222,6 +265,12 @@ function CartPanel({
         </div>
         <span>{cart.reduce((sum, line) => sum + line.quantity, 0)}</span>
       </header>
+      {priceChanged ? (
+        <div className="cart-price-change-banner" role="status">
+          <span>Prices have been updated. Please review your order.</span>
+          <button onClick={onDismissPriceChange} type="button">OK</button>
+        </div>
+      ) : null}
       <div className="kiosk-cart-lines">
         {cart.length ? (
           cart.map((line) => (

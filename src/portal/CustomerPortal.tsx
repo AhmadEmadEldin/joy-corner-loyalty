@@ -75,6 +75,7 @@ function CustomerAccess() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,15 +148,23 @@ function CustomerAccess() {
           </label>
           <label>
             Password
-            <input
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-              minLength={8}
-              name="password"
-              required
-              type="password"
-            />
+            <div className="password-toggle">
+              <input
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                minLength={8}
+                name="password"
+                required
+                type={showPassword ? "text" : "password"}
+              />
+              <button
+                onClick={() => setShowPassword(!showPassword)}
+                type="button"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
           {mode === "signup" ? (
             <label className="consent-checkbox">
@@ -278,7 +287,10 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
       user.id,
       () => {
         window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => void refreshDashboard(), 150);
+        refreshTimer = window.setTimeout(() => {
+          void refreshDashboard();
+          void loadMenu().then(setMenu).catch(() => undefined);
+        }, 150);
       },
       (connected) => setRealtimeState(connected ? "connected" : "reconnecting"),
     );
@@ -876,7 +888,7 @@ function ProfileForm({
         </label>
         <label className="consent-checkbox">
           <input
-            defaultChecked={Boolean((profile as Record<string, unknown>).marketingConsent)}
+            defaultChecked={Boolean(profile.marketing_consent)}
             name="marketingConsent"
             type="checkbox"
           />
