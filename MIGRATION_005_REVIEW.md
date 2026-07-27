@@ -24,8 +24,29 @@ locally without a Neon connection.
 - `loyalty_ledger.balance_after` must be non-negative.
 - The payment-reference uniqueness index is created only after a duplicate
   preflight guard provides a clear remediation error.
+- Whitespace-only payment references are normalized to `null`; no payment is
+  deleted, merged, or repriced.
+- `image_provider` allows only `null` or `cloudinary`, matching the only
+  supported external image writer.
 - The migration still runs inside the migration runner's per-file transaction
   and advisory lock.
+
+## Constraint review
+
+| Field | Database rule |
+|---|---|
+| `orders.status` | Nine lowercase canonical workflow values |
+| `orders.payment_status` | `unpaid`, `partially_paid`, `paid`, `refunded`, or `voided` |
+| `orders.order_place` | `dine_in`, `takeaway`, `car`, `outside`, `delivery` |
+| `orders.service_fee` | `>= 0` |
+| `orders.delivery_fee` | `>= 0` |
+| `voucher_redemptions.discount_amount` | `>= 0` |
+| `loyalty_ledger.balance_after` | `>= 0` |
+| `menu_items.image_provider` | `null` or `cloudinary` |
+| `menu_item_sizes.price` | `> 0`, already enforced by migration 001 |
+| `menu_modifiers.price` | `>= 0`, already enforced by migration 001 |
+| `payments.amount` | `> 0`, already enforced by migration 001 |
+| price-history values | previous `>= 0`, new `> 0` |
 
 ## Loyalty balance decision
 
@@ -52,6 +73,12 @@ The migration converts only:
 It does not insert synthetic `order_status_history` or `menu_price_history`
 records. The new history tables begin recording real changes after deployment.
 
+Existing `orders`, `order_items`, item-name/category/size/unit-price snapshots,
+payments, and vouchers are preserved. Migration 005 adds an image URL snapshot
+column but does not rewrite existing monetary snapshots. It also does not
+insert synthetic audit logs, status history, price history, loyalty ledger
+entries, or voucher redemptions.
+
 The availability backfill applies only to null values:
 
 | Existing flags | New availability |
@@ -68,9 +95,9 @@ Use a direct, unpooled connection to a disposable Neon branch first:
 psql $env:NEON_DATABASE_URL -v ON_ERROR_STOP=1 -f MIGRATION_005_PREFLIGHT.sql
 ```
 
-The script creates a temporary report table inside a transaction and ends with
-`rollback`; it does not persist data. A `BLOCKED` result must be resolved before
-running the migration.
+The script begins with `begin read only`, uses only temporary reporting tables,
+and ends with `rollback`. PostgreSQL therefore prevents persistent writes. A
+`BLOCKED` result must be resolved before running the migration.
 
 Then run a transactional migration dry run on the disposable branch:
 
@@ -80,6 +107,27 @@ $probe = "BEGIN;`n" +
   "`nROLLBACK;"
 $probe | psql $env:NEON_DATABASE_URL -v ON_ERROR_STOP=1
 ```
+
+## Migration runner safeguards
+
+- Migration 005 is guarded by `MIGRATION_CONFIRM_STAGING=true`.
+- `NODE_ENV=production` is rejected with no bypass.
+- Hosts or database names visibly marked `prod` or `production` are rejected.
+- The target must be a direct Neon hostname and must not contain `-pooler`.
+- `DATABASE_SSL=false` is rejected.
+- Safe logging includes only target hostname and database name.
+- The runner takes an advisory lock and wraps each unapplied file in its own
+  transaction.
+- It stops at the first failure, records filename/checksum only after commit,
+  skips matching applied migrations, and rejects changed checksums.
+- The guard is evaluated only while migration 005 is unapplied. After it is
+  recorded, normal production startup can verify its checksum without trying
+  to reapply it.
+
+Retry migration 005 only through `npm run migrate:neon`. Do not execute pieces
+of the migration manually and then retry the runner; checksum tracking can
+protect whole-file application but cannot identify arbitrary partial manual
+changes.
 
 ## Remaining operational considerations
 
@@ -92,3 +140,7 @@ $probe | psql $env:NEON_DATABASE_URL -v ON_ERROR_STOP=1
 - A Neon snapshot or temporary branch remains the only lossless rollback.
 - Existing schema field names such as `closed_at` and `closed_order_count`
   remain for compatibility; they now represent `picked_up` completion.
+- The staging confirmation protects explicit environment intent, while the
+  production-name heuristic can only detect hosts/databases whose names expose
+  a production marker. Operational verification of the Neon branch identity
+  remains mandatory.

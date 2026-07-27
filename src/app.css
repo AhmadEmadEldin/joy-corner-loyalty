@@ -1854,7 +1854,7 @@ tbody tr:hover {
 
 .orders-receipt::before,
 .barista-receipt::before {
-  background: url("./assets/joy-coffee-farm-sketch.png") center bottom / 720px
+  background: url("./assets/joy-coffee-farm-sketch.webp") center bottom / 720px
     auto no-repeat;
   content: "";
   inset: 0;
@@ -4157,10 +4157,17 @@ tbody tr:hover {
     break-inside: avoid;
   }
   .digital-receipt {
+    background: #fff !important;
     border: 0;
     box-shadow: none;
     margin: 0;
     padding: 18px 0;
+  }
+  .orders-receipt::before,
+  .barista-receipt::before {
+    background-image: none !important;
+    content: none;
+    display: none;
   }
 }
 

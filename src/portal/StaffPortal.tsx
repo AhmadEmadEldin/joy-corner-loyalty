@@ -1179,7 +1179,12 @@ function BusinessPanel({
           <Metric label="All vouchers" value={insights.vouchers.total} />
         </div>
         <section className="voucher-farm-panel portal-section">
-          <img alt="" src="/assets/joy-reference-hero.png" />
+          <img
+            alt=""
+            decoding="async"
+            loading="lazy"
+            src="/assets/joy-reference-hero.png"
+          />
           <div>
             <p className="eyebrow">Coffee farm voucher identity</p>
             <h3>Every reward carries the Joy Corner story</h3>

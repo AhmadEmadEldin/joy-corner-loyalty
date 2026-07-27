@@ -28,7 +28,7 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
         use: ["style-loader", "css-loader"],
       },
       {
-        test: /\.(png|jpg|jpeg|svg|woff|woff2)$/i,
+        test: /\.(avif|png|jpg|jpeg|svg|webp|woff|woff2)$/i,
         type: "asset/resource",
       },
     ],

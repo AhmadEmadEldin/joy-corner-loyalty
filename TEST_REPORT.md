@@ -8,7 +8,7 @@ Run date: 2026-07-27
 |---|---|
 | TypeScript `tsc --noEmit` | Pass |
 | ESLint | Pass |
-| Jest | Pass: 20 suites, 88 tests |
+| Jest | Pass: 23 suites, 101 tests |
 | Production webpack build | Pass |
 | Browser public/auth render | Pass |
 | Browser horizontal overflow at 390, 900, and 1440px | Pass |
@@ -17,7 +17,8 @@ Run date: 2026-07-27
 Production build warnings:
 
 - `app.js` is approximately 301 KiB.
-- Coffee-farm artwork is approximately 1.42 MiB.
+- Optimized coffee-farm WebP is approximately 290 KiB; the 1.42 MiB design PNG
+  is excluded from the runtime bundle.
 
 These are performance risks, not build failures. Optimize the PNG and consider further lazy chunking before a constrained-network launch.
 
@@ -37,6 +38,9 @@ These are performance risks, not build failures. Optimize the PNG and consider f
 - Full canonical API transition sequence.
 - Migration 005 targeted updates, constraint guards, duplicate preflight, and
   no-synthetic-history assertions.
+- Staging-only migration target guards and safe connection summaries.
+- Cloudinary staging folder validation.
+- Optimized farm-art runtime/reference separation and print suppression.
 
 Existing coverage continues to pass for permissions, receipt calculations/printing/visual state, menu normalization, customer menu/product dialog, mobile navigation, customer navigation, reporting mappings/write plan, cart drafts, and repository projections.
 

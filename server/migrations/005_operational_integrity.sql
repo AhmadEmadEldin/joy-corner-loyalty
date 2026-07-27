@@ -214,6 +214,39 @@ alter table menu_items add column if not exists image_url text;
 alter table menu_items add column if not exists image_provider text;
 alter table menu_items add column if not exists image_public_id text;
 
+do $$
+declare
+  invalid_providers text;
+begin
+  select string_agg(
+    format('%s (%s row(s))', image_provider, row_count),
+    ', '
+  )
+  into invalid_providers
+  from (
+    select image_provider, count(*) as row_count
+    from menu_items
+    where image_provider is not null
+      and image_provider <> 'cloudinary'
+    group by image_provider
+    order by image_provider
+  ) invalid;
+
+  if invalid_providers is not null then
+    raise exception
+      'Migration 005 preflight failed: unsupported image_provider values: %',
+      invalid_providers;
+  end if;
+end
+$$;
+
+alter table menu_items
+  drop constraint if exists menu_items_image_provider_check;
+alter table menu_items
+  add constraint menu_items_image_provider_check check (
+    image_provider is null or image_provider = 'cloudinary'
+  );
+
 create table if not exists menu_price_history (
   id bigserial primary key,
   menu_item_id uuid not null references menu_items(id),
@@ -291,16 +324,22 @@ alter table voucher_redemptions
     discount_amount >= 0
   );
 
+-- Whitespace-only references contain no usable idempotency value. Normalizing
+-- them to null is safe and keeps them outside the partial uniqueness index.
+update payments
+set reference = null
+where reference is not null and btrim(reference) = '';
+
 do $$
 declare
   duplicate_groups bigint;
 begin
   select count(*) into duplicate_groups
   from (
-    select order_id, reference
+    select order_id, btrim(reference) as normalized_reference
     from payments
-    where reference is not null and reference <> ''
-    group by order_id, reference
+    where reference is not null and btrim(reference) <> ''
+    group by order_id, btrim(reference)
     having count(*) > 1
   ) duplicates;
 
@@ -314,7 +353,7 @@ $$;
 
 create unique index if not exists payments_order_reference_unique
   on payments(order_id, reference)
-  where reference is not null and reference <> '';
+  where reference is not null and btrim(reference) <> '';
 
 create index if not exists orders_active_created_idx
   on orders(created_at desc)

@@ -609,7 +609,12 @@ function VouchersPanel({
               className={`voucher-card voucher-${voucher.status}`}
               key={voucher.id}
             >
-              <img alt="" src="/assets/joy-reference-hero.png" />
+              <img
+                alt=""
+                decoding="async"
+                loading="lazy"
+                src="/assets/joy-reference-hero.png"
+              />
               <div className="voucher-card-content">
                 <header>
                   <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />

@@ -10,12 +10,30 @@ function configuration() {
   const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME || "").trim();
   const apiKey = String(process.env.CLOUDINARY_API_KEY || "").trim();
   const apiSecret = String(process.env.CLOUDINARY_API_SECRET || "").trim();
+  const folder = String(
+    process.env.CLOUDINARY_FOLDER || "joy-corner/menu-items",
+  ).trim();
   if (!cloudName || !apiKey || !apiSecret) {
     throw new Error(
       "Product image storage is not configured. Add the Cloudinary server credentials.",
     );
   }
-  return { apiKey, apiSecret, cloudName };
+  return { apiKey, apiSecret, cloudName, folder };
+}
+
+export function cloudinaryPublicId(itemId: string, folder: string): string {
+  const normalizedFolder = folder.replace(/^\/+|\/+$/g, "");
+  if (
+    !normalizedFolder ||
+    normalizedFolder.includes("..") ||
+    !/^[a-z0-9/_-]+$/i.test(normalizedFolder)
+  ) {
+    throw new Error("The Cloudinary folder is invalid.");
+  }
+  if (!/^[a-z0-9-]+$/i.test(itemId)) {
+    throw new Error("The menu item identifier is invalid.");
+  }
+  return `${normalizedFolder}/${itemId}/main`;
 }
 
 function signature(
@@ -41,8 +59,8 @@ export async function storeMenuImage(
   if (!bytes.length || bytes.length > 5 * 1024 * 1024) {
     throw new Error("Menu images must be between 1 byte and 5 MB.");
   }
-  const { apiKey, apiSecret, cloudName } = configuration();
-  const publicId = `menu-items/${itemId}/main`;
+  const { apiKey, apiSecret, cloudName, folder } = configuration();
+  const publicId = cloudinaryPublicId(itemId, folder);
   const timestamp = Math.floor(Date.now() / 1000);
   const parameters = {
     invalidate: "true",

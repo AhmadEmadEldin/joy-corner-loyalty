@@ -6,13 +6,77 @@ fails, the project migration runner rolls the entire file back automatically.
 After a successful commit, rollback is not lossless. Create a Neon branch or
 snapshot immediately before applying the migration.
 
-## Preferred rollback
+## Approved rollback preparation
 
-1. Stop API, worker, and administrative writes.
-2. Restore or promote the pre-migration Neon branch/snapshot.
-3. Deploy the previous API, reporting worker, and frontend together.
-4. Restore the previous environment-variable set.
-5. Run read-only health and receipt checks before reopening writes.
+### 1. Create the isolated staging branch
+
+In the Neon project console, create a new branch from the intended source
+branch and name it clearly, for example `staging-migration-005`. Record the
+Neon project ID, source branch ID, staging branch ID, database name, creation
+time, and responsible operator in the deployment ticket. Configure only the
+staging services with that branch's direct connection string.
+
+Confirm that the staging endpoint differs from production before continuing.
+Do not infer branch identity only from the database name.
+
+### 2. Create the immediate pre-migration restore point
+
+After staging data has been refreshed and writes have been paused, create a
+child branch or point-in-time restore branch from staging. Use a timestamped
+name such as `staging-pre-005-YYYYMMDD-HHMM`. Do this immediately before the
+preflight and migration so the restore point contains no unrelated drift.
+
+### 3. Verify the restore point
+
+Using read-only queries against both staging and the restore point, compare:
+
+- latest applied `schema_migrations` filename/checksum;
+- row counts for orders, order items, payments, vouchers, menu items, and
+  customers;
+- maximum `created_at` and `updated_at` timestamps;
+- order totals and payment totals;
+- a small sample of historical order-item snapshots.
+
+Record branch IDs and query results. Do not apply migration 005 until the
+restore point is independently reachable.
+
+## Restore after a successful migration
+
+1. Stop API, reporting worker, scheduled jobs, and administrative writes.
+2. Preserve the failed migrated branch for investigation.
+3. Restore staging from the verified pre-migration branch/restore point, or
+   repoint all staging services to that branch.
+4. Deploy the last verified application artifact compatible with migrations
+   001–004. In this repository that baseline is commit `2e07d70`; verify the
+   deployment record before rollback. Do not deploy checkpoint `45a380f`
+   against a restored pre-005 database because its runtime expects the new
+   schema.
+5. Restore the matching pre-migration environment-variable configuration.
+6. Restart one service instance and perform the consistency verification below.
+7. Reopen writes only after sign-off.
+
+Transaction rollback protects failures only before migration 005 commits. Once
+the migration is committed, a full rollback requires restoring the database
+branch/restore point.
+
+## Post-restore consistency verification
+
+Confirm:
+
+- migration 005 is absent from `schema_migrations`;
+- legacy status constraints match the restored application version;
+- order/order-item/payment/voucher row counts match the restore-point record;
+- order totals equal their preserved historical item snapshots;
+- payment totals and references match the restore point;
+- no status-history, price-history, loyalty-ledger, or voucher-redemption rows
+  from the failed attempt remain;
+- API health/readiness succeeds with the pre-migration application;
+- one historical receipt renders without modifying data.
+
+## Preferred rollback summary
+
+The approved method is a Neon branch or restore point created immediately
+before migration. SQL-only reversal is not approved for a full rollback.
 
 This is the only rollback that preserves the exact distinction between:
 
@@ -55,6 +119,7 @@ alter table order_items
   drop column if exists image_url_snapshot;
 
 alter table menu_items
+  drop constraint if exists menu_items_image_provider_check,
   drop constraint if exists menu_items_availability_status_check,
   drop column if exists image_public_id,
   drop column if exists image_provider,

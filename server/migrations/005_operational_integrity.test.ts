@@ -10,6 +10,10 @@ const migration = fs.readFileSync(
   ),
   "utf8",
 );
+const preflight = fs.readFileSync(
+  path.resolve(process.cwd(), "MIGRATION_005_PREFLIGHT.sql"),
+  "utf8",
+);
 
 describe("migration 005 operational integrity", () => {
   it("updates only legacy order statuses", () => {
@@ -40,6 +44,24 @@ describe("migration 005 operational integrity", () => {
     );
   });
 
+  it("allows only null or Cloudinary external image providers", () => {
+    expect(migration).toContain("menu_items_image_provider_check");
+    expect(migration).toContain(
+      "image_provider is null or image_provider = 'cloudinary'",
+    );
+  });
+
+  it("normalizes whitespace-only payment references before duplicate checks", () => {
+    const normalization = migration.indexOf(
+      "where reference is not null and btrim(reference) = ''",
+    );
+    const guard = migration.indexOf(
+      "duplicate non-empty payment reference group(s) exist",
+    );
+    expect(normalization).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(normalization);
+  });
+
   it("checks duplicate payment references before creating the unique index", () => {
     const guard = migration.indexOf(
       "duplicate non-empty payment reference group(s) exist",
@@ -55,5 +77,35 @@ describe("migration 005 operational integrity", () => {
     expect(migration).not.toMatch(
       /insert\s+into\s+(order_status_history|menu_price_history)/i,
     );
+  });
+
+  it("keeps the standalone preflight read-only and rollback protected", () => {
+    expect(preflight).toContain("begin read only;");
+    expect(preflight.trimEnd().endsWith("rollback;")).toBe(true);
+    expect(preflight).not.toMatch(/\bupdate\s+(orders|payments|menu_items)\b/i);
+    expect(preflight).not.toMatch(/\bdelete\s+from\b/i);
+  });
+
+  it("reports required integrity and inventory checks", () => {
+    for (const check of [
+      "invalid_order_status",
+      "invalid_payment_status",
+      "duplicate_payment_reference",
+      "invalid_order_place",
+      "null_menu_availability",
+      "invalid_service_fee",
+      "invalid_delivery_fee",
+      "orphaned_order_item_order",
+      "orphaned_payment_order",
+      "orphaned_voucher_customer",
+      "duplicate_voucher_redemption_candidate",
+      "Existing schema migration versions",
+      "Affected-table row counts",
+    ]) {
+      expect(preflight).toContain(check);
+    }
+    expect(preflight).toContain("'payment_id', id");
+    expect(preflight).toContain("'amount', amount");
+    expect(preflight).toContain("'created_at', created_at");
   });
 });

@@ -16,6 +16,7 @@ API:
 - `NEON_DATABASE_URL`
 - `DATABASE_POOL_SIZE`
 - `DATABASE_SSL=true`
+- `MIGRATION_CONFIRM_STAGING=true` only during the explicit staging migration
 - optional one-time `ALLOW_MIGRATED_ACCOUNT_CLAIM`
 - optional staff seed passwords
 
@@ -24,6 +25,7 @@ Images:
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_FOLDER`
 
 Reporting worker:
 
@@ -35,9 +37,12 @@ Reporting worker:
 ## Pre-deployment
 
 - [ ] Create a Neon branch/snapshot.
+- [ ] Use a direct, unpooled Neon URL for the explicit migration command.
+- [ ] Confirm `NODE_ENV` is not `production` and the target is the staging branch.
 - [ ] Confirm frontend origin list and API URL.
 - [ ] Confirm JWT rotation/rollback procedure.
 - [ ] Configure Cloudinary folder permissions and upload limits.
+- [ ] Set the staging folder to `joy-corner/staging/menu-items`.
 - [ ] Confirm Google Sheet headers match reporting mappings.
 - [ ] Run `npm ci`.
 - [ ] Run `npm run check`.

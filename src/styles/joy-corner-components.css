@@ -112,7 +112,7 @@ body .auth-shell .auth-card a {
 .staff-sidebar {
   background:
     linear-gradient(rgba(8, 6, 4, 0.9), rgba(8, 6, 4, 0.97)),
-    url("../assets/joy-coffee-farm-sketch.png") bottom center / 100% auto no-repeat;
+    url("../assets/joy-coffee-farm-sketch.webp") bottom center / 100% auto no-repeat;
   border-right: 1px solid var(--jc-border-medium);
   display: flex;
   flex-direction: column;
@@ -856,7 +856,7 @@ body .auth-shell .auth-card a {
 .customer-app-shell .digital-receipt {
   background:
     linear-gradient(rgba(11, 8, 6, 0.91), rgba(11, 8, 6, 0.97)),
-    url("../assets/joy-coffee-farm-sketch.png") bottom center / 100% auto no-repeat;
+    url("../assets/joy-coffee-farm-sketch.webp") bottom center / 100% auto no-repeat;
   border: 1px solid var(--jc-border-active);
   box-shadow: var(--jc-shadow-lg), var(--jc-shadow-glow);
 }
