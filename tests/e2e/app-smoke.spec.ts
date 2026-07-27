@@ -10,11 +10,11 @@ test("staff login shell renders with Joy Corner branding and favicon", async ({
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  await expect(page).toHaveTitle(/Joy Corner Cafe Management/);
+  await expect(page).toHaveTitle(/Joy Corner Loyalty & Coffee Operations/);
   await expect(
-    page.getByRole("heading", { name: /Joy Corner Loyalty/i }),
+    page.getByRole("heading", { name: /Staff sign in/i }),
   ).toBeVisible();
-  await expect(page.getByLabel(/Staff Email/i)).toBeVisible();
+  await expect(page.getByLabel(/^Email$/i)).toBeVisible();
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
     "href",
     /joy-corner-logo\.svg/,
@@ -42,7 +42,7 @@ test("login shell stays usable across supported viewport widths", async ({
     await page.setViewportSize({ height: width <= 768 ? 780 : 900, width });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByLabel(/Staff Email/i)).toBeVisible();
+    await expect(page.getByLabel(/^Email$/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Sign In/i })).toBeVisible();
     const overflow = await page.evaluate(
       () =>
@@ -60,8 +60,8 @@ test("customer order route renders and keeps protected staff routes separate", a
 }) => {
   await page.goto("/order", { waitUntil: "domcontentloaded" });
   await expect(
-    page.getByRole("heading", { name: /^Joy Corner$/i }),
+    page.getByRole("heading", { name: /Welcome back/i }),
   ).toBeVisible();
-  await expect(page.getByText(/Customer Access/i)).toBeVisible();
+  await expect(page.getByText(/Joy Corner Loyalty/i)).toBeVisible();
   await expect(page.getByLabel(/Email/i)).toBeVisible();
 });

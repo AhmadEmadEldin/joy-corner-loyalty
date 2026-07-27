@@ -11,6 +11,8 @@ import {
   createStaffOrder,
   confirmOrderPayment,
   loadCustomerDirectory,
+  loadStaffHistory,
+  loadStaffInsights,
   loadStaffProfile,
   loadStaffQueues,
   loadMenu,
@@ -21,12 +23,18 @@ import {
   signInStaff,
   signOutCustomer,
   StaffProfile,
+  StaffInsights,
   subscribeToStaffQueues,
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
+import { ORDER_STATUS } from "../orderWorkflow";
 import { OwnerMenuManager } from "./OwnerMenuManager";
-import { createClientId } from "./cartDraft";
+import { ProductCustomizer } from "./ProductCustomizer";
 import { buildReceiptPrintHtml } from "../receiptPrint";
+import {
+  StaffAppShell,
+  type StaffSection,
+} from "../components/StaffAppShell";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -119,18 +127,22 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
   const [customers, setCustomers] = useState<Array<Record<string, unknown>>>(
     [],
   );
-  const [tab, setTab] = useState<
-    "overview" | "new_order" | "cashier" | "kitchen" | "customers" | "menu"
-  >("cashier");
+  const [history, setHistory] = useState<QueueOrder[]>([]);
+  const [insights, setInsights] = useState<StaffInsights | null>(null);
+  const [tab, setTab] = useState<StaffSection>("cashier");
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
   const [endingDay, setEndingDay] = useState(false);
 
   async function refreshQueues(role: StaffProfile["role"]) {
     try {
-      const queues = await loadStaffQueues(role);
+      const [queues, nextHistory] = await Promise.all([
+        loadStaffQueues(role),
+        loadStaffHistory(),
+      ]);
       setCashier(queues.cashier);
       setKitchen(queues.kitchen);
+      setHistory(nextHistory);
     } catch (error) {
       setMessage(getMessage(error));
     }
@@ -141,16 +153,22 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       const nextProfile = await loadStaffProfile();
       if (nextProfile.role === "customer")
         throw new Error("This account does not have staff access.");
-      const [queues, directory] = await Promise.all([
+      const [queues, directory, nextHistory, nextInsights] = await Promise.all([
         loadStaffQueues(nextProfile.role),
         ["owner", "manager", "cashier"].includes(nextProfile.role)
           ? loadCustomerDirectory()
           : Promise.resolve([]),
+        loadStaffHistory(),
+        ["owner", "manager"].includes(nextProfile.role)
+          ? loadStaffInsights()
+          : Promise.resolve(null),
       ]);
       setProfile(nextProfile as StaffProfile);
       setCashier(queues.cashier);
       setKitchen(queues.kitchen);
       setCustomers(directory);
+      setHistory(nextHistory);
+      setInsights(nextInsights);
       setTab(
         nextProfile.role === "owner" || nextProfile.role === "manager"
           ? "overview"
@@ -274,6 +292,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     setEndingDay(true);
     try {
       const report = await runEndDay();
+      setInsights(await loadStaffInsights());
       setMessage(`End Day completed: ${report.order_count} orders, ${money.format(report.gross_sales)} gross sales. Reporting is queued for Google Sheets.`);
     } catch (error) {
       setMessage(getMessage(error));
@@ -286,86 +305,23 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     profile && ["owner", "manager", "cashier"].includes(profile.role);
   const canKitchen =
     profile && ["owner", "manager", "barista"].includes(profile.role);
-  const canCreate =
-    profile && ["owner", "manager", "cashier", "waiter"].includes(profile.role);
   const canOverview = profile && ["owner", "manager"].includes(profile.role);
+  if (!profile) {
+    return (
+      <main className="joy-portal center-state" aria-busy="true">
+        {message || "Loading staff workspace…"}
+      </main>
+    );
+  }
   return (
-    <main className="joy-portal">
-      <header className="portal-header">
-        <div>
-          <p className="eyebrow">Joy Corner operations</p>
-          <h1>{profile?.full_name || "Staff"}</h1>
-          <small>{profile?.role}</small>
-        </div>
-        <button
-          className="button-secondary"
-          onClick={() => void signOutCustomer()}
-          type="button"
-        >
-          Sign out
-        </button>
-      </header>
-      {message ? (
-        <p className="portal-message" role="status">
-          {message}
-        </p>
-      ) : null}
-      <nav className="portal-tabs">
-        {canOverview ? (
-          <button
-            className={tab === "overview" ? "active" : ""}
-            onClick={() => setTab("overview")}
-            type="button"
-          >
-            Overview
-          </button>
-        ) : null}
-        {canCreate ? (
-          <button
-            className={tab === "new_order" ? "active" : ""}
-            onClick={() => setTab("new_order")}
-            type="button"
-          >
-            New order
-          </button>
-        ) : null}
-        {canCashier ? (
-          <button
-            className={tab === "cashier" ? "active" : ""}
-            onClick={() => setTab("cashier")}
-            type="button"
-          >
-            Cashier ({cashier.length})
-          </button>
-        ) : null}
-        {profile?.role === "owner" ? (
-          <button
-            className={tab === "menu" ? "active" : ""}
-            onClick={() => setTab("menu")}
-            type="button"
-          >
-            Menu & images
-          </button>
-        ) : null}
-        {canKitchen ? (
-          <button
-            className={tab === "kitchen" ? "active" : ""}
-            onClick={() => setTab("kitchen")}
-            type="button"
-          >
-            Kitchen ({kitchen.length})
-          </button>
-        ) : null}
-        {canCashier ? (
-          <button
-            className={tab === "customers" ? "active" : ""}
-            onClick={() => setTab("customers")}
-            type="button"
-          >
-            Customers ({customers.length})
-          </button>
-        ) : null}
-      </nav>
+    <StaffAppShell
+      active={tab}
+      badges={{ cashier: cashier.length, customers: customers.length, kitchen: kitchen.length }}
+      message={message}
+      onNavigate={setTab}
+      onSignOut={() => void signOutCustomer()}
+      profile={profile}
+    >
       {tab === "overview" && canOverview ? (
         <StaffOverview
           cashier={cashier}
@@ -393,20 +349,22 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           variant="cashier"
           actions={(order) => (
             <>
-              {order.status === "pending_confirmation" ? (
+              {order.status === ORDER_STATUS.AWAITING_CONFIRMATION ? (
                 <>
                   <button
-                    onClick={() => void move(order, "confirmed")}
+                    disabled={busyOrder === order.order_id}
+                    onClick={() => void move(order, ORDER_STATUS.CONFIRMED)}
                     type="button"
                   >
                     Confirm
                   </button>
                   <button
                     className="button-danger"
+                    disabled={busyOrder === order.order_id}
                     onClick={() => {
                       const reason =
                         window.prompt("Reason for rejection?") || "";
-                      if (reason) void move(order, "rejected", reason);
+                      if (reason) void move(order, ORDER_STATUS.REJECTED, reason);
                     }}
                     type="button"
                   >
@@ -414,22 +372,14 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
                   </button>
                 </>
               ) : null}
-              {order.status !== "pending_confirmation" && order.payment_status !== "paid" ? (
-                <button onClick={() => void collect(order)} type="button">
+              {order.status !== ORDER_STATUS.AWAITING_CONFIRMATION && order.payment_status !== "paid" ? (
+                <button disabled={busyOrder === order.order_id} onClick={() => void collect(order)} type="button">
                   Record payment ({money.format(order.remaining_amount ?? order.total ?? 0)} due)
                 </button>
               ) : null}
               <button className="button-secondary" onClick={() => printReceipt(order)} type="button">
                 Print receipt
               </button>
-              {order.status === "picked_up" ? (
-                <button
-                  onClick={() => void move(order, "closed")}
-                  type="button"
-                >
-                  Close
-                </button>
-              ) : null}
             </>
           )}
         />
@@ -444,15 +394,16 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
             const next: Partial<
               Record<OperationalOrderStatus, OperationalOrderStatus>
             > = {
-              confirmed: "accepted",
-              accepted: "preparing",
-              preparing: "ready",
-              ready: "picked_up",
+              [ORDER_STATUS.CONFIRMED]: ORDER_STATUS.IN_PREPARATION,
+              [ORDER_STATUS.IN_PREPARATION]: ORDER_STATUS.READY,
+              [ORDER_STATUS.READY]: ORDER_STATUS.PICKED_UP,
             };
             const target = next[order.status];
             return target ? (
-              <button onClick={() => void move(order, target)} type="button">
-                Mark {statusLabel(target)}
+              <button disabled={busyOrder === order.order_id} onClick={() => void move(order, target)} type="button">
+                {target === ORDER_STATUS.IN_PREPARATION
+                  ? "Start preparation"
+                  : `Mark ${statusLabel(target)}`}
               </button>
             ) : null;
           }}
@@ -475,7 +426,27 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       {tab === "menu" && profile?.role === "owner" ? (
         <OwnerMenuManager />
       ) : null}
-    </main>
+      {tab === "orders" ? <OrderHistoryPanel orders={history} /> : null}
+      {tab === "rewards" && insights ? (
+        <BusinessPanel kind="rewards" insights={insights} />
+      ) : null}
+      {tab === "vouchers" && insights ? (
+        <BusinessPanel kind="vouchers" insights={insights} />
+      ) : null}
+      {tab === "analytics" && insights ? (
+        <BusinessPanel kind="analytics" insights={insights} />
+      ) : null}
+      {tab === "end_day" && insights ? (
+        <EndDayPanel
+          endingDay={endingDay}
+          insights={insights}
+          onEndDay={() => void endDay()}
+        />
+      ) : null}
+      {tab === "system" && insights ? (
+        <BusinessPanel kind="system" insights={insights} />
+      ) : null}
+    </StaffAppShell>
   );
 }
 
@@ -498,33 +469,27 @@ function StaffOrderForm({
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
+  const [menuQuery, setMenuQuery] = useState("");
+  const [category, setCategory] = useState("All");
+  const [orderPlace, setOrderPlace] = useState<
+    "dine_in" | "takeaway" | "car" | "outside" | "delivery"
+  >("takeaway");
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
       .catch((error) => setMessage(getMessage(error)));
   }, []);
-  function add(item: MenuItem) {
-    const size = item.sizes[0];
-    if (!size) return;
-    setCart((current) => {
-      const found = current.find((line) => line.size.id === size.id);
-      return found
-        ? current.map((line) =>
-            line === found ? { ...line, quantity: line.quantity + 1 } : line,
-          )
-        : [
-            ...current,
-            {
-              item,
-              lineId: createClientId(),
-              modifiers: [],
-              notes: "",
-              quantity: 1,
-              size,
-            },
-          ];
-    });
-  }
+  const categories = ["All", ...Array.from(new Set(menu.map((item) => item.category)))];
+  const visibleMenu = menu.filter((item) => {
+    const query = menuQuery.trim().toLowerCase();
+    return (
+      (category === "All" || item.category === category) &&
+      (!query ||
+        item.name.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query))
+    );
+  });
   async function searchCustomer() {
     if (!customerPhone.trim()) return;
     setSearching(true);
@@ -586,6 +551,21 @@ function StaffOrderForm({
           | "card_at_branch"
           | "instapay"
           | "manual_transfer",
+        orderPlace,
+        placeDetails: Object.fromEntries(
+          [
+            "tableNumber",
+            "pickupName",
+            "pickupTime",
+            "carColor",
+            "carModel",
+            "plateNumber",
+            "address",
+            "phone",
+            "deliveryNote",
+            "deliveryFee",
+          ].map((key) => [key, String(form.get(key) || "")]),
+        ),
         pickupName: String(form.get("pickupName") || ""),
       });
       setCart([]);
@@ -602,22 +582,58 @@ function StaffOrderForm({
   }
   return (
     <section className="portal-section">
-      <h2>Create branch order</h2>
+      <header className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Complete point of sale</p>
+          <h2>Create branch order</h2>
+        </div>
+        <label>
+          <span className="sr-only">Search menu products</span>
+          <input
+            onChange={(event) => setMenuQuery(event.target.value)}
+            placeholder="Search products"
+            type="search"
+            value={menuQuery}
+          />
+        </label>
+      </header>
+      <nav aria-label="Menu categories" className="pos-category-tabs">
+        {categories.map((name) => (
+          <button
+            aria-pressed={category === name}
+            className={category === name ? "active" : ""}
+            key={name}
+            onClick={() => setCategory(name)}
+            type="button"
+          >
+            {name}
+          </button>
+        ))}
+      </nav>
       <div className="staff-order-layout">
         <div className="compact-menu">
-          {menu.map((item) => (
+          {visibleMenu.map((item) => (
             <button
-              disabled={!item.sizes.length}
+              className={!item.available ? "unavailable" : ""}
+              disabled={!item.available || !item.sizes.length}
               key={item.id}
-              onClick={() => add(item)}
+              onClick={() => setSelectedProduct(item)}
               type="button"
             >
               <strong>{item.name}</strong>
+              <span>{item.category}</span>
               <small>
                 {item.sizes[0]
                   ? money.format(item.sizes[0].price)
                   : "Unavailable"}
               </small>
+              {!item.available ? (
+                <em>
+                  {item.availability_status === "sold_out"
+                    ? "Sold out"
+                    : "Temporarily unavailable"}
+                </em>
+              ) : null}
             </button>
           ))}
         </div>
@@ -643,10 +659,13 @@ function StaffOrderForm({
               </div>
             </label>
             {foundCustomer ? (
-              <p style={{ color: "green" }}>
-                Found: <strong>{String(foundCustomer.fullName || "")}</strong>
-                {foundCustomer.customerNumber ? ` (${String(foundCustomer.customerNumber)})` : ""}
-              </p>
+              <div className="customer-lookup-result">
+                <strong>{String(foundCustomer.fullName || "")}</strong>
+                <span>{String(foundCustomer.loyaltyPoints || 0)} points</span>
+                <span>{String(foundCustomer.activeVouchers || 0)} active vouchers</span>
+                <span>{money.format(Number(foundCustomer.unpaidBalance || 0))} unpaid</span>
+                <small>{String(foundCustomer.orderCount || 0)} previous orders</small>
+              </div>
             ) : null}
             {showCreateInline ? (
               <div style={{ marginTop: "0.5rem" }}>
@@ -676,14 +695,65 @@ function StaffOrderForm({
               <option value="manual_transfer">Transfer</option>
             </select>
           </label>
+          <fieldset className="order-place-selector">
+            <legend>Order place</legend>
+            {(["dine_in", "takeaway", "car", "outside", "delivery"] as const).map(
+              (place) => (
+                <label key={place}>
+                  <input
+                    checked={orderPlace === place}
+                    name="orderPlace"
+                    onChange={() => setOrderPlace(place)}
+                    type="radio"
+                    value={place}
+                  />
+                  {place.replace(/_/g, " ")}
+                </label>
+              ),
+            )}
+          </fieldset>
+          {orderPlace === "dine_in" ? (
+            <label>Table number<input name="tableNumber" required /></label>
+          ) : null}
+          {orderPlace === "takeaway" ? (
+            <label>Pickup time (optional)<input name="pickupTime" type="time" /></label>
+          ) : null}
+          {orderPlace === "car" ? (
+            <>
+              <label>Car color<input name="carColor" required /></label>
+              <label>Car model<input name="carModel" required /></label>
+              <label>Plate number (optional)<input name="plateNumber" /></label>
+            </>
+          ) : null}
+          {orderPlace === "delivery" ? (
+            <>
+              <label>Delivery address<textarea name="address" required /></label>
+              <label>Delivery phone<input inputMode="tel" name="phone" required /></label>
+              <label>Delivery note<textarea name="deliveryNote" /></label>
+              <label>Delivery fee (EGP)<input min="0" name="deliveryFee" step="0.01" type="number" /></label>
+            </>
+          ) : null}
           <label>
             Notes
             <textarea name="customerNotes" />
           </label>
           <div className="staff-cart">
             {cart.map((line) => (
-              <span key={line.size.id}>
-                {line.quantity} × {line.item.name}
+              <span key={line.lineId}>
+                {line.quantity} × {line.item.name} · {line.size.size_name}
+                <button
+                  aria-label={`Remove ${line.item.name}`}
+                  onClick={() =>
+                    setCart((current) =>
+                      current.filter(
+                        (candidate) => candidate.lineId !== line.lineId,
+                      ),
+                    )
+                  }
+                  type="button"
+                >
+                  ×
+                </button>
               </span>
             ))}
             <strong>
@@ -701,6 +771,16 @@ function StaffOrderForm({
         </form>
       </div>
       {message ? <p role="status">{message}</p> : null}
+      {selectedProduct ? (
+        <ProductCustomizer
+          item={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          onSave={(line) => {
+            setCart((current) => [...current, line]);
+            setSelectedProduct(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -728,10 +808,14 @@ function Queue({
     if (view === "all") return true;
     if (view === "new")
       return variant === "cashier"
-        ? order.status === "pending_confirmation"
-        : order.status === "confirmed";
-    if (view === "ready") return order.status === "ready";
-    return !["pending_confirmation", "confirmed", "ready"].includes(
+        ? order.status === ORDER_STATUS.AWAITING_CONFIRMATION
+        : order.status === ORDER_STATUS.CONFIRMED;
+    if (view === "ready") return order.status === ORDER_STATUS.READY;
+    return !([
+      ORDER_STATUS.AWAITING_CONFIRMATION,
+      ORDER_STATUS.CONFIRMED,
+      ORDER_STATUS.READY,
+    ] as OperationalOrderStatus[]).includes(
       order.status,
     );
   });
@@ -834,7 +918,7 @@ function StaffOverview({
   ) => void;
 }) {
   const pending = cashier.filter(
-    (order) => order.status === "pending_confirmation",
+    (order) => order.status === ORDER_STATUS.AWAITING_CONFIRMATION,
   ).length;
   const unpaid = cashier.filter(
     (order) => order.payment_status !== "paid",
@@ -874,7 +958,7 @@ function StaffOverview({
       </div>
       <div className="portal-section">
         <h3>Daily reporting</h3>
-        <p>End Day is available when every order for today is closed, rejected, or cancelled.</p>
+        <p>End Day is available when every order for today is picked up, rejected, or cancelled.</p>
         <button disabled={endingDay} onClick={onEndDay} type="button">
           {endingDay ? "Closing day…" : "End Day & queue Google Sheets report"}
         </button>
@@ -896,6 +980,15 @@ function StaffCustomerDirectory({
   const [addPhone, setAddPhone] = useState("");
   const [addEmail, setAddEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleCustomers = customers.filter((customer) => {
+    const value = query.trim().toLowerCase();
+    return (
+      !value ||
+      String(customer.fullName || "").toLowerCase().includes(value) ||
+      String(customer.phone || "").toLowerCase().includes(value)
+    );
+  });
   async function addCustomer() {
     if (!addName.trim() || !addPhone.trim()) return;
     setBusy(true);
@@ -917,7 +1010,21 @@ function StaffCustomerDirectory({
   }
   return (
     <section className="portal-section">
-      <h2>Customer directory</h2>
+      <header className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Real customer accounts</p>
+          <h2>Customer directory</h2>
+        </div>
+        <label>
+          <span className="sr-only">Search customers</span>
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name or phone"
+            type="search"
+            value={query}
+          />
+        </label>
+      </header>
       <form
         className="profile-grid"
         onSubmit={(e) => { e.preventDefault(); void addCustomer(); }}
@@ -956,19 +1063,239 @@ function StaffCustomerDirectory({
         <div className="staff-table-row heading">
           <span>Customer</span>
           <span>Contact</span>
-          <span>Number</span>
+          <span>Orders / spend</span>
+          <span>Unpaid</span>
+          <span>Rewards</span>
         </div>
-        {customers.map((customer) => (
+        {visibleCustomers.map((customer) => (
           <div className="staff-table-row" key={String(customer.id)}>
             <strong>{String(customer.fullName || "")}</strong>
             <span>
               {String(customer.phone || customer.email || "Restricted")}
             </span>
-            <span>{String(customer.customerNumber || "")}</span>
+            <span>
+              {String(customer.orderCount || 0)} /{" "}
+              {money.format(Number(customer.lifetimeSpend || 0))}
+            </span>
+            <span>{money.format(Number(customer.unpaidBalance || 0))}</span>
+            <span>
+              {String(customer.loyaltyPoints || 0)} pts ·{" "}
+              {String(customer.activeVouchers || 0)} vouchers
+            </span>
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function OrderHistoryPanel({ orders }: { orders: QueueOrder[] }) {
+  return (
+    <section className="portal-section">
+      <header className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Preserved operational history</p>
+          <h2>Completed and cancelled orders</h2>
+        </div>
+        <strong>{orders.length} recent records</strong>
+      </header>
+      {orders.length ? (
+        <div className="staff-table order-history-table">
+          <div className="staff-table-row heading">
+            <span>Order</span>
+            <span>Customer</span>
+            <span>Status</span>
+            <span>Total</span>
+            <span>Payment</span>
+          </div>
+          {orders.map((order) => (
+            <div className="staff-table-row" key={order.order_id}>
+              <strong>{order.order_number}</strong>
+              <span>{order.pickup_name}</span>
+              <span className={`status-pill status-${order.status}`}>
+                {statusLabel(order.status)}
+              </span>
+              <span>{money.format(order.total || 0)}</span>
+              <span className={`payment-badge payment-${order.payment_status}`}>
+                {(order.payment_status || "unpaid").replace(/_/g, " ")}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="empty-inline">No completed or cancelled orders yet.</p>
+      )}
+    </section>
+  );
+}
+
+function BusinessPanel({
+  insights,
+  kind,
+}: {
+  insights: StaffInsights;
+  kind: "analytics" | "rewards" | "system" | "vouchers";
+}) {
+  if (kind === "rewards") {
+    return (
+      <section className="staff-business-page">
+        <header className="staff-page-heading">
+          <div>
+            <p className="eyebrow">Immutable loyalty reporting</p>
+            <h2>Rewards</h2>
+            <p>Balances and eligible activity are calculated from Neon.</p>
+          </div>
+        </header>
+        <div className="staff-metric-grid">
+          <Metric label="Points outstanding" value={insights.rewards.points_outstanding} />
+          <Metric label="Eligible orders" value={insights.rewards.eligible_orders} />
+          <Metric label="Free rewards available" value={insights.rewards.free_rewards} />
+          <Metric label="Active customers" value={insights.customers.total_customers} />
+        </div>
+        <section className="portal-section">
+          <h3>Ledger protection</h3>
+          <p>
+            Completed paid orders write a unique ledger entry. Duplicate awards
+            are rejected by the database.
+          </p>
+        </section>
+      </section>
+    );
+  }
+  if (kind === "vouchers") {
+    return (
+      <section className="staff-business-page voucher-operations">
+        <header className="staff-page-heading">
+          <div>
+            <p className="eyebrow">Atomic redemption reporting</p>
+            <h2>Vouchers</h2>
+            <p>Current voucher inventory and redemption state.</p>
+          </div>
+        </header>
+        <div className="staff-metric-grid">
+          <Metric label="Active" value={insights.vouchers.active} />
+          <Metric label="Redeemed" value={insights.vouchers.redeemed} />
+          <Metric label="Cancelled" value={insights.vouchers.cancelled} />
+          <Metric label="All vouchers" value={insights.vouchers.total} />
+        </div>
+        <section className="voucher-farm-panel portal-section">
+          <img alt="" src="/assets/joy-reference-hero.png" />
+          <div>
+            <p className="eyebrow">Coffee farm voucher identity</p>
+            <h3>Every reward carries the Joy Corner story</h3>
+            <p>
+              Voucher benefits, ownership, expiry, and single-use redemption
+              are verified by the protected API.
+            </p>
+          </div>
+        </section>
+      </section>
+    );
+  }
+  if (kind === "system") {
+    const integrations = [
+      ["Neon operational database", insights.integrations.neon],
+      ["Live order updates", Boolean(insights.integrations.realtime)],
+      ["Google Sheets reporting", insights.integrations.googleSheets],
+      ["Cloudinary product images", insights.integrations.cloudinary],
+    ] as const;
+    return (
+      <section className="staff-business-page">
+        <header className="staff-page-heading">
+          <div>
+            <p className="eyebrow">Protected owner configuration</p>
+            <h2>System</h2>
+            <p>Runtime integration readiness without exposing credentials.</p>
+          </div>
+        </header>
+        <div className="system-grid">
+          {integrations.map(([label, ready]) => (
+            <article className="portal-section" key={label}>
+              <span className={ready ? "status-dot ready" : "status-dot"} />
+              <div><strong>{label}</strong><small>{ready ? "Configured" : "Needs configuration"}</small></div>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="staff-business-page">
+      <header className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Live business performance</p>
+          <h2>Analytics</h2>
+          <p>Today in Cairo, calculated from operational order records.</p>
+        </div>
+      </header>
+      <div className="staff-metric-grid">
+        <Metric label="Revenue" value={money.format(insights.analytics.order_value)} />
+        <Metric label="Orders" value={insights.analytics.order_count} />
+        <Metric label="Average order" value={money.format(insights.analytics.average_order)} />
+        <Metric label="Unpaid value" value={money.format(insights.analytics.unpaid_value)} />
+        <Metric label="Active kitchen" value={insights.analytics.active_kitchen} />
+        <Metric label="New customers" value={insights.customers.new_customers} />
+      </div>
+    </section>
+  );
+}
+
+function EndDayPanel({
+  endingDay,
+  insights,
+  onEndDay,
+}: {
+  endingDay: boolean;
+  insights: StaffInsights;
+  onEndDay: () => void;
+}) {
+  return (
+    <section className="staff-business-page">
+      <header className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Protected close procedure</p>
+          <h2>End of Day</h2>
+          <p>
+            Closing is blocked while operational orders remain active and is
+            protected by a database lock.
+          </p>
+        </div>
+        <button className="danger-action" disabled={endingDay} onClick={onEndDay} type="button">
+          {endingDay ? "Closing…" : "Close business day"}
+        </button>
+      </header>
+      <div className="staff-metric-grid">
+        <Metric label="Orders today" value={insights.analytics.order_count} />
+        <Metric label="Sales today" value={money.format(insights.analytics.order_value)} />
+        <Metric label="Unpaid" value={money.format(insights.analytics.unpaid_value)} />
+        <Metric label="Open kitchen" value={insights.analytics.active_kitchen} />
+      </div>
+      <section className="portal-section">
+        <h3>Recent closures</h3>
+        {insights.endDays.length ? (
+          <div className="staff-table">
+            {insights.endDays.map((report) => (
+              <div className="staff-table-row" key={String(report.id)}>
+                <strong>{String(report.business_date || "")}</strong>
+                <span>{String(report.order_count || 0)} orders</span>
+                <span>{money.format(Number(report.gross_sales || 0))}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-inline">No closed business days yet.</p>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <article className="metric-card">
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </article>
   );
 }
 

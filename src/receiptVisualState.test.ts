@@ -8,19 +8,23 @@ import {
 
 describe("receiptVisualState", () => {
   it("maps preparation statuses to explicit classes", () => {
-    expect(getPreparationStatusClass("Submitted")).toBe("status-submitted");
-    expect(getPreparationStatusClass("Accepted")).toBe("status-accepted");
-    expect(getPreparationStatusClass("Preparing")).toBe("status-preparing");
-    expect(getPreparationStatusClass("Ready")).toBe("status-ready");
-    expect(getPreparationStatusClass("Picked Up")).toBe("status-picked-up");
-    expect(getPreparationStatusClass("Cancelled")).toBe("status-cancelled");
+    expect(getPreparationStatusClass("submitted")).toBe("status-submitted");
+    expect(getPreparationStatusClass("awaiting_confirmation")).toBe(
+      "status-awaiting-confirmation",
+    );
+    expect(getPreparationStatusClass("confirmed")).toBe("status-confirmed");
+    expect(getPreparationStatusClass("in_preparation")).toBe(
+      "status-in-preparation",
+    );
+    expect(getPreparationStatusClass("ready")).toBe("status-ready");
+    expect(getPreparationStatusClass("picked_up")).toBe("status-picked-up");
+    expect(getPreparationStatusClass("cancelled")).toBe("status-cancelled");
   });
 
   it("normalizes picked up values to one canonical preparation status", () => {
-    expect(normalizePreparationStatus("pickedup")).toBe("Picked Up");
-    expect(normalizePreparationStatus("picked_up")).toBe("Picked Up");
-    expect(normalizePreparationStatus("PickedUp")).toBe("Picked Up");
-    expect(normalizePreparationStatus("Served")).toBe("Picked Up");
+    expect(normalizePreparationStatus("pickedup")).toBe("picked_up");
+    expect(normalizePreparationStatus("picked_up")).toBe("picked_up");
+    expect(normalizePreparationStatus("PickedUp")).toBe("picked_up");
   });
 
   it("maps payment statuses to separate explicit classes", () => {
@@ -33,9 +37,9 @@ describe("receiptVisualState", () => {
   });
 
   it("keeps preparation and payment status concepts independent", () => {
-    expect(normalizePreparationStatus("Ready")).toBe("Ready");
+    expect(normalizePreparationStatus("ready")).toBe("ready");
     expect(normalizePaymentStatusForDisplay("Unpaid")).toBe("Unpaid");
-    expect(isFinishedPreparationStatus("Ready")).toBe(true);
+    expect(isFinishedPreparationStatus("ready")).toBe(true);
     expect(isFinishedPreparationStatus("Paid")).toBe(false);
   });
 });

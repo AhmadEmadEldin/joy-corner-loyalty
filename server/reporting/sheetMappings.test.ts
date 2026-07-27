@@ -6,10 +6,10 @@ describe("Neon reporting sheet mappings", () => {
       reportingRecord("orders", {
         id: "order-1",
         order_number: "JC-1001",
-        status: "pending_confirmation",
+        status: "awaiting_confirmation",
       }),
     ).toMatchObject({
-      "Order Status": "pending_confirmation",
+      "Order Status": "awaiting_confirmation",
       orderId: "order-1",
       receiptNumber: "JC-1001",
     });

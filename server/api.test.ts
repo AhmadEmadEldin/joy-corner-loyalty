@@ -2,7 +2,7 @@ import { normalizePhone } from "./validators";
 
 describe("normalizePhone", () => {
   it("normalizes Egyptian mobile with leading zero", () => {
-    expect(normalizePhone("01234567890")).toBe("+01234567890");
+    expect(normalizePhone("01234567890")).toBe("+201234567890");
   });
 
   it("normalizes Egyptian mobile with country code", () => {

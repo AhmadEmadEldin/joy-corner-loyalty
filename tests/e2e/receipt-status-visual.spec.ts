@@ -31,7 +31,7 @@ test("receipt status colors and finished slash are scoped by view", async ({
   await page.setContent(`
     <style>${css}</style>
     <main>
-      ${receiptMarkup("barista-receipt status-accepted payment-awaiting")}
+      ${receiptMarkup("barista-receipt status-confirmed payment-awaiting")}
       ${receiptMarkup("barista-receipt status-picked-up payment-paid")}
       ${receiptMarkup("barista-receipt status-ready payment-unpaid is-finished")}
       ${receiptMarkup("orders-receipt status-ready payment-unpaid")}
@@ -42,7 +42,7 @@ test("receipt status colors and finished slash are scoped by view", async ({
   `);
 
   await expect(
-    page.locator(".barista-receipt.status-accepted").first(),
+    page.locator(".barista-receipt.status-confirmed").first(),
   ).toHaveCSS("border-left-color", "rgb(249, 115, 22)");
   await expect(
     page.locator(".barista-receipt.status-picked-up").first(),

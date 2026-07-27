@@ -6,7 +6,7 @@ import type { Configuration as DevServerConfiguration } from "webpack-dev-server
 
 dotenv.config({ path: [".env.local", ".env"] });
 
-const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
+const port = Number(process.env.FRONTEND_PORT || process.env.PORT || 8081);
 
 const apiConfig = {
   baseUrl: process.env.VITE_API_URL || "/api",

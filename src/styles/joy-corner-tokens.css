@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+  --jc-bg-primary: #0b0806;
+  --jc-bg-secondary: #120c08;
+  --jc-bg-tertiary: #1a120c;
+  --jc-bg-elevated: #2b1b14;
+  --jc-bg-soft: #342219;
+  --jc-espresso: #2b1b14;
+  --jc-coffee: #4a2c20;
+  --jc-caramel: #b9783d;
+  --jc-gold: #d6a756;
+  --jc-gold-light: #e8c77e;
+  --jc-cream: #f7f0e4;
+  --jc-ivory: #fffdf8;
+  --jc-sand: #e9ddcc;
+  --jc-muted: #a89a8e;
+  --jc-muted-dark: #786a61;
+  --jc-success: #55a974;
+  --jc-success-soft: rgba(56, 122, 82, 0.22);
+  --jc-warning: #e59a45;
+  --jc-warning-soft: rgba(198, 123, 45, 0.22);
+  --jc-danger: #df6b61;
+  --jc-danger-soft: rgba(184, 70, 61, 0.22);
+  --jc-info: #65a0f8;
+  --jc-info-soft: rgba(56, 130, 246, 0.22);
+  --jc-glass-light: rgba(255, 253, 248, 0.05);
+  --jc-glass-medium: rgba(43, 27, 20, 0.68);
+  --jc-glass-strong: rgba(18, 12, 8, 0.88);
+  --jc-glass-solid: rgba(11, 8, 6, 0.96);
+  --jc-border-soft: rgba(214, 167, 86, 0.18);
+  --jc-border-medium: rgba(214, 167, 86, 0.35);
+  --jc-border-active: rgba(214, 167, 86, 0.68);
+  --jc-font-display: "Playfair Display", Georgia, serif;
+  --jc-font-ui: "Poppins", Arial, sans-serif;
+  --jc-radius-xs: 4px;
+  --jc-radius-sm: 8px;
+  --jc-radius-md: 12px;
+  --jc-radius-lg: 16px;
+  --jc-radius-xl: 24px;
+  --jc-radius-2xl: 32px;
+  --jc-radius-pill: 999px;
+  --jc-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.22);
+  --jc-shadow-md: 0 12px 28px rgba(0, 0, 0, 0.32);
+  --jc-shadow-lg: 0 22px 52px rgba(0, 0, 0, 0.42);
+  --jc-shadow-glow: 0 0 22px rgba(214, 167, 86, 0.18);
+  --jc-space-1: 4px;
+  --jc-space-2: 8px;
+  --jc-space-3: 12px;
+  --jc-space-4: 16px;
+  --jc-space-5: 20px;
+  --jc-space-6: 24px;
+  --jc-space-8: 32px;
+  --jc-space-10: 40px;
+  --jc-space-12: 48px;
+  --jc-space-16: 64px;
+  --jc-duration-fast: 140ms;
+  --jc-duration-normal: 220ms;
+  --jc-duration-slow: 300ms;
+  --jc-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+*:focus-visible {
+  outline: 3px solid var(--jc-gold-light);
+  outline-offset: 3px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--jc-font-ui);
+}
+
+button,
+[role="button"] {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

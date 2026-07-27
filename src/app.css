@@ -179,13 +179,14 @@
   padding: 5px 10px;
 }
 
-.status-preparing,
-.status-accepted {
+.status-in-preparation,
+.status-confirmed,
+.status-awaiting-confirmation {
   background: #fff0bd;
 }
 
 .status-ready,
-.status-closed {
+.status-picked-up {
   background: #d9f4df;
 }
 
@@ -1712,13 +1713,14 @@ tbody tr:hover {
   color: #5c4a2f;
 }
 
-.preparation-status-badge.status-accepted {
+.preparation-status-badge.status-confirmed {
   background: #ffedd5;
   border-color: rgba(194, 92, 14, 0.28);
   color: #9a3412;
 }
 
-.preparation-status-badge.status-preparing {
+.preparation-status-badge.status-in-preparation,
+.preparation-status-badge.status-awaiting-confirmation {
   background: #fef3c7;
   border-color: rgba(180, 83, 9, 0.26);
   color: #92400e;
@@ -1777,14 +1779,14 @@ tbody tr:hover {
   color: #5b21b6;
 }
 
-.barista-receipt.status-accepted {
+.barista-receipt.status-confirmed {
   background:
     radial-gradient(circle at 0 0, rgba(249, 115, 22, 0.22), transparent 31%),
     linear-gradient(180deg, #fff7ed, #ffedd5);
   border-left-color: #f97316;
 }
 
-.barista-receipt.status-preparing {
+.barista-receipt.status-in-preparation {
   background:
     radial-gradient(circle at 0 0, rgba(234, 179, 8, 0.22), transparent 31%),
     linear-gradient(180deg, #fffbeb, #fef3c7);

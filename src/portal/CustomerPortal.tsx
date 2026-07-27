@@ -35,6 +35,15 @@ import {
   subscribeToCustomerChanges,
   updateCustomerProfile,
 } from "./repository";
+import {
+  cartCanCheckout,
+  reconcileCartWithMenu,
+} from "./cartReconciliation";
+
+const money = new Intl.NumberFormat("en-EG", {
+  currency: "EGP",
+  style: "currency",
+});
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -229,15 +238,6 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
     [],
   );
 
-  const refreshDashboard = useCallback(async () => {
-    try {
-      applyDashboard(await loadCustomerDashboard());
-      setMessage("");
-    } catch (error) {
-      setMessage(errorMessage(error));
-    }
-  }, [applyDashboard]);
-
   const refresh = useCallback(async () => {
     try {
       const [nextMenu, nextProfile, dashboard] = await Promise.all([
@@ -246,6 +246,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
         loadCustomerDashboard(),
       ]);
       setMenu(nextMenu);
+      setCart((current) => reconcileCartWithMenu(current, nextMenu));
       setProfile(nextProfile);
       applyDashboard(dashboard);
       setMessage("");
@@ -263,7 +264,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
       user.id,
       () => {
         window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => void refreshDashboard(), 150);
+        refreshTimer = window.setTimeout(() => void refresh(), 150);
       },
       (connected) => setRealtimeState(connected ? "connected" : "reconnecting"),
     );
@@ -271,7 +272,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
       window.clearTimeout(refreshTimer);
       unsubscribe();
     };
-  }, [refresh, refreshDashboard, user.id]);
+  }, [refresh, user.id]);
 
   useEffect(() => {
     saveCartDraft(user.id, cart, orderIdempotencyKey);
@@ -295,7 +296,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
   );
 
   async function submitOrder(submission: CheckoutSubmission) {
-    if (busy || !cart.length) return;
+    if (busy || !cartCanCheckout(cart)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -415,7 +416,14 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
           loading={loading}
           menu={menu}
           onCartChange={setCart}
-          onCheckout={() => cart.length && setCheckoutOpen(true)}
+          onCheckout={() => {
+            if (cartCanCheckout(cart)) setCheckoutOpen(true);
+            else {
+              setMessage(
+                "Review changed prices or remove unavailable items before checkout.",
+              );
+            }
+          }}
         />
       ) : null}
       {section === "orders" ||
@@ -437,7 +445,9 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
         />
       ) : null}
       {section === "rewards" ? <RewardsPanel rewards={rewards} /> : null}
-      {section === "vouchers" ? <VouchersPanel vouchers={vouchers} /> : null}
+      {section === "vouchers" ? (
+        <VouchersPanel customerName={profile.full_name} vouchers={vouchers} />
+      ) : null}
       {section === "notifications" ? (
         <NotificationsPanel
           notifications={notifications}
@@ -484,7 +494,7 @@ function CustomerHome({
   vouchers: CustomerVoucher[];
 }) {
   const currentOrder = orders.find(
-    (order) => !["closed", "rejected", "cancelled"].includes(order.status),
+    (order) => !["picked_up", "rejected", "cancelled"].includes(order.status),
   );
   return (
     <section className="customer-home">
@@ -575,23 +585,64 @@ function RewardsPanel({
   );
 }
 
-function VouchersPanel({ vouchers }: { vouchers: CustomerVoucher[] }) {
+function VouchersPanel({
+  customerName,
+  vouchers,
+}: {
+  customerName: string;
+  vouchers: CustomerVoucher[];
+}) {
+  const [copied, setCopied] = useState("");
   return (
     <section className="portal-section customer-detail-page">
-      <p className="eyebrow">Saved offers</p>
-      <h2>Your vouchers</h2>
+      <header className="voucher-page-heading">
+        <div>
+          <p className="eyebrow">From farm to cup</p>
+          <h2>Your vouchers</h2>
+          <p>Personal rewards secured to your Joy Corner account.</p>
+        </div>
+      </header>
       {vouchers.length ? (
         <div className="voucher-grid">
           {vouchers.map((voucher) => (
-            <article className="voucher-card" key={voucher.id}>
-              <span>{voucher.status}</span>
-              <strong>{voucher.voucher_code}</strong>
-              <p>{voucher.voucher_type.replace(/_/g, " ")}</p>
-              <small>
-                {voucher.expires_at
-                  ? `Expires ${new Date(voucher.expires_at).toLocaleDateString()}`
-                  : "No expiry"}
-              </small>
+            <article
+              className={`voucher-card voucher-${voucher.status}`}
+              key={voucher.id}
+            >
+              <img alt="" src="/assets/joy-reference-hero.png" />
+              <div className="voucher-card-content">
+                <header>
+                  <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+                  <span>{voucher.status}</span>
+                </header>
+                <p className="eyebrow">A Joy Corner reward for</p>
+                <h3>{customerName}</h3>
+                <strong className="voucher-benefit">
+                  {customerVoucherBenefit(voucher)}
+                </strong>
+                <div className="voucher-code-row">
+                  <code>{voucher.voucher_code}</code>
+                  <button
+                    disabled={voucher.status !== "active"}
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(voucher.voucher_code);
+                      setCopied(voucher.id);
+                    }}
+                    type="button"
+                  >
+                    {copied === voucher.id ? "Copied" : "Copy code"}
+                  </button>
+                </div>
+                <small>
+                  {voucher.expires_at
+                    ? `Expires ${new Date(voucher.expires_at).toLocaleDateString()}`
+                    : "No expiry"}
+                </small>
+                <p className="voucher-terms">
+                  Eligibility and final value are verified when the order is
+                  submitted. Each voucher can be redeemed once.
+                </p>
+              </div>
             </article>
           ))}
         </div>
@@ -600,6 +651,12 @@ function VouchersPanel({ vouchers }: { vouchers: CustomerVoucher[] }) {
       )}
     </section>
   );
+}
+
+function customerVoucherBenefit(voucher: CustomerVoucher): string {
+  if (voucher.fixed_value) return `${money.format(voucher.fixed_value)} off`;
+  if (voucher.percentage_value) return `${voucher.percentage_value}% off`;
+  return "Free eligible item";
 }
 
 function NotificationsPanel({

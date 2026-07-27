@@ -4,6 +4,11 @@ import dotenv from "dotenv";
 import type { PoolClient } from "pg";
 import { applyNeonMigrations, closeNeonPool, transaction } from "../server/neon";
 import { googleSheetsClient } from "../server/reporting/googleAuth";
+import {
+  importedCompletionTimestamp,
+  importedConfirmationStatus,
+  normalizeImportedOrderStatus,
+} from "../server/importOrderNormalization";
 import { parseLiveMenuSizes } from "../src/menuRepository";
 
 dotenv.config({ path: [".env.local", ".env"] });
@@ -86,25 +91,6 @@ function normalizeRole(value: string): string {
   return ["owner", "manager", "cashier", "waiter", "barista"].includes(role)
     ? role
     : "cashier";
-}
-
-function normalizeOrderStatus(value: string): string {
-  const status = key(value);
-  const map: Record<string, string> = {
-    accepted: "accepted",
-    cancelled: "cancelled",
-    closed: "closed",
-    complete: "closed",
-    completed: "closed",
-    confirmed: "confirmed",
-    pending: "pending_confirmation",
-    pendingconfirmation: "pending_confirmation",
-    pickedup: "picked_up",
-    preparing: "preparing",
-    ready: "ready",
-    rejected: "rejected",
-  };
-  return map[status] || "closed";
 }
 
 function normalizePaymentStatus(value: string): string {
@@ -241,16 +227,21 @@ async function migrateOrders(client: PoolClient, source: Row[]): Promise<number>
     const unitPrice = number(row, "unitPrice");
     const discount = number(row, "discount");
     const total = Math.max(0, number(row, "total") || quantity * unitPrice - discount);
-    const status = normalizeOrderStatus(text(row, "orderStatus"));
+    const status = normalizeImportedOrderStatus(text(row, "orderStatus"));
+    const confirmationStatus = importedConfirmationStatus(status);
+    const completionTimestamp = importedCompletionTimestamp(status, createdAt);
     const orderResult = await client.query<{ id: string }>(
       `insert into orders(legacy_id,order_number,idempotency_key,customer_id,pickup_name,customer_notes,status,confirmation_status,payment_status,subtotal,discount_total,total,created_at,updated_at,closed_at)
-       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::timestamptz,$13::timestamptz,case when $7='closed' then $13::timestamptz else null end)
-       on conflict(legacy_id) do update set status=excluded.status,payment_status=excluded.payment_status,
-       subtotal=excluded.subtotal,discount_total=excluded.discount_total,total=excluded.total returning id`,
+       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::timestamptz,$13::timestamptz,$14::timestamptz)
+       on conflict(legacy_id) do update set
+       status=excluded.status,confirmation_status=excluded.confirmation_status,
+       payment_status=excluded.payment_status,subtotal=excluded.subtotal,
+       discount_total=excluded.discount_total,total=excluded.total,
+       closed_at=excluded.closed_at returning id`,
       [legacyId, orderNumber, `migration:${legacyId}`, customer.rows[0]?.id || null,
        text(row, "customerName") || "Legacy customer", text(row, "notes"), status,
-       status === "pending_confirmation" ? "pending" : "confirmed", normalizePaymentStatus(text(row, "paymentStatus")),
-       quantity * unitPrice, discount, total, createdAt],
+       confirmationStatus, normalizePaymentStatus(text(row, "paymentStatus")),
+       quantity * unitPrice, discount, total, createdAt, completionTimestamp],
     );
     const menu = await client.query<Record<string, unknown>>(
       `select i.id,i.name,c.name as category,s.size_name,s.price from menu_items i

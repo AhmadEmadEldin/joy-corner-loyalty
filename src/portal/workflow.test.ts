@@ -2,31 +2,29 @@ import { canTransitionOrder, statusLabel, statusProgress } from "./workflow";
 
 describe("Operational order workflow", () => {
   it("allows only the documented customer-to-kitchen sequence", () => {
-    expect(canTransitionOrder("pending_confirmation", "confirmed")).toBe(true);
-    expect(canTransitionOrder("confirmed", "accepted")).toBe(true);
-    expect(canTransitionOrder("accepted", "preparing")).toBe(true);
-    expect(canTransitionOrder("preparing", "ready")).toBe(true);
+    expect(canTransitionOrder("awaiting_confirmation", "confirmed")).toBe(true);
+    expect(canTransitionOrder("confirmed", "in_preparation")).toBe(true);
+    expect(canTransitionOrder("in_preparation", "ready")).toBe(true);
     expect(canTransitionOrder("ready", "picked_up")).toBe(true);
-    expect(canTransitionOrder("picked_up", "closed")).toBe(true);
   });
 
   it("blocks skipped and terminal transitions", () => {
-    expect(canTransitionOrder("pending_confirmation", "preparing")).toBe(false);
+    expect(canTransitionOrder("awaiting_confirmation", "in_preparation")).toBe(false);
     expect(canTransitionOrder("rejected", "confirmed")).toBe(false);
-    expect(canTransitionOrder("closed", "preparing")).toBe(false);
+    expect(canTransitionOrder("picked_up", "in_preparation")).toBe(false);
   });
 
   it("reports deterministic customer progress", () => {
-    expect(statusProgress("pending_confirmation")).toBe(0);
-    expect(statusProgress("preparing")).toBe(60);
-    expect(statusProgress("closed")).toBe(100);
+    expect(statusProgress("awaiting_confirmation")).toBe(25);
+    expect(statusProgress("in_preparation")).toBe(65);
+    expect(statusProgress("picked_up")).toBe(100);
   });
 
   it("uses explicit cashier and barista labels", () => {
-    expect(statusLabel("pending_confirmation")).toBe(
-      "Pending cashier confirmation",
+    expect(statusLabel("awaiting_confirmation")).toBe(
+      "Waiting for confirmation",
     );
-    expect(statusLabel("accepted")).toBe("Accepted by barista");
-    expect(statusLabel("closed")).toBe("Completed");
+    expect(statusLabel("in_preparation")).toBe("Being prepared");
+    expect(statusLabel("picked_up")).toBe("Picked up");
   });
 });

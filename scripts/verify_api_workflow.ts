@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import dotenv from "dotenv";
 import { closeNeonPool, query } from "../server/neon";
+import { ORDER_STATUS } from "../src/orderWorkflow";
 
 dotenv.config({ path: [".env.local", ".env"] });
 
@@ -103,18 +104,30 @@ async function main(): Promise<void> {
   }
   controller.abort();
 
-  for (const status of ["accepted", "preparing", "ready", "picked_up"]) {
+  for (const status of [
+    ORDER_STATUS.IN_PREPARATION,
+    ORDER_STATUS.READY,
+  ]) {
     await request(`/orders/${customerOrder.orderId}/status`, cookies.barista, { body: JSON.stringify({ status }), method: "POST" });
   }
   const queues = await request<{ cashier: Array<{ order_id: string; total: number }> }>("/staff/queues", cookies.cashier);
   const queued = queues.cashier.find((order) => order.order_id === customerOrder.orderId);
   if (!queued) throw new Error("Cashier queue did not contain the pickup order.");
   await request(`/orders/${customerOrder.orderId}/payment`, cookies.cashier, {
-    body: JSON.stringify({ amount: queued.total, paymentMethod: "cash_at_cashier", reference: `e2e-${runId}` }), method: "POST",
+    body: JSON.stringify({
+      amount: queued.total,
+      idempotencyKey: `e2e-${runId}`,
+      paymentMethod: "cash_at_cashier",
+    }),
+    headers: { "Idempotency-Key": `e2e-${runId}` },
+    method: "POST",
   });
   const paymentRows = await query<{ id: string }>("select id from payments where order_id=$1", [customerOrder.orderId]);
   paymentIds.push(...paymentRows.map((row) => row.id));
-  await request(`/orders/${customerOrder.orderId}/status`, cookies.cashier, { body: JSON.stringify({ status: "closed" }), method: "POST" });
+  await request(`/orders/${customerOrder.orderId}/status`, cookies.barista, {
+    body: JSON.stringify({ status: ORDER_STATUS.PICKED_UP }),
+    method: "POST",
+  });
 
   const dashboard = await request<{
     orders: Array<{ id: string; paid_amount: number; remaining_amount: number }>;
@@ -142,7 +155,14 @@ async function main(): Promise<void> {
     customerOrder: customerOrder.orderNumber,
     endDay: "verified",
     loyalty: "verified",
-    orderLifecycle: ["pending_confirmation","confirmed","accepted","preparing","ready","picked_up","paid","closed"],
+    orderLifecycle: [
+      ORDER_STATUS.AWAITING_CONFIRMATION,
+      ORDER_STATUS.CONFIRMED,
+      ORDER_STATUS.IN_PREPARATION,
+      ORDER_STATUS.READY,
+      "paid",
+      ORDER_STATUS.PICKED_UP,
+    ],
     receiptAmounts: "verified",
     realtime: "verified",
     unconfirmedBaristaVisibility: "blocked",

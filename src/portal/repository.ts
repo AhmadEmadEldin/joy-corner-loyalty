@@ -20,6 +20,11 @@ export type MenuSize = { id: string; price: number; size_name: string };
 export type MenuModifier = { id: string; name: string; price: number };
 export type MenuItem = {
   available: boolean;
+  availability_status:
+    | "available"
+    | "temporarily_unavailable"
+    | "sold_out"
+    | "archived";
   category: string;
   description: string;
   id: string;
@@ -43,16 +48,19 @@ export type CustomerOrder = {
   discount_total: number;
   id: string;
   order_number: string;
+  order_place: string;
   paid_amount: number;
   payment_method: string | null;
   payment_status: string;
   pickup_name: string;
   rejection_reason: string | null;
   remaining_amount: number;
+  service_fee: number;
   subtotal: number;
   status: OperationalOrderStatus;
   tax_total: number;
   total: number;
+  delivery_fee: number;
   voucher_discount: number;
 };
 export type CustomerOrderItem = {
@@ -94,11 +102,14 @@ export type CustomerVoucher = {
   voucher_type: string;
 };
 export type CartLine = {
+  invalidReason?: string;
   item: MenuItem;
   lineId: string;
   modifiers: MenuModifier[];
   notes: string;
+  previousUnitPrice?: number;
   quantity: number;
+  requiresPriceAcknowledgement?: boolean;
   size: MenuSize;
 };
 export type StaffProfile = {
@@ -136,6 +147,38 @@ export type QueueOrder = {
   voucher_discount?: number;
   tax_total?: number;
   total?: number;
+};
+
+export type StaffInsights = {
+  analytics: {
+    active_kitchen: number;
+    average_order: number;
+    order_count: number;
+    order_value: number;
+    unpaid_value: number;
+  };
+  customers: {
+    new_customers: number;
+    total_customers: number;
+  };
+  endDays: Array<Record<string, unknown>>;
+  integrations: {
+    cloudinary: boolean;
+    googleSheets: boolean;
+    neon: boolean;
+    realtime: string;
+  };
+  rewards: {
+    eligible_orders: number;
+    free_rewards: number;
+    points_outstanding: number;
+  };
+  vouchers: {
+    active: number;
+    cancelled: number;
+    redeemed: number;
+    total: number;
+  };
 };
 
 export function staffQueueTables(
@@ -218,6 +261,14 @@ export async function loadStaffQueues(role: StaffProfile["role"]): Promise<{
   return apiRequest(`/staff/queues?role=${encodeURIComponent(role)}`);
 }
 
+export async function loadStaffHistory(): Promise<QueueOrder[]> {
+  return (await apiRequest<{ orders: QueueOrder[] }>("/staff/orders")).orders;
+}
+
+export async function loadStaffInsights(): Promise<StaffInsights> {
+  return apiRequest("/staff/insights");
+}
+
 export async function changeOrderStatus(
   orderId: string,
   status: OperationalOrderStatus,
@@ -231,12 +282,16 @@ export async function changeOrderStatus(
 
 export async function confirmOrderPayment(input: {
   amount: number;
+  idempotencyKey?: string;
   orderId: string;
   paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
   reference: string;
 }): Promise<void> {
   await apiRequest(`/orders/${encodeURIComponent(input.orderId)}/payment`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      idempotencyKey: input.idempotencyKey || crypto.randomUUID(),
+    }),
     method: "POST",
   });
 }
@@ -314,16 +369,40 @@ export async function loadOwnerMenu(): Promise<OwnerMenuItem[]> {
 export async function updateOwnerMenuItem(input: {
   active: boolean;
   available: boolean;
+  availabilityStatus:
+    | "available"
+    | "temporarily_unavailable"
+    | "sold_out"
+    | "archived";
+  categoryId: string;
   description: string;
   id: string;
   loyaltyEligible: boolean;
   name: string;
   preparationStation: "barista" | "kitchen";
+  sortOrder: number;
 }): Promise<void> {
   await apiRequest(`/owner/menu/items/${encodeURIComponent(input.id)}`, {
     body: JSON.stringify(input),
     method: "PATCH",
   });
+}
+
+export async function createOwnerMenuItem(input: {
+  categoryId: string;
+  description: string;
+  loyaltyEligible: boolean;
+  name: string;
+  preparationStation: "barista" | "kitchen";
+  price: number;
+  sizeName: string;
+  sortOrder: number;
+}): Promise<string> {
+  const result = await apiRequest<{ itemId: string }>("/owner/menu/items", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+  return result.itemId;
 }
 
 export async function updateOwnerMenuSize(sizeId: string, price: number): Promise<void> {
@@ -343,6 +422,34 @@ function fileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+async function optimizedMenuImage(file: File): Promise<string> {
+  if (typeof createImageBitmap !== "function") return fileAsDataUrl(file);
+  const bitmap = await createImageBitmap(file);
+  const maxEdge = 1600;
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    return fileAsDataUrl(file);
+  }
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/webp", 0.84),
+  );
+  if (!blob) return fileAsDataUrl(file);
+  return fileAsDataUrl(
+    new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.webp`, {
+      type: "image/webp",
+    }),
+  );
+}
+
 export async function uploadOwnerMenuImage(
   itemId: string,
   file: File,
@@ -354,7 +461,7 @@ export async function uploadOwnerMenuImage(
   if (file.size > 5 * 1024 * 1024) throw new Error("Menu images must be 5 MB or smaller.");
   const result = await apiRequest<{ imageUrl: string }>(
     `/owner/menu/items/${encodeURIComponent(itemId)}/image`,
-    { body: JSON.stringify({ dataUrl: await fileAsDataUrl(file) }), method: "PUT" },
+    { body: JSON.stringify({ dataUrl: await optimizedMenuImage(file) }), method: "PUT" },
   );
   return result.imageUrl;
 }
@@ -406,7 +513,9 @@ export async function createStaffOrder(input: {
   cart: CartLine[];
   customerId: string | null;
   customerNotes: string;
+  orderPlace: "dine_in" | "takeaway" | "car" | "outside" | "delivery";
   paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
+  placeDetails: Record<string, string | number>;
   pickupName: string;
 }): Promise<{ orderId: string; orderNumber: string }> {
   return apiRequest("/orders/staff", {
@@ -422,7 +531,7 @@ export function subscribeToCustomerChanges(
 ): () => void {
   onConnectionChange?.(true);
   const unsubscribe = subscribeToEvents(
-    ["orders", "rewards_accounts", "vouchers", "notifications"],
+    ["menu", "orders", "rewards_accounts", "vouchers", "notifications"],
     onChange,
   );
   return () => {

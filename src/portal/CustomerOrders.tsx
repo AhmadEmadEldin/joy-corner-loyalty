@@ -11,13 +11,12 @@ const money = new Intl.NumberFormat("en-EG", {
 });
 
 const stages = [
-  ["pending_confirmation", "Sent to cashier"],
-  ["confirmed", "Cashier confirmed"],
-  ["accepted", "Barista accepted"],
-  ["preparing", "Preparing"],
-  ["ready", "Ready"],
+  ["submitted", "Order received"],
+  ["awaiting_confirmation", "Waiting for confirmation"],
+  ["confirmed", "Confirmed"],
+  ["in_preparation", "Being prepared"],
+  ["ready", "Ready for pickup"],
   ["picked_up", "Picked up"],
-  ["closed", "Completed"],
 ] as const;
 
 export function CustomerOrders({
@@ -43,8 +42,7 @@ export function CustomerOrders({
 }) {
   const visible = orders.filter((order) => {
     if (mode === "unpaid") return order.payment_status !== "paid";
-    if (mode === "receipts")
-      return ["picked_up", "closed"].includes(order.status);
+    if (mode === "receipts") return order.status === "picked_up";
     return true;
   });
   const selected = orders.find((order) => order.id === selectedOrderId) || null;
@@ -173,7 +171,7 @@ function OrderReceipt({
         <p>
           {terminalFailure
             ? "Order update"
-            : order.status === "pending_confirmation"
+            : order.status === "awaiting_confirmation"
               ? "Your order has been sent to the cashier for confirmation."
               : "Follow your Joy Corner order live"}
         </p>
@@ -225,6 +223,10 @@ function OrderReceipt({
           <div>
             <small>Pickup name</small>
             <strong>{order.pickup_name}</strong>
+          </div>
+          <div>
+            <small>Order place</small>
+            <strong>{order.order_place.replace(/_/g, " ")}</strong>
           </div>
           <div>
             <small>Payment</small>
@@ -283,6 +285,18 @@ function OrderReceipt({
               <dd>{money.format(order.tax_total)}</dd>
             </div>
           ) : null}
+          {order.service_fee ? (
+            <div>
+              <dt>Service fee</dt>
+              <dd>{money.format(order.service_fee)}</dd>
+            </div>
+          ) : null}
+          {order.delivery_fee ? (
+            <div>
+              <dt>Delivery fee</dt>
+              <dd>{money.format(order.delivery_fee)}</dd>
+            </div>
+          ) : null}
           <div className="grand-total">
             <dt>Total</dt>
             <dd>{money.format(order.total)}</dd>
@@ -306,7 +320,7 @@ function OrderReceipt({
         </footer>
       </article>
       <div className="receipt-actions no-print">
-        {order.status === "pending_confirmation" ? (
+        {order.status === "awaiting_confirmation" ? (
           <button
             className="button-secondary"
             onClick={() => void onCancel(order)}

@@ -3,6 +3,7 @@ import { CustomerMenu, lineTotal } from "./CustomerMenu";
 import type { CartLine, MenuItem } from "./repository";
 
 const latte: MenuItem = {
+  availability_status: "available",
   available: true,
   category: "Hot Coffee",
   description: "Espresso with steamed milk",
@@ -19,6 +20,7 @@ const latte: MenuItem = {
 
 const unavailable: MenuItem = {
   ...latte,
+  availability_status: "temporarily_unavailable",
   available: false,
   category: "Desserts",
   id: "cake",

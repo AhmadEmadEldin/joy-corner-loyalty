@@ -39,10 +39,10 @@ const orderSheet: ReportingSheet = {
     "Payment Status": row.payment_status,
     Total: row.total,
     Notes: row.customer_notes,
-    activeBoard: !["closed", "rejected", "cancelled"].includes(
+    activeBoard: !["picked_up", "rejected", "cancelled"].includes(
       String(row.status),
     ),
-    archived: row.status === "closed",
+    archived: row.status === "picked_up",
     archivedAt: row.closed_at,
     businessDate: row.created_at
       ? getCairoBusinessDate(new Date(String(row.created_at)))
@@ -85,7 +85,7 @@ const itemSheet: ReportingSheet = {
     notes: row.preparation_notes,
     orderId: row.order_id,
     orderItemId: row.id,
-    preparationStatus: "Requested",
+    preparationStatus: "awaiting_confirmation",
     quantity: row.quantity,
     size: row.size_name,
     unitPrice: row.unit_price,

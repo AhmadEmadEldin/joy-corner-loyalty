@@ -1,11 +1,13 @@
 export type PreparationStatus =
-  | "Requested"
-  | "Submitted"
-  | "Accepted"
-  | "Preparing"
-  | "Ready"
-  | "Picked Up"
-  | "Cancelled";
+  | "draft"
+  | "submitted"
+  | "awaiting_confirmation"
+  | "confirmed"
+  | "in_preparation"
+  | "ready"
+  | "picked_up"
+  | "cancelled"
+  | "rejected";
 
 export type PaymentStatus =
   | "Awaiting Payment"
@@ -15,18 +17,15 @@ export type PaymentStatus =
   | "Refunded";
 
 const preparationStatusMap: Record<string, PreparationStatus> = {
-  accepted: "Accepted",
-  cancelled: "Cancelled",
-  canceled: "Cancelled",
-  done: "Picked Up",
-  open: "Submitted",
-  pickedup: "Picked Up",
-  pickup: "Picked Up",
-  preparing: "Preparing",
-  ready: "Ready",
-  requested: "Requested",
-  served: "Picked Up",
-  submitted: "Requested",
+  awaitingconfirmation: "awaiting_confirmation",
+  cancelled: "cancelled",
+  confirmed: "confirmed",
+  draft: "draft",
+  inpreparation: "in_preparation",
+  pickedup: "picked_up",
+  ready: "ready",
+  rejected: "rejected",
+  submitted: "submitted",
 };
 
 const paymentStatusMap: Record<string, PaymentStatus> = {
@@ -40,13 +39,15 @@ const paymentStatusMap: Record<string, PaymentStatus> = {
 };
 
 export const preparationStatusStyles: Record<PreparationStatus, string> = {
-  Requested: "status-submitted",
-  Submitted: "status-submitted",
-  Accepted: "status-accepted",
-  Preparing: "status-preparing",
-  Ready: "status-ready",
-  "Picked Up": "status-picked-up",
-  Cancelled: "status-cancelled",
+  awaiting_confirmation: "status-awaiting-confirmation",
+  cancelled: "status-cancelled",
+  confirmed: "status-confirmed",
+  draft: "status-draft",
+  in_preparation: "status-in-preparation",
+  picked_up: "status-picked-up",
+  ready: "status-ready",
+  rejected: "status-rejected",
+  submitted: "status-submitted",
 };
 
 export const paymentStatusStyles: Record<PaymentStatus, string> = {
@@ -65,7 +66,7 @@ function statusKey(value: unknown) {
 }
 
 export function normalizePreparationStatus(value: unknown): PreparationStatus {
-  return preparationStatusMap[statusKey(value)] || "Requested";
+  return preparationStatusMap[statusKey(value)] || "awaiting_confirmation";
 }
 
 export function normalizePaymentStatusForDisplay(
@@ -83,9 +84,9 @@ export function getPaymentStatusClass(value: unknown) {
 }
 
 export function isPickedUpStatus(value: unknown) {
-  return normalizePreparationStatus(value) === "Picked Up";
+  return normalizePreparationStatus(value) === "picked_up";
 }
 
 export function isFinishedPreparationStatus(value: unknown) {
-  return normalizePreparationStatus(value) === "Ready";
+  return normalizePreparationStatus(value) === "ready";
 }

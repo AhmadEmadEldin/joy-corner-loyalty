@@ -66,30 +66,23 @@ export const featurePermissions = [
 ] as const;
 
 export const orderStatuses = [
-  "Draft",
-  "Requested",
-  "Submitted",
-  "Accepted",
-  "Preparing",
-  "Ready",
-  "Picked Up",
-  "Served",
-  "Awaiting Payment",
-  "Partially Paid",
-  "Paid",
-  "Unpaid",
-  "Cancelled",
-  "Refunded",
-  "Archived",
+  "draft",
+  "submitted",
+  "awaiting_confirmation",
+  "confirmed",
+  "in_preparation",
+  "ready",
+  "picked_up",
+  "cancelled",
+  "rejected",
 ] as const;
 
 export const paymentStatuses = [
-  "Awaiting Payment",
-  "Partially Paid",
-  "Paid",
-  "Partial",
-  "Unpaid",
-  "Refunded",
+  "unpaid",
+  "partially_paid",
+  "paid",
+  "refunded",
+  "voided",
 ] as const;
 
 const isoDateStringSchema = z.string().min(1);
@@ -185,7 +178,7 @@ export const orderItemSchema = z.object({
   notes: z.string().default(""),
   orderId: idSchema,
   orderItemId: idSchema,
-  preparationStatus: orderStatusSchema.default("Submitted"),
+  preparationStatus: orderStatusSchema.default("awaiting_confirmation"),
   quantity: z.number().int().positive(),
   size: z.string().min(1),
   unitPrice: moneySchema,

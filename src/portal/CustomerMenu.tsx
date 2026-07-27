@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CartLine, MenuItem } from "./repository";
 import { ProductCustomizer } from "./ProductCustomizer";
+import { cartCanCheckout } from "./cartReconciliation";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -111,7 +112,10 @@ export function CustomerMenu({
           ) : visible.length ? (
             <div className="kiosk-product-grid">
               {visible.map((item) => (
-                <article className="kiosk-product-card" key={item.id}>
+                <article
+                  className={`kiosk-product-card availability-${item.availability_status}`}
+                  key={item.id}
+                >
                   <button
                     aria-label={`Customize ${item.name}`}
                     className="product-card-main"
@@ -124,11 +128,20 @@ export function CustomerMenu({
                         alt={item.name}
                         loading="lazy"
                         onError={(event) => {
-                          event.currentTarget.src = "/assets/joy-corner-mark.png";
+                          event.currentTarget.src = "/assets/coffee-bean-field.jpg";
                         }}
-                        src={item.image_url || "/assets/joy-corner-mark.png"}
+                        src={item.image_url || "/assets/coffee-bean-field.jpg"}
                       />
                     </span>
+                    {!item.available ? (
+                      <span className="product-unavailable-overlay">
+                        <strong>
+                          {item.availability_status === "sold_out"
+                            ? "Sold out"
+                            : "Temporarily unavailable"}
+                        </strong>
+                      </span>
+                    ) : null}
                     <span className="product-card-copy">
                       <small>{item.category}</small>
                       <strong>{item.name}</strong>
@@ -175,7 +188,12 @@ export function CustomerMenu({
         />
       </div>
       {cart.length ? (
-        <button className="mobile-cart-button" onClick={onCheckout} type="button">
+        <button
+          className="mobile-cart-button"
+          disabled={!cartCanCheckout(cart)}
+          onClick={onCheckout}
+          type="button"
+        >
           <span>{quantity} {quantity === 1 ? "item" : "items"}</span>
           <strong>View order · {money.format(total)}</strong>
         </button>
@@ -235,10 +253,36 @@ function CartPanel({
                     : ""}
                 </small>
                 {line.notes ? <small>Note: {line.notes}</small> : null}
+                {line.invalidReason ? (
+                  <small className="cart-line-warning" role="alert">
+                    {line.invalidReason}
+                  </small>
+                ) : null}
+                {line.requiresPriceAcknowledgement ? (
+                  <small className="cart-line-warning">
+                    Price changed from {money.format(line.previousUnitPrice || 0)} to{" "}
+                    {money.format(line.size.price)}.
+                  </small>
+                ) : null}
               </div>
               <strong>{money.format(lineTotal(line))}</strong>
               <div className="cart-line-actions">
-                <button onClick={() => onEdit(line)} type="button">Edit</button>
+                {line.requiresPriceAcknowledgement ? (
+                  <button
+                    onClick={() =>
+                      onEdit({
+                        ...line,
+                        previousUnitPrice: undefined,
+                        requiresPriceAcknowledgement: false,
+                      })
+                    }
+                    type="button"
+                  >
+                    Review
+                  </button>
+                ) : (
+                  <button disabled={Boolean(line.invalidReason)} onClick={() => onEdit(line)} type="button">Edit</button>
+                )}
                 <div className="quantity-control">
                   <button
                     aria-label={`Remove one ${line.item.name}`}
@@ -269,7 +313,7 @@ function CartPanel({
       <footer>
         <div><span>Subtotal</span><strong>{money.format(total)}</strong></div>
         <small>Discounts are calculated securely at checkout.</small>
-        <button disabled={!cart.length} onClick={onCheckout} type="button">
+        <button disabled={!cartCanCheckout(cart)} onClick={onCheckout} type="button">
           Continue to checkout
         </button>
       </footer>

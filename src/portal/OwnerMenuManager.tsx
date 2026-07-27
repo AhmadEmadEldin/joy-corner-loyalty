@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  createOwnerMenuItem,
   loadOwnerMenu,
   OwnerMenuItem,
   removeOwnerMenuImage,
@@ -18,6 +19,7 @@ export function OwnerMenuManager() {
   const [query, setQuery] = useState("");
   const [missingOnly, setMissingOnly] = useState(false);
   const [message, setMessage] = useState("Loading owner menu…");
+  const [creating, setCreating] = useState(false);
 
   async function refresh(preferredId?: string) {
     try {
@@ -60,6 +62,9 @@ export function OwnerMenuManager() {
           </p>
         </div>
         <div className="owner-menu-filters">
+          <button onClick={() => setCreating((value) => !value)} type="button">
+            {creating ? "Close new product" : "Add product"}
+          </button>
           <label>
             Search products
             <input
@@ -84,6 +89,16 @@ export function OwnerMenuManager() {
           {message}
         </p>
       ) : null}
+      {creating ? (
+        <OwnerNewProduct
+          items={items}
+          onCreated={async (itemId) => {
+            setCreating(false);
+            await refresh(itemId);
+            setMessage("Product created. Add its image and remaining details.");
+          }}
+        />
+      ) : null}
       <div className="owner-menu-layout">
         <div aria-label="Menu products" className="owner-menu-list">
           {filtered.map((item) => (
@@ -97,9 +112,9 @@ export function OwnerMenuManager() {
               <img
                 alt=""
                 onError={(event) => {
-                  event.currentTarget.src = "/assets/joy-corner-mark.png";
+                  event.currentTarget.src = "/assets/coffee-bean-field.jpg";
                 }}
-                src={item.image_url || "/assets/joy-corner-mark.png"}
+                src={item.image_url || "/assets/coffee-bean-field.jpg"}
               />
               <span>
                 <strong>{item.name}</strong>
@@ -115,12 +130,13 @@ export function OwnerMenuManager() {
         {selected ? (
           <OwnerMenuEditor
             item={selected}
+            items={items}
             key={selected.id}
             onChanged={async () => refresh(selected.id)}
           />
         ) : (
           <div className="owner-menu-empty">
-            <img alt="" src="/assets/joy-corner-mark.png" />
+            <img alt="" src="/assets/coffee-bean-field.jpg" />
             <p>Select a product to manage its details and image.</p>
           </div>
         )}
@@ -131,9 +147,11 @@ export function OwnerMenuManager() {
 
 function OwnerMenuEditor({
   item,
+  items,
   onChanged,
 }: {
   item: OwnerMenuItem;
+  items: OwnerMenuItem[];
   onChanged: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -148,6 +166,12 @@ function OwnerMenuEditor({
       await updateOwnerMenuItem({
         active: form.get("active") === "on",
         available: form.get("available") === "on",
+        availabilityStatus: String(form.get("availabilityStatus")) as
+          | "available"
+          | "temporarily_unavailable"
+          | "sold_out"
+          | "archived",
+        categoryId: String(form.get("categoryId") || item.category_id),
         description: String(form.get("description") || ""),
         id: item.id,
         loyaltyEligible: form.get("loyaltyEligible") === "on",
@@ -155,6 +179,7 @@ function OwnerMenuEditor({
         preparationStation: String(form.get("preparationStation")) as
           | "barista"
           | "kitchen",
+        sortOrder: Number(form.get("sortOrder") || 0),
       });
       await onChanged();
       setMessage("Product details saved.");
@@ -199,7 +224,7 @@ function OwnerMenuEditor({
       <div className="owner-menu-image-preview">
         <img
           alt={item.image_url ? item.name : `${item.name} image missing`}
-          src={item.image_url || "/assets/joy-corner-mark.png"}
+          src={item.image_url || "/assets/coffee-bean-field.jpg"}
         />
         <div>
           <label className="button-like">
@@ -238,6 +263,33 @@ function OwnerMenuEditor({
         />
       </label>
       <label>
+        Category
+        <select defaultValue={item.category_id} name="categoryId">
+          {Array.from(
+            new Map(
+              items.map((candidate) => [
+                candidate.category_id,
+                candidate.category,
+              ]),
+            ),
+          ).map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Display order
+        <input
+          defaultValue={item.sort_order}
+          min="0"
+          name="sortOrder"
+          step="1"
+          type="number"
+        />
+      </label>
+      <label>
         Preparation station
         <select
           defaultValue={item.preparation_station}
@@ -268,6 +320,20 @@ function OwnerMenuEditor({
             type="checkbox"
           />{" "}
           Loyalty eligible
+        </label>
+        <label>
+          Availability
+          <select
+            defaultValue={item.availability_status}
+            name="availabilityStatus"
+          >
+            <option value="available">Available</option>
+            <option value="temporarily_unavailable">
+              Temporarily unavailable
+            </option>
+            <option value="sold_out">Sold out</option>
+            <option value="archived">Archived</option>
+          </select>
         </label>
       </fieldset>
       <fieldset className="owner-size-editor">
@@ -305,6 +371,98 @@ function OwnerMenuEditor({
           {message}
         </p>
       ) : null}
+    </form>
+  );
+}
+
+function OwnerNewProduct({
+  items,
+  onCreated,
+}: {
+  items: OwnerMenuItem[];
+  onCreated: (itemId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const categories = Array.from(
+    new Map(items.map((item) => [item.category_id, item.category])),
+  );
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setMessage("");
+    try {
+      const itemId = await createOwnerMenuItem({
+        categoryId: String(form.get("categoryId") || ""),
+        description: String(form.get("description") || ""),
+        loyaltyEligible: form.get("loyaltyEligible") === "on",
+        name: String(form.get("name") || ""),
+        preparationStation: String(form.get("preparationStation")) as
+          | "barista"
+          | "kitchen",
+        price: Number(form.get("price")),
+        sizeName: String(form.get("sizeName") || "Regular"),
+        sortOrder: Number(form.get("sortOrder") || 0),
+      });
+      await onCreated(itemId);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="owner-new-product" onSubmit={submit}>
+      <div>
+        <p className="eyebrow">Catalog creation</p>
+        <h3>Add a menu product</h3>
+      </div>
+      <label>
+        Product name
+        <input maxLength={120} name="name" required />
+      </label>
+      <label>
+        Category
+        <select name="categoryId" required>
+          {categories.map(([id, name]) => (
+            <option key={id} value={id}>{name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Description
+        <input maxLength={500} name="description" />
+      </label>
+      <label>
+        Initial size
+        <input defaultValue="Regular" name="sizeName" required />
+      </label>
+      <label>
+        Initial price (EGP)
+        <input min="0.01" name="price" required step="0.01" type="number" />
+      </label>
+      <label>
+        Display order
+        <input defaultValue="0" min="0" name="sortOrder" step="1" type="number" />
+      </label>
+      <label>
+        Preparation station
+        <select defaultValue="barista" name="preparationStation">
+          <option value="barista">Barista</option>
+          <option value="kitchen">Kitchen</option>
+        </select>
+      </label>
+      <label>
+        <input defaultChecked name="loyaltyEligible" type="checkbox" />
+        Loyalty eligible
+      </label>
+      <button disabled={busy} type="submit">
+        {busy ? "Creating…" : "Create product"}
+      </button>
+      {message ? <p role="alert">{message}</p> : null}
     </form>
   );
 }
