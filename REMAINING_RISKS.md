@@ -2,20 +2,17 @@
 
 Run date: 2026-07-29
 
-## Staging blocker
+## Staging blockers
 
-- Cloudinary API key and secret are not present in the ignored local
-  environment. The authenticated connector metadata test and disposable
-  upload/delete passed, but backend signed upload/replace/remove and cross-role
-  image propagation remain unverified.
+None.
 
 ## Operational follow-up
 
-- The PostgreSQL credential formerly committed in `env.txt` must remain treated
-  as compromised until provider-side revocation is confirmed.
-- Four historical Google service-account keys must remain treated as
-  compromised until provider-side revocation is confirmed. The current ignored
-  staging key is a different key.
+- The historical PostgreSQL login and four historical Google private keys are
+  inactive. They remain in Git history because history was intentionally not
+  rewritten; rotation, not deletion of history, is the compensating control.
+- The active Cloudinary credential is intentionally local-only. Deployment
+  environments must receive it through their secret manager, never Git.
 - The staging Google Sheet Menu tab contains 28 spelling/name differences and
   the original duplicate; Neon and normalized JSON are authoritative.
 - In-process SSE assumes one API replica. Multi-replica deployment requires a

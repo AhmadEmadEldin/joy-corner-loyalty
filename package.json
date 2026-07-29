@@ -25,6 +25,7 @@
     "start": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js serve --config webpack.config.ts --mode development",
     "sync:reporting": "tsx ./scripts/sync_neon_reporting.ts",
     "verify:api-workflow": "tsx ./scripts/verify_api_workflow.ts",
+    "verify:cloudinary-staging": "tsx ./scripts/verify_cloudinary_staging.ts",
     "verify:staging-workflow": "tsx ./scripts/verify_staging_workflow.ts",
     "test": "jest --no-cache --passWithNoTests",
     "test:watch": "jest --watchAll",

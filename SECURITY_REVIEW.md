@@ -29,6 +29,6 @@ Additional verified controls:
 
 Gitleaks 8.30.1 found the known PostgreSQL exposure plus four historical Google
 service-account private keys. None remains tracked, and the current ignored
-Google key differs from all historical keys. Provider-side revocation of the
-old Neon credential and four old Google keys must still be confirmed. Git
-history was not rewritten.
+Google key differs from all historical keys. The historical Neon credential no
+longer authenticates to the verified direct staging host, and Google Cloud
+confirms all four historical keys are inactive. Git history was not rewritten.

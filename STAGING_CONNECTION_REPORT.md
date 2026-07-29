@@ -8,12 +8,12 @@ No production service was changed.
 |---|---|---|
 | Neon | Direct, unpooled Neon host; SSL; database `neondb`; role `neondb_owner`; isolated branch `preview/agent/fix-code-errors` | PASS |
 | Google Sheets | Native staging workbook, 20 tabs, Menu header/read access, service-account writer access | PASS |
-| Cloudinary | Authenticated metadata request and disposable connector upload/delete | WARNING |
+| Cloudinary | Authenticated backend upload/replace/remove, four-role projection, audit and cleanup | PASS |
 | Authentication | JWT secret present and at least 32 characters; value not displayed | PASS |
 
-Cloudinary application signing is the remaining connection gap: cloud name and
-required staging folder are known, but the local ignored environment does not
-yet contain an API key and API secret.
+Cloudinary application signing uses an active credential pair stored only in
+the ignored local environment and the exact staging folder
+`joy-corner/staging/menu-items`.
 
 Environment safety:
 

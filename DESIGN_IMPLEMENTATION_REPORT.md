@@ -44,8 +44,9 @@ Verified against the local frontend:
 
 ## Remaining visual work
 
-Final product photography depends on completing the backend Cloudinary signed
-upload acceptance test. Existing fallbacks and all responsive role layouts are
+The backend Cloudinary signed upload, replacement, removal, and fallback
+acceptance test now passes. Production-quality product photography is a content
+selection task; existing fallbacks and all responsive role layouts are
 verified.
 
 ## 2026-07-28 verification

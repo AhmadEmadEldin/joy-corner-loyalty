@@ -12,28 +12,25 @@ Git history was not rewritten.
 
 | Item | Status | Required action |
 |---|---|---|
-| Neon credential rotation | INCOMPLETE | Confirm the exposed role/password is revoked provider-side; the local staging app now uses the current isolated staging credential |
+| Neon credential rotation | COMPLETE | The historical username/password cannot authenticate to the direct staging endpoint; the app uses the current isolated staging credential |
 | Cloudinary secret rotation | COMPLETE | No Cloudinary secret was found in `env.txt` or tracked repository content |
-| Google service-account key revocation/replacement | INCOMPLETE | The current ignored local key is different from every historical key, but provider-side revocation of the four historical keys must be confirmed |
+| Google service-account key revocation/replacement | COMPLETE | Google Cloud confirms all four historical keys are inactive; two historical service accounts no longer exist, and the current ignored key is a different replacement |
 | JWT secret rotation | COMPLETE | No JWT secret was found in `env.txt` or tracked repository content; local JWT configuration meets the 32-character minimum |
-| Deployment environment updates | BLOCKED | Production/deployment credential changes are outside this staging-only run; update only after provider-side Neon rotation is confirmed |
+| Deployment environment updates | COMPLETE FOR STAGING | Local staging API/worker use the replacement credentials; production settings were intentionally not changed |
 | Local environment updates | COMPLETE | The staging connection is stored only in `.env.local`; no active `PGPASSWORD` copy is required |
 
-## Neon rotation completion
+## Neon verification
 
-1. Revoke or reset the credential associated with the historical exposure.
-2. Confirm the old credential can no longer authenticate.
-3. Update encrypted staging/deployment environments if the replacement differs.
-4. Restart affected API and worker services and verify readiness and reporting.
+The historical credential was tested against the verified direct staging host
+using a read-only connection attempt and could not authenticate. The current
+replacement connection passed migrations, API workflow, and reporting.
 
-## Google key revocation completion
+## Google key verification
 
-1. In Google Cloud IAM, locate the service accounts referenced by the historical
-   JSON files.
-2. Revoke/delete the four historical private-key IDs.
-3. Keep only the current replacement key required by the staging worker.
-4. Confirm the staging Sheet sync still succeeds.
-5. Confirm historical keys can no longer authenticate.
+The four historical key IDs were checked in Google Cloud IAM. None is active.
+Two referenced service accounts no longer exist; the remaining accounts do not
+list the historical keys. The current replacement key successfully delivered
+staging reporting records.
 
 ## Deployment and local hygiene
 

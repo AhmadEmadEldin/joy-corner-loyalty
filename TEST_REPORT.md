@@ -20,7 +20,8 @@ Run date: 2026-07-29
 | Multi-role authenticated workflow | PASS |
 | End Day and second no-op reporting sync | PASS |
 | Cloudinary connector metadata/upload/delete | PASS |
-| Cloudinary application signed upload | BLOCKED by missing local API credentials |
+| Cloudinary application upload/replace/remove and four-role projection | PASS |
+| Cloudinary disposable staging-asset cleanup | PASS: 0 assets remain |
 
 ## Coverage added
 
