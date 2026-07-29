@@ -146,3 +146,7 @@ dist
 .dev-logs/
 devserver.log
 supabase/
+
+# Local credentials
+/secrets/
+/env.txt

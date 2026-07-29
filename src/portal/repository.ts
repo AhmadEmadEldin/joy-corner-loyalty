@@ -1,10 +1,12 @@
 import {
   apiRequest,
   clearSession,
+  currentSessionUser,
   setSession,
   subscribeToEvents,
   type SessionUser,
 } from "./client";
+import { clearCartDraft } from "./cartDraft";
 import type { OperationalOrderStatus } from "./workflow";
 
 export type CustomerProfile = {
@@ -233,7 +235,9 @@ export async function signInCustomer(email: string, password: string): Promise<v
 }
 
 export async function signOutCustomer(): Promise<void> {
+  const userId = currentSessionUser()?.id;
   await apiRequest("/auth/logout", { method: "POST" }).catch(() => undefined);
+  if (userId) clearCartDraft(userId);
   clearSession();
 }
 
@@ -364,6 +368,57 @@ export async function loadMenu(): Promise<MenuItem[]> {
 
 export async function loadOwnerMenu(): Promise<OwnerMenuItem[]> {
   return (await apiRequest<{ items: OwnerMenuItem[] }>("/owner/menu")).items;
+}
+
+export type MenuImportPreview = {
+  additions: Array<{ fields: string[]; id: string; name: string }>;
+  archives: Array<{ fields: string[]; id: string; name: string }>;
+  canApply: boolean;
+  digest: string;
+  errors: Array<{ code: string; message: string; path: string; severity: "error" }>;
+  priceChanges: Array<{ fields: string[]; id: string; name: string }>;
+  requiresOwnerConfirmation: boolean;
+  unchanged: Array<{ fields: string[]; id: string; name: string }>;
+  updates: Array<{ fields: string[]; id: string; name: string }>;
+  warnings: Array<{ code: string; message: string; path: string; severity: "warning" }>;
+};
+
+export async function previewOwnerMenuImport(
+  source: unknown,
+): Promise<MenuImportPreview> {
+  return (
+    await apiRequest<{ preview: MenuImportPreview }>("/owner/menu/import/preview", {
+      body: JSON.stringify({ source }),
+      method: "POST",
+    })
+  ).preview;
+}
+
+export async function applyOwnerMenuImport(input: {
+  confirmation: string;
+  digest: string;
+  source: unknown;
+}): Promise<{
+  additions: number;
+  archives: number;
+  digest: string;
+  priceChanges: number;
+  updates: number;
+}> {
+  return (
+    await apiRequest<{
+      result: {
+        additions: number;
+        archives: number;
+        digest: string;
+        priceChanges: number;
+        updates: number;
+      };
+    }>("/owner/menu/import/apply", {
+      body: JSON.stringify(input),
+      method: "POST",
+    })
+  ).result;
 }
 
 export async function updateOwnerMenuItem(input: {
@@ -513,6 +568,7 @@ export async function createStaffOrder(input: {
   cart: CartLine[];
   customerId: string | null;
   customerNotes: string;
+  idempotencyKey: string;
   orderPlace: "dine_in" | "takeaway" | "car" | "outside" | "delivery";
   paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
   placeDetails: Record<string, string | number>;

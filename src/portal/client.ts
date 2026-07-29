@@ -20,7 +20,7 @@ export const apiConfigured = Boolean(apiBaseUrl);
 
 function storedUser(): SessionUser | null {
   try {
-    const value = window.localStorage.getItem(USER_KEY);
+    const value = window.sessionStorage.getItem(USER_KEY);
     return value ? (JSON.parse(value) as SessionUser) : null;
   } catch {
     return null;
@@ -32,12 +32,12 @@ export function currentSessionUser(): SessionUser | null {
 }
 
 export function setSession(user: SessionUser): void {
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   sessionListeners.forEach((listener) => listener(user));
 }
 
 export function clearSession(): void {
-  window.localStorage.removeItem(USER_KEY);
+  window.sessionStorage.removeItem(USER_KEY);
   sessionListeners.forEach((listener) => listener(null));
 }
 
@@ -76,7 +76,7 @@ export async function apiRequest<T>(
 export async function restoreSession(): Promise<SessionUser | null> {
   try {
     const result = await apiRequest<{ user: SessionUser }>("/auth/me");
-    window.localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+    window.sessionStorage.setItem(USER_KEY, JSON.stringify(result.user));
     return result.user;
   } catch {
     clearSession();

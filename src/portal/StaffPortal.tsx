@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
+  currentSessionUser,
   restoreSession,
   subscribeToSession,
   type SessionUser,
@@ -46,13 +47,19 @@ function getMessage(error: unknown) {
 }
 
 export function StaffPortal() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState<SessionUser | null>(currentSessionUser);
+  const [checking, setChecking] = useState(() =>
+    Boolean(currentSessionUser()),
+  );
   useEffect(() => {
-    void restoreSession().then((sessionUser) => {
-      setUser(sessionUser);
+    if (currentSessionUser()) {
+      void restoreSession().then((sessionUser) => {
+        setUser(sessionUser);
+        setChecking(false);
+      });
+    } else {
       setChecking(false);
-    });
+    }
     const unsubscribe = subscribeToSession((sessionUser) => {
       setUser(sessionUser);
       setChecking(false);
@@ -138,7 +145,9 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     try {
       const [queues, nextHistory] = await Promise.all([
         loadStaffQueues(role),
-        loadStaffHistory(),
+        ["owner", "manager", "cashier"].includes(role)
+          ? loadStaffHistory()
+          : Promise.resolve([]),
       ]);
       setCashier(queues.cashier);
       setKitchen(queues.kitchen);
@@ -158,7 +167,9 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
         ["owner", "manager", "cashier"].includes(nextProfile.role)
           ? loadCustomerDirectory()
           : Promise.resolve([]),
-        loadStaffHistory(),
+        ["owner", "manager", "cashier"].includes(nextProfile.role)
+          ? loadStaffHistory()
+          : Promise.resolve([]),
         ["owner", "manager"].includes(nextProfile.role)
           ? loadStaffInsights()
           : Promise.resolve(null),
@@ -475,6 +486,7 @@ function StaffOrderForm({
   const [orderPlace, setOrderPlace] = useState<
     "dine_in" | "takeaway" | "car" | "outside" | "delivery"
   >("takeaway");
+  const orderIdempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
@@ -544,6 +556,7 @@ function StaffOrderForm({
         cart,
         customerId: selectedCustomerId || null,
         customerNotes: String(form.get("customerNotes") || ""),
+        idempotencyKey: orderIdempotencyKey.current,
         paymentMethod: String(
           form.get("paymentMethod") || "cash_at_cashier",
         ) as
@@ -573,6 +586,7 @@ function StaffOrderForm({
       setCustomerPhone("");
       setSelectedCustomerId(null);
       setShowCreateInline(false);
+      orderIdempotencyKey.current = crypto.randomUUID();
       await onCreated(result.orderNumber);
     } catch (error) {
       setMessage(getMessage(error));

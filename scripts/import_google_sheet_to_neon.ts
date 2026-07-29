@@ -2,7 +2,12 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import dotenv from "dotenv";
 import type { PoolClient } from "pg";
-import { applyNeonMigrations, closeNeonPool, transaction } from "../server/neon";
+import {
+  applyNeonMigrations,
+  assertMigration005StagingTarget,
+  closeNeonPool,
+  transaction,
+} from "../server/neon";
 import { googleSheetsClient } from "../server/reporting/googleAuth";
 import {
   importedCompletionTimestamp,
@@ -263,6 +268,9 @@ async function migrateOrders(client: PoolClient, source: Row[]): Promise<number>
 }
 
 async function main() {
+  const connectionString =
+    process.env.NEON_DATABASE_URL || process.env.DATABASE_URL || "";
+  assertMigration005StagingTarget(connectionString);
   await applyNeonMigrations();
   const connectorPayload = process.env.GOOGLE_RANGE_VALUES_B64;
   const connectorKind = process.env.GOOGLE_RANGE_KIND as ImportKind | undefined;

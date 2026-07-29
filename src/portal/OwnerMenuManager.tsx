@@ -1,8 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  applyOwnerMenuImport,
   createOwnerMenuItem,
   loadOwnerMenu,
+  MenuImportPreview,
   OwnerMenuItem,
+  previewOwnerMenuImport,
   removeOwnerMenuImage,
   updateOwnerMenuItem,
   updateOwnerMenuSize,
@@ -20,6 +23,13 @@ export function OwnerMenuManager() {
   const [missingOnly, setMissingOnly] = useState(false);
   const [message, setMessage] = useState("Loading owner menu…");
   const [creating, setCreating] = useState(false);
+  const [importPreview, setImportPreview] = useState<MenuImportPreview | null>(
+    null,
+  );
+  const [previewingImport, setPreviewingImport] = useState(false);
+  const [applyingImport, setApplyingImport] = useState(false);
+  const [importConfirmation, setImportConfirmation] = useState("");
+  const [importSource, setImportSource] = useState<unknown>(null);
 
   async function refresh(preferredId?: string) {
     try {
@@ -50,6 +60,57 @@ export function OwnerMenuManager() {
     );
   }, [items, missingOnly, query]);
 
+  async function previewImport(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage("Menu JSON files must be 2 MB or smaller.");
+      return;
+    }
+    setPreviewingImport(true);
+    setImportPreview(null);
+    setMessage("Validating menu import…");
+    try {
+      const source = JSON.parse(await file.text()) as unknown;
+      const preview = await previewOwnerMenuImport(source);
+      setImportSource(source);
+      setImportConfirmation("");
+      setImportPreview(preview);
+      setMessage(
+        preview.errors.length
+          ? "Import is blocked. Correct every validation error before writing."
+          : "Preview ready. No menu data has been written.",
+      );
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setPreviewingImport(false);
+    }
+  }
+
+  async function applyImport() {
+    if (!importPreview || !importSource) return;
+    setApplyingImport(true);
+    setMessage("Applying the confirmed menu import…");
+    try {
+      const result = await applyOwnerMenuImport({
+        confirmation: importConfirmation,
+        digest: importPreview.digest,
+        source: importSource,
+      });
+      setImportPreview(null);
+      setImportSource(null);
+      setImportConfirmation("");
+      await refresh();
+      setMessage(
+        `Menu import complete: ${result.additions} added, ${result.updates} updated, ${result.archives} archived.`,
+      );
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setApplyingImport(false);
+    }
+  }
+
   return (
     <section className="portal-section owner-menu-manager">
       <header className="owner-menu-header">
@@ -65,6 +126,17 @@ export function OwnerMenuManager() {
           <button onClick={() => setCreating((value) => !value)} type="button">
             {creating ? "Close new product" : "Add product"}
           </button>
+          <label className="button-like">
+            {previewingImport ? "Validating…" : "Preview JSON import"}
+            <input
+              accept="application/json,.json"
+              disabled={previewingImport}
+              onChange={(event) =>
+                void previewImport(event.target.files?.[0])
+              }
+              type="file"
+            />
+          </label>
           <label>
             Search products
             <input
@@ -98,6 +170,74 @@ export function OwnerMenuManager() {
             setMessage("Product created. Add its image and remaining details.");
           }}
         />
+      ) : null}
+      {importPreview ? (
+        <section
+          aria-label="Menu import preview"
+          className="owner-import-preview"
+        >
+          <div>
+            <p className="eyebrow">Staging preview only</p>
+            <h3>Menu import changes</h3>
+            <p className="muted">
+              Add {importPreview.additions.length} · update{" "}
+              {importPreview.updates.length} · unchanged{" "}
+              {importPreview.unchanged.length} · archive{" "}
+              {importPreview.archives.length}
+            </p>
+          </div>
+          <dl>
+            <div>
+              <dt>Validation errors</dt>
+              <dd>{importPreview.errors.length}</dd>
+            </div>
+            <div>
+              <dt>Warnings</dt>
+              <dd>{importPreview.warnings.length}</dd>
+            </div>
+            <div>
+              <dt>Price changes</dt>
+              <dd>{importPreview.priceChanges.length}</dd>
+            </div>
+          </dl>
+          {importPreview.errors.length ? (
+            <ol className="owner-import-errors">
+              {importPreview.errors.slice(0, 20).map((issue, index) => (
+                <li key={`${issue.path}:${issue.code}:${index}`}>
+                  <code>{issue.path}</code> {issue.message}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div>
+              <p role="status">
+                Validation passed. Review every count, then type{" "}
+                <strong>APPLY MENU IMPORT</strong> to confirm this exact
+                staging-only digest.
+              </p>
+              <label>
+                Owner confirmation
+                <input
+                  autoComplete="off"
+                  onChange={(event) =>
+                    setImportConfirmation(event.target.value)
+                  }
+                  value={importConfirmation}
+                />
+              </label>
+              <button
+                disabled={
+                  applyingImport ||
+                  importConfirmation !== "APPLY MENU IMPORT"
+                }
+                onClick={() => void applyImport()}
+                type="button"
+              >
+                {applyingImport ? "Applying…" : "Apply confirmed import"}
+              </button>
+            </div>
+          )}
+        </section>
       ) : null}
       <div className="owner-menu-layout">
         <div aria-label="Menu products" className="owner-menu-list">

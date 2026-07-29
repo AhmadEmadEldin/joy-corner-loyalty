@@ -1,0 +1,2377 @@
+{
+  "generatedAt": "deterministic",
+  "source": "data/menu.json",
+  "categories": [
+    {
+      "canonicalId": "CAT-001",
+      "name": "Hot Beverages",
+      "sourcePath": "$.categories[0]"
+    },
+    {
+      "canonicalId": "CAT-002",
+      "name": "Iced Drinks",
+      "sourcePath": "$.categories[1]"
+    },
+    {
+      "canonicalId": "CAT-003",
+      "name": "Shakes",
+      "sourcePath": "$.categories[2]"
+    },
+    {
+      "canonicalId": "CAT-004",
+      "name": "Smoothies",
+      "sourcePath": "$.categories[3]"
+    },
+    {
+      "canonicalId": "CAT-005",
+      "name": "Juices",
+      "sourcePath": "$.categories[4]"
+    },
+    {
+      "canonicalId": "CAT-006",
+      "name": "Frappes",
+      "sourcePath": "$.categories[5]"
+    },
+    {
+      "canonicalId": "CAT-007",
+      "name": "Cocktails",
+      "sourcePath": "$.categories[6]"
+    },
+    {
+      "canonicalId": "CAT-008",
+      "name": "Soft Drinks",
+      "sourcePath": "$.categories[7]"
+    },
+    {
+      "canonicalId": "CAT-009",
+      "name": "Sandwiches",
+      "sourcePath": "$.categories[8]"
+    },
+    {
+      "canonicalId": "CAT-010",
+      "name": "Matcha",
+      "sourcePath": "$.categories[9]"
+    },
+    {
+      "canonicalId": "CAT-011",
+      "name": "Dessert",
+      "sourcePath": "$.categories[10]"
+    },
+    {
+      "canonicalId": "CAT-012",
+      "name": "Extras",
+      "sourcePath": "$.categories[11]"
+    },
+    {
+      "canonicalId": "CAT-013",
+      "name": "Extra Boba",
+      "sourcePath": "$.categories[12]"
+    }
+  ],
+  "duplicateResolutions": [
+    {
+      "canonicalId": "ITEM-0037",
+      "classification": "same product with separate classic and flavored price variants",
+      "name": "Sahlab",
+      "sourcePaths": [
+        "$.categories[0].items[36]",
+        "$.categories[0].items[38]"
+      ]
+    }
+  ],
+  "products": [
+    {
+      "canonicalId": "ITEM-0001",
+      "name": "Turkish Coffee",
+      "sourcePaths": [
+        "$.categories[0].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0002",
+      "name": "French Coffee",
+      "sourcePaths": [
+        "$.categories[0].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0003",
+      "name": "Nutella Coffee",
+      "sourcePaths": [
+        "$.categories[0].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0004",
+      "name": "Hazelnut Coffee",
+      "sourcePaths": [
+        "$.categories[0].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0005",
+      "name": "Hazelnut Coffee Nutella",
+      "sourcePaths": [
+        "$.categories[0].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0006",
+      "name": "Espresso",
+      "sourcePaths": [
+        "$.categories[0].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0007",
+      "name": "Ristretto",
+      "sourcePaths": [
+        "$.categories[0].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0008",
+      "name": "Macchiato",
+      "sourcePaths": [
+        "$.categories[0].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0009",
+      "name": "Espresso Con Panna",
+      "sourcePaths": [
+        "$.categories[0].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0010",
+      "name": "Espresso Affogato",
+      "sourcePaths": [
+        "$.categories[0].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0011",
+      "name": "Corto Classic",
+      "sourcePaths": [
+        "$.categories[0].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0012",
+      "name": "Corto Chocolate",
+      "sourcePaths": [
+        "$.categories[0].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0013",
+      "name": "Corto Caramel",
+      "sourcePaths": [
+        "$.categories[0].items[12]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0014",
+      "name": "American Black",
+      "sourcePaths": [
+        "$.categories[0].items[13]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0015",
+      "name": "American White",
+      "sourcePaths": [
+        "$.categories[0].items[14]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0016",
+      "name": "Cappuccino",
+      "sourcePaths": [
+        "$.categories[0].items[15]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0017",
+      "name": "Latte",
+      "sourcePaths": [
+        "$.categories[0].items[16]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0018",
+      "name": "Hot Spanish Latte",
+      "sourcePaths": [
+        "$.categories[0].items[17]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0019",
+      "name": "Flat White",
+      "sourcePaths": [
+        "$.categories[0].items[18]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0020",
+      "name": "Mocha",
+      "sourcePaths": [
+        "$.categories[0].items[19]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0021",
+      "name": "Mocha White",
+      "sourcePaths": [
+        "$.categories[0].items[20]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0022",
+      "name": "Caramel Macchiato",
+      "sourcePaths": [
+        "$.categories[0].items[21]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0023",
+      "name": "Nescafe",
+      "sourcePaths": [
+        "$.categories[0].items[22]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0024",
+      "name": "Nescafe Black",
+      "sourcePaths": [
+        "$.categories[0].items[23]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0025",
+      "name": "Hot Chocolate",
+      "sourcePaths": [
+        "$.categories[0].items[24]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0026",
+      "name": "Hot Chocolate Nutella",
+      "sourcePaths": [
+        "$.categories[0].items[25]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0027",
+      "name": "Hot White Chocolate",
+      "sourcePaths": [
+        "$.categories[0].items[26]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0028",
+      "name": "Hot Lotus Biscoff",
+      "sourcePaths": [
+        "$.categories[0].items[27]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0029",
+      "name": "Hot Cider",
+      "sourcePaths": [
+        "$.categories[0].items[28]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0030",
+      "name": "Tea",
+      "sourcePaths": [
+        "$.categories[0].items[29]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0031",
+      "name": "Green Tea",
+      "sourcePaths": [
+        "$.categories[0].items[30]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0032",
+      "name": "Tea with Milk",
+      "sourcePaths": [
+        "$.categories[0].items[31]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0033",
+      "name": "Flavored Black Tea",
+      "sourcePaths": [
+        "$.categories[0].items[32]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0034",
+      "name": "Hot Herbs",
+      "sourcePaths": [
+        "$.categories[0].items[33]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0035",
+      "name": "Hot Herbs Cocktail",
+      "sourcePaths": [
+        "$.categories[0].items[34]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0036",
+      "name": "Vitamin C",
+      "sourcePaths": [
+        "$.categories[0].items[35]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0037",
+      "name": "Sahlab",
+      "sourcePaths": [
+        "$.categories[0].items[36]",
+        "$.categories[0].items[38]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0038",
+      "name": "Sahlab Nuts",
+      "sourcePaths": [
+        "$.categories[0].items[37]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0040",
+      "name": "Sahlab Pistachio",
+      "sourcePaths": [
+        "$.categories[0].items[39]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0041",
+      "name": "Iced Coffee",
+      "sourcePaths": [
+        "$.categories[1].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0042",
+      "name": "Iced Coffee Salted Caramel",
+      "sourcePaths": [
+        "$.categories[1].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0043",
+      "name": "Iced Cappuccino",
+      "sourcePaths": [
+        "$.categories[1].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0044",
+      "name": "Iced Latte",
+      "sourcePaths": [
+        "$.categories[1].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0045",
+      "name": "Iced Spanish Latte",
+      "sourcePaths": [
+        "$.categories[1].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0046",
+      "name": "Iced Americano",
+      "sourcePaths": [
+        "$.categories[1].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0047",
+      "name": "Iced Mocha",
+      "sourcePaths": [
+        "$.categories[1].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0048",
+      "name": "Iced White Mocha",
+      "sourcePaths": [
+        "$.categories[1].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0049",
+      "name": "Iced Chocolate",
+      "sourcePaths": [
+        "$.categories[1].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0050",
+      "name": "Iced Caramel Macchiato",
+      "sourcePaths": [
+        "$.categories[1].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0051",
+      "name": "Iced Tea",
+      "sourcePaths": [
+        "$.categories[1].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0052",
+      "name": "Mojito Classic",
+      "sourcePaths": [
+        "$.categories[1].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0053",
+      "name": "Mojito",
+      "sourcePaths": [
+        "$.categories[1].items[12]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0054",
+      "name": "Milkshake Vanilla",
+      "sourcePaths": [
+        "$.categories[2].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0055",
+      "name": "Milkshake Strawberry",
+      "sourcePaths": [
+        "$.categories[2].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0056",
+      "name": "Milkshake Mango",
+      "sourcePaths": [
+        "$.categories[2].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0057",
+      "name": "Milkshake Chocolate",
+      "sourcePaths": [
+        "$.categories[2].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0058",
+      "name": "Milkshake Nutella",
+      "sourcePaths": [
+        "$.categories[2].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0059",
+      "name": "Milkshake Oreo",
+      "sourcePaths": [
+        "$.categories[2].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0060",
+      "name": "Milkshake Kinder",
+      "sourcePaths": [
+        "$.categories[2].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0061",
+      "name": "Milkshake Brownies",
+      "sourcePaths": [
+        "$.categories[2].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0062",
+      "name": "Milkshake Double Chocolate Cookie",
+      "sourcePaths": [
+        "$.categories[2].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0063",
+      "name": "Milkshake Lotus Biscoff",
+      "sourcePaths": [
+        "$.categories[2].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0064",
+      "name": "Milkshake Cheesecake",
+      "sourcePaths": [
+        "$.categories[2].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0065",
+      "name": "Milkshake Cheesecake Strawberry",
+      "sourcePaths": [
+        "$.categories[2].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0066",
+      "name": "Milkshake Cheesecake Pistachio",
+      "sourcePaths": [
+        "$.categories[2].items[12]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0067",
+      "name": "Milkshake Cheesecake Nutella",
+      "sourcePaths": [
+        "$.categories[2].items[13]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0068",
+      "name": "Milkshake Coffee",
+      "sourcePaths": [
+        "$.categories[2].items[14]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0069",
+      "name": "Milkshake Raspberry Boba Blueberry",
+      "sourcePaths": [
+        "$.categories[2].items[15]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0070",
+      "name": "Milkshake Date Nuts",
+      "sourcePaths": [
+        "$.categories[2].items[16]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0071",
+      "name": "Milkshake Pistachio",
+      "sourcePaths": [
+        "$.categories[2].items[17]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0072",
+      "name": "Milkshake Raspberry White Chocolate",
+      "sourcePaths": [
+        "$.categories[2].items[18]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0073",
+      "name": "Milkshake Blueberry",
+      "sourcePaths": [
+        "$.categories[2].items[19]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0074",
+      "name": "Milkshake Caramel Shoko Cream",
+      "sourcePaths": [
+        "$.categories[2].items[20]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0075",
+      "name": "Smoothie Passion Fruit",
+      "sourcePaths": [
+        "$.categories[3].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0076",
+      "name": "Smoothie Green Apple",
+      "sourcePaths": [
+        "$.categories[3].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0077",
+      "name": "Smoothie Pineapple",
+      "sourcePaths": [
+        "$.categories[3].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0078",
+      "name": "Smoothie Pineapple Mint",
+      "sourcePaths": [
+        "$.categories[3].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0079",
+      "name": "Smoothie Lemon Mint",
+      "sourcePaths": [
+        "$.categories[3].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0080",
+      "name": "Smoothie Blueberry",
+      "sourcePaths": [
+        "$.categories[3].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0081",
+      "name": "Smoothie Peach",
+      "sourcePaths": [
+        "$.categories[3].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0082",
+      "name": "Smoothie Peach Passion",
+      "sourcePaths": [
+        "$.categories[3].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0083",
+      "name": "Smoothie Mango",
+      "sourcePaths": [
+        "$.categories[3].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0084",
+      "name": "Smoothie Mango Passion",
+      "sourcePaths": [
+        "$.categories[3].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0085",
+      "name": "Smoothie Strawberry Lemon",
+      "sourcePaths": [
+        "$.categories[3].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0086",
+      "name": "Smoothie Watermelon Mint",
+      "sourcePaths": [
+        "$.categories[3].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0087",
+      "name": "Smoothie Pinacolada",
+      "sourcePaths": [
+        "$.categories[3].items[12]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0088",
+      "name": "Smoothie Pineapple Lemon",
+      "sourcePaths": [
+        "$.categories[3].items[13]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0089",
+      "name": "Smoothie Pineapple Orange",
+      "sourcePaths": [
+        "$.categories[3].items[14]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0090",
+      "name": "Smoothie Pineapple Green Apple",
+      "sourcePaths": [
+        "$.categories[3].items[15]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0091",
+      "name": "Smoothie Strawberry Kiwi",
+      "sourcePaths": [
+        "$.categories[3].items[16]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0092",
+      "name": "Smoothie Mix Berry",
+      "sourcePaths": [
+        "$.categories[3].items[17]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0093",
+      "name": "Smoothie Pinacolada Boba Strawberry",
+      "sourcePaths": [
+        "$.categories[3].items[18]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0094",
+      "name": "Smoothie Lemon Boba Cola",
+      "sourcePaths": [
+        "$.categories[3].items[19]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0095",
+      "name": "Smoothie Cola",
+      "sourcePaths": [
+        "$.categories[3].items[20]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0096",
+      "name": "Orange",
+      "sourcePaths": [
+        "$.categories[4].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0097",
+      "name": "Lemon",
+      "sourcePaths": [
+        "$.categories[4].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0098",
+      "name": "Lemon Mint",
+      "sourcePaths": [
+        "$.categories[4].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0099",
+      "name": "Pink Lemon",
+      "sourcePaths": [
+        "$.categories[4].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0100",
+      "name": "Guava",
+      "sourcePaths": [
+        "$.categories[4].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0101",
+      "name": "Guava Mint",
+      "sourcePaths": [
+        "$.categories[4].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0102",
+      "name": "Mango",
+      "sourcePaths": [
+        "$.categories[4].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0103",
+      "name": "Mango Mint",
+      "sourcePaths": [
+        "$.categories[4].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0104",
+      "name": "Strawberry",
+      "sourcePaths": [
+        "$.categories[4].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0105",
+      "name": "Banana",
+      "sourcePaths": [
+        "$.categories[4].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0106",
+      "name": "Watermelon",
+      "sourcePaths": [
+        "$.categories[4].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0107",
+      "name": "Pomegranate",
+      "sourcePaths": [
+        "$.categories[4].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0108",
+      "name": "Kiwi",
+      "sourcePaths": [
+        "$.categories[4].items[12]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0109",
+      "name": "Date",
+      "sourcePaths": [
+        "$.categories[4].items[13]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0110",
+      "name": "Frappuccino",
+      "sourcePaths": [
+        "$.categories[5].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0111",
+      "name": "Frappe Caramel",
+      "sourcePaths": [
+        "$.categories[5].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0112",
+      "name": "Frappe Salted Caramel",
+      "sourcePaths": [
+        "$.categories[5].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0113",
+      "name": "Frappe Oreo",
+      "sourcePaths": [
+        "$.categories[5].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0114",
+      "name": "Frappe Lotus",
+      "sourcePaths": [
+        "$.categories[5].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0115",
+      "name": "Frappe Cookie",
+      "sourcePaths": [
+        "$.categories[5].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0116",
+      "name": "Frappe Brownies",
+      "sourcePaths": [
+        "$.categories[5].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0117",
+      "name": "Frappe Pistachio",
+      "sourcePaths": [
+        "$.categories[5].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0118",
+      "name": "Frappe White Chocolate",
+      "sourcePaths": [
+        "$.categories[5].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0119",
+      "name": "Tropical Night",
+      "sourcePaths": [
+        "$.categories[6].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0120",
+      "name": "Florida",
+      "sourcePaths": [
+        "$.categories[6].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0121",
+      "name": "Mix Berry",
+      "sourcePaths": [
+        "$.categories[6].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0122",
+      "name": "Sweet & Sour Mix",
+      "sourcePaths": [
+        "$.categories[6].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0123",
+      "name": "Kiwi / Strawberry",
+      "sourcePaths": [
+        "$.categories[6].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0124",
+      "name": "Strawberry / Pomegranate / Watermelon",
+      "sourcePaths": [
+        "$.categories[6].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0125",
+      "name": "Guava / Banana",
+      "sourcePaths": [
+        "$.categories[6].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0126",
+      "name": "Mineral Water",
+      "sourcePaths": [
+        "$.categories[7].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0127",
+      "name": "Can",
+      "sourcePaths": [
+        "$.categories[7].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0128",
+      "name": "Red Bull",
+      "sourcePaths": [
+        "$.categories[7].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0129",
+      "name": "Sunshine",
+      "sourcePaths": [
+        "$.categories[7].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0130",
+      "name": "Cherry Cola",
+      "sourcePaths": [
+        "$.categories[7].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0131",
+      "name": "Cinnamon Cola",
+      "sourcePaths": [
+        "$.categories[7].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0132",
+      "name": "Vanilla Cola",
+      "sourcePaths": [
+        "$.categories[7].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0133",
+      "name": "Salami Turkey",
+      "sourcePaths": [
+        "$.categories[8].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0134",
+      "name": "Smoked Turkey Sandwich",
+      "sourcePaths": [
+        "$.categories[8].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0135",
+      "name": "Mix Cheese Sandwich",
+      "sourcePaths": [
+        "$.categories[8].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0136",
+      "name": "Tuna Sandwich",
+      "sourcePaths": [
+        "$.categories[8].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0137",
+      "name": "Roast Beef Sandwich",
+      "sourcePaths": [
+        "$.categories[8].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0138",
+      "name": "Chicken Pesto",
+      "sourcePaths": [
+        "$.categories[8].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0139",
+      "name": "Hot Matcha",
+      "sourcePaths": [
+        "$.categories[9].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0140",
+      "name": "Ice Matcha Cubes",
+      "sourcePaths": [
+        "$.categories[9].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0141",
+      "name": "Frappe Matcha",
+      "sourcePaths": [
+        "$.categories[9].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0142",
+      "name": "Matcha Strawberry",
+      "sourcePaths": [
+        "$.categories[9].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0143",
+      "name": "Matcha Mango",
+      "sourcePaths": [
+        "$.categories[9].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0144",
+      "name": "Flutes Cake",
+      "sourcePaths": [
+        "$.categories[10].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0145",
+      "name": "Honey Cake",
+      "sourcePaths": [
+        "$.categories[10].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0146",
+      "name": "Cheese Cake",
+      "sourcePaths": [
+        "$.categories[10].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0147",
+      "name": "Cheese Cake Flavoured",
+      "sourcePaths": [
+        "$.categories[10].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0148",
+      "name": "Nutella Molten Cake",
+      "sourcePaths": [
+        "$.categories[10].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0149",
+      "name": "Lotus Molten Cake",
+      "sourcePaths": [
+        "$.categories[10].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0150",
+      "name": "Brownies",
+      "sourcePaths": [
+        "$.categories[10].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0151",
+      "name": "Tres Leches",
+      "sourcePaths": [
+        "$.categories[10].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0152",
+      "name": "Eclair Nutella",
+      "sourcePaths": [
+        "$.categories[10].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0153",
+      "name": "Eclair Lotus",
+      "sourcePaths": [
+        "$.categories[10].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0154",
+      "name": "Milky Cake",
+      "sourcePaths": [
+        "$.categories[10].items[10]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0155",
+      "name": "Swiss Roll",
+      "sourcePaths": [
+        "$.categories[10].items[11]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0156",
+      "name": "Flavor",
+      "sourcePaths": [
+        "$.categories[11].items[0]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0157",
+      "name": "Puree",
+      "sourcePaths": [
+        "$.categories[11].items[1]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0158",
+      "name": "Espresso",
+      "sourcePaths": [
+        "$.categories[11].items[2]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0159",
+      "name": "Nutella",
+      "sourcePaths": [
+        "$.categories[11].items[3]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0160",
+      "name": "White Chocolate",
+      "sourcePaths": [
+        "$.categories[11].items[4]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0161",
+      "name": "Lotus",
+      "sourcePaths": [
+        "$.categories[11].items[5]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0162",
+      "name": "Kinder",
+      "sourcePaths": [
+        "$.categories[11].items[6]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0163",
+      "name": "Pistachio",
+      "sourcePaths": [
+        "$.categories[11].items[7]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0164",
+      "name": "Nuts",
+      "sourcePaths": [
+        "$.categories[11].items[8]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0165",
+      "name": "Whipped Cream",
+      "sourcePaths": [
+        "$.categories[11].items[9]"
+      ]
+    },
+    {
+      "canonicalId": "ITEM-0166",
+      "name": "Boba",
+      "sourcePaths": [
+        "$.categories[12].items[0]"
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "canonicalId": "ITEM-0001-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[0].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0001-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[0].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0002-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[1].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0002-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[1].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0002-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[1].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0003-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[2].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0003-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[2].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0003-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[2].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0004-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[3].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0004-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[3].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0004-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[3].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0005-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[4].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0005-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[4].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0005-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[4].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0006-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[5].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0006-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[5].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0007-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[6].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0007-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[6].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0008-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[7].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0008-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[7].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0009-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[8].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0009-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[8].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0010-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[9].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0010-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[9].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0011-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[0].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0012-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[0].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0013-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[0].items[12].price"
+    },
+    {
+      "canonicalId": "ITEM-0014-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[13].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0014-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[13].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0014-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[13].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0015-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[14].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0015-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[14].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0015-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[14].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0016-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[15].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0016-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[15].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0016-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[15].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0017-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[16].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0017-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[16].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0017-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[16].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0018-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[0].items[17].price"
+    },
+    {
+      "canonicalId": "ITEM-0019-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[18].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0019-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[18].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0019-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[18].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0020-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[19].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0020-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[19].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0020-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[19].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0021-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[20].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0021-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[20].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0021-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[20].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0022-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[21].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0022-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[21].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0022-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[21].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0023-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[22].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0023-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[22].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0023-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[22].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0024-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[23].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0024-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[23].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0024-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[23].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0025-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[24].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0025-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[24].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0025-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[24].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0026-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[25].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0026-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[25].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0026-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[25].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0027-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[26].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0027-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[26].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0027-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[26].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0028-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[27].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0028-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[27].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0028-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[27].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0029-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[28].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0029-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[28].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0029-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[28].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0030-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[29].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0030-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[29].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0031-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[30].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0031-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[30].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0032-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[31].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0032-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[31].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0033-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[32].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0033-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[32].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0034-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[33].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0034-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[33].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0035-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[34].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0035-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[34].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0036-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[35].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0036-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[35].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0037-CLASSIC-SMALL",
+      "name": "Classic Small",
+      "sourcePath": "$.categories[0].items[36].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0037-CLASSIC-MEDIUM",
+      "name": "Classic Medium",
+      "sourcePath": "$.categories[0].items[36].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0037-CLASSIC-LARGE",
+      "name": "Classic Large",
+      "sourcePath": "$.categories[0].items[36].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0037-FLAVORED-SMALL",
+      "name": "Flavored Small",
+      "sourcePath": "$.categories[0].items[38].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0037-FLAVORED-MEDIUM",
+      "name": "Flavored Medium",
+      "sourcePath": "$.categories[0].items[38].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0037-FLAVORED-LARGE",
+      "name": "Flavored Large",
+      "sourcePath": "$.categories[0].items[38].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0038-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[37].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0038-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[37].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0038-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[37].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0040-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[0].items[39].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0040-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[0].items[39].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0040-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[0].items[39].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0041-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0042-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0043-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0044-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0045-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0046-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0047-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0048-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0049-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0050-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0051-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0052-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0053-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[1].items[12].price"
+    },
+    {
+      "canonicalId": "ITEM-0054-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0055-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0056-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0057-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0058-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0059-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0060-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0061-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0062-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0063-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0064-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0065-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0066-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[12].price"
+    },
+    {
+      "canonicalId": "ITEM-0067-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[13].price"
+    },
+    {
+      "canonicalId": "ITEM-0068-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[14].price"
+    },
+    {
+      "canonicalId": "ITEM-0069-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[15].price"
+    },
+    {
+      "canonicalId": "ITEM-0070-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[16].price"
+    },
+    {
+      "canonicalId": "ITEM-0071-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[17].price"
+    },
+    {
+      "canonicalId": "ITEM-0072-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[18].price"
+    },
+    {
+      "canonicalId": "ITEM-0073-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[19].price"
+    },
+    {
+      "canonicalId": "ITEM-0074-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[2].items[20].price"
+    },
+    {
+      "canonicalId": "ITEM-0075-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0076-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0077-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0078-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0079-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0080-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0081-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0082-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0083-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0084-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0085-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0086-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0087-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[12].price"
+    },
+    {
+      "canonicalId": "ITEM-0088-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[13].price"
+    },
+    {
+      "canonicalId": "ITEM-0089-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[14].price"
+    },
+    {
+      "canonicalId": "ITEM-0090-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[15].price"
+    },
+    {
+      "canonicalId": "ITEM-0091-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[16].price"
+    },
+    {
+      "canonicalId": "ITEM-0092-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[17].price"
+    },
+    {
+      "canonicalId": "ITEM-0093-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[18].price"
+    },
+    {
+      "canonicalId": "ITEM-0094-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[19].price"
+    },
+    {
+      "canonicalId": "ITEM-0095-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[3].items[20].price"
+    },
+    {
+      "canonicalId": "ITEM-0096-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0097-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0098-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0099-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0100-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0101-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0102-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0103-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0104-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0105-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0106-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0107-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0108-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[12].price"
+    },
+    {
+      "canonicalId": "ITEM-0109-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[4].items[13].price"
+    },
+    {
+      "canonicalId": "ITEM-0110-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0111-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0112-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0113-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0114-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0115-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0116-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0117-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0118-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[5].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0119-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0120-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0121-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0122-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0123-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0124-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0125-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[6].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0126-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0127-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0128-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0129-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0130-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0131-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0132-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[7].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0133-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0134-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0135-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0136-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0137-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0138-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[8].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0139-SMALL",
+      "name": "Small",
+      "sourcePath": "$.categories[9].items[0].prices[0]"
+    },
+    {
+      "canonicalId": "ITEM-0139-MEDIUM",
+      "name": "Medium",
+      "sourcePath": "$.categories[9].items[0].prices[1]"
+    },
+    {
+      "canonicalId": "ITEM-0139-LARGE",
+      "name": "Large",
+      "sourcePath": "$.categories[9].items[0].prices[2]"
+    },
+    {
+      "canonicalId": "ITEM-0140-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[9].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0141-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[9].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0142-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[9].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0143-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[9].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0144-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0145-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0146-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0147-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0148-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0149-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0150-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0151-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0152-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0153-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0154-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[10].price"
+    },
+    {
+      "canonicalId": "ITEM-0155-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[10].items[11].price"
+    },
+    {
+      "canonicalId": "ITEM-0156-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[0].price"
+    },
+    {
+      "canonicalId": "ITEM-0157-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[1].price"
+    },
+    {
+      "canonicalId": "ITEM-0158-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[2].price"
+    },
+    {
+      "canonicalId": "ITEM-0159-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[3].price"
+    },
+    {
+      "canonicalId": "ITEM-0160-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[4].price"
+    },
+    {
+      "canonicalId": "ITEM-0161-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[5].price"
+    },
+    {
+      "canonicalId": "ITEM-0162-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[6].price"
+    },
+    {
+      "canonicalId": "ITEM-0163-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[7].price"
+    },
+    {
+      "canonicalId": "ITEM-0164-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[8].price"
+    },
+    {
+      "canonicalId": "ITEM-0165-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[11].items[9].price"
+    },
+    {
+      "canonicalId": "ITEM-0166-STANDARD",
+      "name": "Standard",
+      "sourcePath": "$.categories[12].items[0].price"
+    }
+  ]
+}

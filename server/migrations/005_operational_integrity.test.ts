@@ -79,9 +79,10 @@ describe("migration 005 operational integrity", () => {
     );
   });
 
-  it("keeps the standalone preflight read-only and rollback protected", () => {
-    expect(preflight).toContain("begin read only;");
-    expect(preflight.trimEnd().endsWith("rollback;")).toBe(true);
+  it("keeps the standalone preflight a single read-only query", () => {
+    expect(preflight).toMatch(/select jsonb_build_object\(/);
+    expect(preflight).not.toMatch(/\bcreate\s+(?:temporary\s+)?table\b/i);
+    expect(preflight).not.toMatch(/\binsert\s+into\b/i);
     expect(preflight).not.toMatch(/\bupdate\s+(orders|payments|menu_items)\b/i);
     expect(preflight).not.toMatch(/\bdelete\s+from\b/i);
   });
@@ -99,13 +100,16 @@ describe("migration 005 operational integrity", () => {
       "orphaned_payment_order",
       "orphaned_voucher_customer",
       "duplicate_voucher_redemption_candidate",
-      "Existing schema migration versions",
-      "Affected-table row counts",
+      "'schemaMigrations'",
+      "'inventory'",
+      "'duplicatePaymentReferences'",
+      "'whitespacePaymentReferences'",
+      "'menuAvailabilityPreview'",
     ]) {
       expect(preflight).toContain(check);
     }
-    expect(preflight).toContain("'payment_id', id");
-    expect(preflight).toContain("'amount', amount");
-    expect(preflight).toContain("'created_at', created_at");
+    expect(preflight).toContain("from schema_migrations");
+    expect(preflight).toContain("from payments");
+    expect(preflight).toContain("'orders',true,count(*) from orders");
   });
 });

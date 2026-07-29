@@ -4,6 +4,7 @@
   "description": "Joy Corner ordering and loyalty app powered by Neon and Northflank.",
   "scripts": {
     "backend": "tsx ./server/api.ts",
+    "import:staging-menu": "tsx ./scripts/apply_staging_menu.ts",
     "build": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts",
     "dev": "npm run start",
     "dev:full": "concurrently \"npm run backend\" \"npm run start\"",
@@ -16,12 +17,15 @@
     "lint:fix": "eslint . --fix",
     "lint:types": "tsc --noEmit",
     "migrate:neon": "tsx ./scripts/apply_neon_migrations.ts",
+    "migrate:neon:dry-run": "tsx ./scripts/dry_run_migration_005.ts",
     "migrate:sheet-to-neon": "tsx ./scripts/import_google_sheet_to_neon.ts",
     "reconcile:end-day": "tsx ./scripts/reconcile_end_day.ts",
+    "seed:staging-accounts": "tsx ./scripts/seed_staging_accounts.ts",
     "check": "npm run lint:types && npm run lint && npm test && npm run build",
     "start": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js serve --config webpack.config.ts --mode development",
     "sync:reporting": "tsx ./scripts/sync_neon_reporting.ts",
     "verify:api-workflow": "tsx ./scripts/verify_api_workflow.ts",
+    "verify:staging-workflow": "tsx ./scripts/verify_staging_workflow.ts",
     "test": "jest --no-cache --passWithNoTests",
     "test:watch": "jest --watchAll",
     "test:update": "npm run test -- -u"

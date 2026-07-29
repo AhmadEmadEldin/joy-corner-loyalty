@@ -1,0 +1,932 @@
+{
+  "brand": "Joy Corner",
+  "currency": "EGP",
+  "price_format": {
+    "single_price": "number",
+    "multiple_prices": "array ordered from smallest to largest size"
+  },
+  "categories": [
+    {
+      "name": "Hot Beverages",
+      "items": [
+        {
+          "name": "Turkish Coffee",
+          "prices": [
+            34,
+            39
+          ]
+        },
+        {
+          "name": "French Coffee",
+          "prices": [
+            59,
+            69,
+            79
+          ]
+        },
+        {
+          "name": "Nutella Coffee",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Hazelnut Coffee",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Hazelnut Coffee Nutella",
+          "prices": [
+            90,
+            100,
+            110
+          ]
+        },
+        {
+          "name": "Espresso",
+          "prices": [
+            45,
+            55
+          ]
+        },
+        {
+          "name": "Ristretto",
+          "prices": [
+            45,
+            55
+          ]
+        },
+        {
+          "name": "Macchiato",
+          "prices": [
+            60,
+            70
+          ]
+        },
+        {
+          "name": "Espresso Con Panna",
+          "prices": [
+            65,
+            75
+          ]
+        },
+        {
+          "name": "Espresso Affogato",
+          "prices": [
+            75,
+            85
+          ]
+        },
+        {
+          "name": "Corto Classic",
+          "price": 65
+        },
+        {
+          "name": "Corto Chocolate",
+          "price": 75
+        },
+        {
+          "name": "Corto Caramel",
+          "price": 75
+        },
+        {
+          "name": "American Black",
+          "prices": [
+            60,
+            70,
+            80
+          ]
+        },
+        {
+          "name": "American White",
+          "prices": [
+            70,
+            80,
+            90
+          ]
+        },
+        {
+          "name": "Cappuccino",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Latte",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Hot Spanish Latte",
+          "price": 110
+        },
+        {
+          "name": "Flat White",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Mocha",
+          "prices": [
+            95,
+            105,
+            115
+          ]
+        },
+        {
+          "name": "Mocha White",
+          "prices": [
+            95,
+            110,
+            120
+          ]
+        },
+        {
+          "name": "Caramel Macchiato",
+          "prices": [
+            95,
+            110,
+            120
+          ]
+        },
+        {
+          "name": "Nescafe",
+          "prices": [
+            60,
+            70,
+            80
+          ]
+        },
+        {
+          "name": "Nescafe Black",
+          "prices": [
+            50,
+            60,
+            70
+          ]
+        },
+        {
+          "name": "Hot Chocolate",
+          "prices": [
+            80,
+            90,
+            100
+          ]
+        },
+        {
+          "name": "Hot Chocolate Nutella",
+          "prices": [
+            90,
+            100,
+            120
+          ]
+        },
+        {
+          "name": "Hot White Chocolate",
+          "prices": [
+            95,
+            105,
+            115
+          ]
+        },
+        {
+          "name": "Hot Lotus Biscoff",
+          "prices": [
+            120,
+            130,
+            140
+          ]
+        },
+        {
+          "name": "Hot Cider",
+          "flavors": [
+            "Apple",
+            "Pineapple",
+            "Orange"
+          ],
+          "prices": [
+            55,
+            65,
+            75
+          ]
+        },
+        {
+          "name": "Tea",
+          "prices": [
+            24,
+            29
+          ]
+        },
+        {
+          "name": "Green Tea",
+          "prices": [
+            24,
+            29
+          ]
+        },
+        {
+          "name": "Tea with Milk",
+          "prices": [
+            29,
+            39
+          ]
+        },
+        {
+          "name": "Flavored Black Tea",
+          "prices": [
+            29,
+            39
+          ]
+        },
+        {
+          "name": "Hot Herbs",
+          "prices": [
+            24,
+            29
+          ]
+        },
+        {
+          "name": "Hot Herbs Cocktail",
+          "prices": [
+            39,
+            49
+          ]
+        },
+        {
+          "name": "Vitamin C",
+          "prices": [
+            49,
+            59
+          ]
+        },
+        {
+          "name": "Sahlab",
+          "prices": [
+            70,
+            80,
+            90
+          ]
+        },
+        {
+          "name": "Sahlab Nuts",
+          "prices": [
+            85,
+            95,
+            105
+          ]
+        },
+        {
+          "name": "Sahlab",
+          "flavors": [
+            "Caramel",
+            "Kinder",
+            "Nutella"
+          ],
+          "prices": [
+            95,
+            105,
+            115
+          ]
+        },
+        {
+          "name": "Sahlab Pistachio",
+          "prices": [
+            115,
+            125,
+            135
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Iced Drinks",
+      "items": [
+        {
+          "name": "Iced Coffee",
+          "price": 105
+        },
+        {
+          "name": "Iced Coffee Salted Caramel",
+          "price": 130
+        },
+        {
+          "name": "Iced Cappuccino",
+          "price": 105
+        },
+        {
+          "name": "Iced Latte",
+          "price": 105
+        },
+        {
+          "name": "Iced Spanish Latte",
+          "price": 120
+        },
+        {
+          "name": "Iced Americano",
+          "price": 80
+        },
+        {
+          "name": "Iced Mocha",
+          "price": 110
+        },
+        {
+          "name": "Iced White Mocha",
+          "price": 120
+        },
+        {
+          "name": "Iced Chocolate",
+          "price": 90
+        },
+        {
+          "name": "Iced Caramel Macchiato",
+          "price": 110
+        },
+        {
+          "name": "Iced Tea",
+          "flavors": [
+            "Peach",
+            "Raspberry",
+            "Lemon"
+          ],
+          "price": 80
+        },
+        {
+          "name": "Mojito Classic",
+          "price": 85
+        },
+        {
+          "name": "Mojito",
+          "flavors": [
+            "Passion",
+            "Watermelon",
+            "Blueberry"
+          ],
+          "price": 100
+        }
+      ]
+    },
+    {
+      "name": "Shakes",
+      "items": [
+        {
+          "name": "Milkshake Vanilla",
+          "price": 95
+        },
+        {
+          "name": "Milkshake Strawberry",
+          "price": 95
+        },
+        {
+          "name": "Milkshake Mango",
+          "price": 95
+        },
+        {
+          "name": "Milkshake Chocolate",
+          "price": 95
+        },
+        {
+          "name": "Milkshake Nutella",
+          "price": 105
+        },
+        {
+          "name": "Milkshake Oreo",
+          "price": 110
+        },
+        {
+          "name": "Milkshake Kinder",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Brownies",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Double Chocolate Cookie",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Lotus Biscoff",
+          "price": 150
+        },
+        {
+          "name": "Milkshake Cheesecake",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Cheesecake Strawberry",
+          "price": 145
+        },
+        {
+          "name": "Milkshake Cheesecake Pistachio",
+          "price": 145
+        },
+        {
+          "name": "Milkshake Cheesecake Nutella",
+          "price": 145
+        },
+        {
+          "name": "Milkshake Coffee",
+          "price": 125
+        },
+        {
+          "name": "Milkshake Raspberry Boba Blueberry",
+          "price": 150
+        },
+        {
+          "name": "Milkshake Date Nuts",
+          "price": 150
+        },
+        {
+          "name": "Milkshake Pistachio",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Raspberry White Chocolate",
+          "price": 130
+        },
+        {
+          "name": "Milkshake Blueberry",
+          "price": 110
+        },
+        {
+          "name": "Milkshake Caramel Shoko Cream",
+          "price": 130
+        }
+      ]
+    },
+    {
+      "name": "Smoothies",
+      "items": [
+        {
+          "name": "Smoothie Passion Fruit",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Green Apple",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Pineapple",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Pineapple Mint",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Lemon Mint",
+          "price": 95
+        },
+        {
+          "name": "Smoothie Blueberry",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Peach",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Peach Passion",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Mango",
+          "price": 100
+        },
+        {
+          "name": "Smoothie Mango Passion",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Strawberry Lemon",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Watermelon Mint",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Pinacolada",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Pineapple Lemon",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Pineapple Orange",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Pineapple Green Apple",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Strawberry Kiwi",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Mix Berry",
+          "price": 105
+        },
+        {
+          "name": "Smoothie Pinacolada Boba Strawberry",
+          "price": 140
+        },
+        {
+          "name": "Smoothie Lemon Boba Cola",
+          "price": 140
+        },
+        {
+          "name": "Smoothie Cola",
+          "price": 100
+        }
+      ]
+    },
+    {
+      "name": "Juices",
+      "items": [
+        {
+          "name": "Orange",
+          "price": 65
+        },
+        {
+          "name": "Lemon",
+          "price": 65
+        },
+        {
+          "name": "Lemon Mint",
+          "price": 75
+        },
+        {
+          "name": "Pink Lemon",
+          "price": 90
+        },
+        {
+          "name": "Guava",
+          "price": 75
+        },
+        {
+          "name": "Guava Mint",
+          "price": 85
+        },
+        {
+          "name": "Mango",
+          "price": 75
+        },
+        {
+          "name": "Mango Mint",
+          "price": 85
+        },
+        {
+          "name": "Strawberry",
+          "price": 75
+        },
+        {
+          "name": "Banana",
+          "price": 75
+        },
+        {
+          "name": "Watermelon",
+          "price": 75
+        },
+        {
+          "name": "Pomegranate",
+          "price": 75
+        },
+        {
+          "name": "Kiwi",
+          "price": 85
+        },
+        {
+          "name": "Date",
+          "price": 85
+        }
+      ]
+    },
+    {
+      "name": "Frappes",
+      "items": [
+        {
+          "name": "Frappuccino",
+          "price": 105
+        },
+        {
+          "name": "Frappe Caramel",
+          "price": 110
+        },
+        {
+          "name": "Frappe Salted Caramel",
+          "price": 130
+        },
+        {
+          "name": "Frappe Oreo",
+          "price": 115
+        },
+        {
+          "name": "Frappe Lotus",
+          "price": 145
+        },
+        {
+          "name": "Frappe Cookie",
+          "price": 115
+        },
+        {
+          "name": "Frappe Brownies",
+          "price": 115
+        },
+        {
+          "name": "Frappe Pistachio",
+          "price": 125
+        },
+        {
+          "name": "Frappe White Chocolate",
+          "price": 125
+        }
+      ]
+    },
+    {
+      "name": "Cocktails",
+      "items": [
+        {
+          "name": "Tropical Night",
+          "ingredients": [
+            "Mango",
+            "Banana",
+            "Kiwi"
+          ],
+          "price": 115
+        },
+        {
+          "name": "Florida",
+          "ingredients": [
+            "Mango",
+            "Guava",
+            "Strawberry"
+          ],
+          "price": 115
+        },
+        {
+          "name": "Mix Berry",
+          "ingredients": [
+            "Blueberry",
+            "Raspberry",
+            "Cream"
+          ],
+          "price": 115
+        },
+        {
+          "name": "Sweet & Sour Mix",
+          "ingredients": [
+            "Fresh Orange",
+            "Pineapple",
+            "Lemon"
+          ],
+          "price": 115
+        },
+        {
+          "name": "Kiwi / Strawberry",
+          "price": 115
+        },
+        {
+          "name": "Strawberry / Pomegranate / Watermelon",
+          "price": 115
+        },
+        {
+          "name": "Guava / Banana",
+          "price": 115
+        }
+      ]
+    },
+    {
+      "name": "Soft Drinks",
+      "items": [
+        {
+          "name": "Mineral Water",
+          "price": 10
+        },
+        {
+          "name": "Can",
+          "price": 30
+        },
+        {
+          "name": "Red Bull",
+          "price": 70
+        },
+        {
+          "name": "Sunshine",
+          "price": 60
+        },
+        {
+          "name": "Cherry Cola",
+          "price": 60
+        },
+        {
+          "name": "Cinnamon Cola",
+          "price": 60
+        },
+        {
+          "name": "Vanilla Cola",
+          "price": 60
+        }
+      ]
+    },
+    {
+      "name": "Sandwiches",
+      "items": [
+        {
+          "name": "Salami Turkey",
+          "price": 95
+        },
+        {
+          "name": "Smoked Turkey Sandwich",
+          "price": 95
+        },
+        {
+          "name": "Mix Cheese Sandwich",
+          "price": 95
+        },
+        {
+          "name": "Tuna Sandwich",
+          "price": 95
+        },
+        {
+          "name": "Roast Beef Sandwich",
+          "price": 95
+        },
+        {
+          "name": "Chicken Pesto",
+          "price": 95
+        }
+      ]
+    },
+    {
+      "name": "Matcha",
+      "items": [
+        {
+          "name": "Hot Matcha",
+          "prices": [
+            105,
+            115,
+            120
+          ]
+        },
+        {
+          "name": "Ice Matcha Cubes",
+          "price": 115
+        },
+        {
+          "name": "Frappe Matcha",
+          "price": 115
+        },
+        {
+          "name": "Matcha Strawberry",
+          "price": 135
+        },
+        {
+          "name": "Matcha Mango",
+          "price": 135
+        }
+      ]
+    },
+    {
+      "name": "Dessert",
+      "items": [
+        {
+          "name": "Flutes Cake",
+          "price": 75
+        },
+        {
+          "name": "Honey Cake",
+          "price": 75
+        },
+        {
+          "name": "Cheese Cake",
+          "price": 75
+        },
+        {
+          "name": "Cheese Cake Flavoured",
+          "price": 90
+        },
+        {
+          "name": "Nutella Molten Cake",
+          "price": 80
+        },
+        {
+          "name": "Lotus Molten Cake",
+          "price": 85
+        },
+        {
+          "name": "Brownies",
+          "price": 65
+        },
+        {
+          "name": "Tres Leches",
+          "price": 75
+        },
+        {
+          "name": "Eclair Nutella",
+          "price": 65
+        },
+        {
+          "name": "Eclair Lotus",
+          "price": 70
+        },
+        {
+          "name": "Milky Cake",
+          "flavors": [
+            "Kinder",
+            "Lotus",
+            "Caramel",
+            "Nutella"
+          ],
+          "price": 75
+        },
+        {
+          "name": "Swiss Roll",
+          "flavors": [
+            "Lotus",
+            "Nutella"
+          ],
+          "price": 95
+        }
+      ]
+    },
+    {
+      "name": "Extras",
+      "items": [
+        {
+          "name": "Flavor",
+          "price": 35
+        },
+        {
+          "name": "Puree",
+          "price": 45
+        },
+        {
+          "name": "Espresso",
+          "price": 25
+        },
+        {
+          "name": "Nutella",
+          "price": 30
+        },
+        {
+          "name": "White Chocolate",
+          "price": 35
+        },
+        {
+          "name": "Lotus",
+          "price": 50
+        },
+        {
+          "name": "Kinder",
+          "price": 50
+        },
+        {
+          "name": "Pistachio",
+          "price": 50
+        },
+        {
+          "name": "Nuts",
+          "price": 40
+        },
+        {
+          "name": "Whipped Cream",
+          "price": 40
+        }
+      ]
+    },
+    {
+      "name": "Extra Boba",
+      "items": [
+        {
+          "name": "Boba",
+          "flavors": [
+            "Strawberry",
+            "Watermelon",
+            "Blueberry",
+            "Cola",
+            "Green Apple",
+            "Passion"
+          ],
+          "price": 45
+        }
+      ]
+    }
+  ]
+}

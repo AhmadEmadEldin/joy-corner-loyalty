@@ -6,7 +6,7 @@ import express, {
   type Request,
   type Response,
 } from "express";
-import type { PoolClient } from "pg";
+import type { PoolClient, QueryResultRow } from "pg";
 import {
   canRoleTransitionOrder,
   derivePaymentStatusMinor,
@@ -17,8 +17,10 @@ import {
   type OperationalOrderStatus,
   type OperationalRole,
 } from "../src/orderWorkflow";
+import { AuthRateLimiter } from "./authRateLimit";
 import { getCairoBusinessDate } from "./cairoDate";
 import { removeMenuImage, storeMenuImage } from "./imageStorage";
+import { normalizeMenuImport, previewMenuImport } from "./menuImport";
 import { isValidEmail, normalizePhone } from "./validators";
 import {
   applyNeonMigrations,
@@ -55,8 +57,8 @@ const allowedOrigins = new Set(
     .filter(Boolean),
 );
 
-if (isProduction && jwtSecret.length < 32) {
-  throw new Error("JWT_SECRET must contain at least 32 characters in production.");
+if (jwtSecret.length < 32) {
+  throw new Error("JWT_SECRET must contain at least 32 characters.");
 }
 
 app.disable("x-powered-by");
@@ -98,7 +100,7 @@ function signToken(user: Omit<Claims, "exp" | "iat">): string {
   const payload = { ...user, exp: iat + sessionLifetimeSeconds, iat };
   const unsigned = `${base64url({ alg: "HS256", typ: "JWT" })}.${base64url(payload)}`;
   const signature = crypto
-    .createHmac("sha256", jwtSecret || "joy-corner-development-secret-only")
+    .createHmac("sha256", jwtSecret)
     .update(unsigned)
     .digest("base64url");
   return `${unsigned}.${signature}`;
@@ -111,7 +113,7 @@ function verifyToken(token: string): Claims {
   if (decodedHeader.alg !== "HS256" || decodedHeader.typ !== "JWT") throw new Error("Invalid session.");
   const unsigned = `${header}.${payload}`;
   const expected = crypto
-    .createHmac("sha256", jwtSecret || "joy-corner-development-secret-only")
+    .createHmac("sha256", jwtSecret)
     .update(unsigned)
     .digest("base64url");
   const suppliedBuffer = Buffer.from(signature, "base64url");
@@ -224,18 +226,20 @@ function sessionResponse(row: Record<string, unknown>, res: Response) {
   };
 }
 
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const authRateLimiter = new AuthRateLimiter();
+
+function authRateLimitKeys(req: Request): string[] {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  return [
+    `ip:${req.ip || "unknown"}`,
+    email ? `account:${email}` : "",
+  ];
+}
+
 function loginRateLimit(req: Request, res: Response, next: NextFunction): void {
-  const key = req.ip || "unknown";
-  const now = Date.now();
-  const current = loginAttempts.get(key);
-  if (!current || current.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60_000 });
-    next();
-    return;
-  }
-  current.count += 1;
-  if (current.count > 12) {
+  const retryAfterMs = authRateLimiter.consume(authRateLimitKeys(req));
+  if (retryAfterMs !== null) {
+    res.setHeader("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
     res.status(429).json({ error: "Too many sign-in attempts. Try again later." });
     return;
   }
@@ -319,7 +323,11 @@ app.get("/ready", asyncRoute(async (_req, res) => {
     const db = await neonHealth();
     checks.database = db;
   } catch (error) {
-    checks.database = { ok: false, error: error instanceof Error ? error.message : "Unknown database error" };
+    console.error(
+      "Database readiness check failed",
+      error instanceof Error ? error.name : "UnknownError",
+    );
+    checks.database = { ok: false, error: "database_unavailable" };
   }
   const hasJwtSecret = Boolean(jwtSecret && jwtSecret.length >= 16);
   checks.config = { ok: hasJwtSecret };
@@ -389,7 +397,7 @@ app.post("/api/auth/login", loginRateLimit, asyncRoute(async (req, res) => {
   if (!rows[0] || !(await passwordMatches(password, String(rows[0].password_hash)))) {
     throw new HttpError(401, "Email or password is incorrect.");
   }
-  loginAttempts.delete(req.ip || "unknown");
+  authRateLimiter.reset(authRateLimitKeys(req));
   res.json(sessionResponse(rows[0], res));
 }));
 
@@ -433,22 +441,48 @@ app.get("/api/events", authenticate, (req: AuthedRequest, res) => {
   });
 });
 
-async function menuItems(includeInactive: boolean) {
-  const [items, sizes, modifiers, links] = await Promise.all([
-    query<Record<string, unknown>>(
-      `select i.id,i.category_id,i.name,i.description,i.active,i.available,
-              i.availability_status,
+async function databaseRows<T extends QueryResultRow>(
+  client: PoolClient | undefined,
+  sql: string,
+  values: unknown[] = [],
+): Promise<T[]> {
+  return client
+    ? (await client.query<T>(sql, values)).rows
+    : query<T>(sql, values);
+}
+
+async function menuItems(includeInactive: boolean, client?: PoolClient) {
+  const itemSql = `select i.id,i.legacy_id,i.category_id,i.name,i.description,i.active,i.available,
+              i.availability_status,i.image_provider,
               i.loyalty_eligible,i.preparation_station,i.sort_order,c.name as category,
               coalesce(i.image_url,case when i.image_bytes is null then null else '/api/menu/images/' || i.id::text end) as image_url
        from menu_items i join menu_categories c on c.id=i.category_id
        where ($1::boolean or (i.active and i.availability_status <> 'archived' and c.active))
-       order by c.sort_order,i.sort_order,i.name`,
-      [includeInactive],
-    ),
-    query<Record<string, unknown>>("select id,menu_item_id,size_name,price from menu_item_sizes order by sort_order,size_name"),
-    query<Record<string, unknown>>("select id,name,price from menu_modifiers where active=true order by name"),
-    query<Record<string, unknown>>("select menu_item_id,modifier_id from menu_item_modifiers"),
-  ]);
+       order by c.sort_order,i.sort_order,i.name`;
+  const sizeSql =
+    "select id,menu_item_id,size_name,price from menu_item_sizes order by sort_order,size_name";
+  const modifierSql =
+    "select id,name,price from menu_modifiers where active=true order by name";
+  const linkSql = "select menu_item_id,modifier_id from menu_item_modifiers";
+  let items: Record<string, unknown>[];
+  let sizes: Record<string, unknown>[];
+  let modifiers: Record<string, unknown>[];
+  let links: Record<string, unknown>[];
+  if (client) {
+    // node-postgres clients execute one query at a time. Keep transaction reads
+    // sequential so menu imports remain compatible with pg 9 and later.
+    items = await databaseRows(client, itemSql, [includeInactive]);
+    sizes = await databaseRows(client, sizeSql);
+    modifiers = await databaseRows(client, modifierSql);
+    links = await databaseRows(client, linkSql);
+  } else {
+    [items, sizes, modifiers, links] = await Promise.all([
+      databaseRows(undefined, itemSql, [includeInactive]),
+      databaseRows(undefined, sizeSql),
+      databaseRows(undefined, modifierSql),
+      databaseRows(undefined, linkSql),
+    ]);
+  }
   const sizesByItem = new Map<string, Record<string, unknown>[]>();
   sizes.forEach((size) => {
     const key = String(size.menu_item_id);
@@ -563,10 +597,37 @@ async function createOrder(
     voucherCode?: string;
   },
 ) {
-  const existing = await client.query<{ id: string; order_number: string }>(
-    "select id,order_number from orders where idempotency_key=$1", [input.idempotencyKey],
+  const existing = await client.query<{
+    created_by: string | null;
+    customer_id: string | null;
+    id: string;
+    order_number: string;
+  }>(
+    `select id,order_number,customer_id,created_by
+     from orders where idempotency_key=$1`,
+    [input.idempotencyKey],
   );
-  if (existing.rows[0]) return { orderId: existing.rows[0].id, orderNumber: existing.rows[0].order_number };
+  if (existing.rows[0]) {
+    const prior = existing.rows[0];
+    if (
+      prior.created_by !== actor.sub ||
+      prior.customer_id !== input.customerId
+    ) {
+      throw new HttpError(409, "That order request key is already in use.");
+    }
+    return { orderId: prior.id, orderNumber: prior.order_number };
+  }
+  if (input.customerId) {
+    const customer = await client.query<{ id: string }>(
+      `select id from accounts
+       where id=$1 and role='customer' and active=true
+       for share`,
+      [input.customerId],
+    );
+    if (!customer.rows[0]) {
+      throw new HttpError(400, "Select an active customer account.");
+    }
+  }
   if (!Array.isArray(input.items) || input.items.length < 1 || input.items.length > 30) throw new HttpError(400, "Add at least one menu item.");
   const sizeIds = input.items.map((item) => String(item.sizeId || ""));
   const sizes = await client.query<Record<string, unknown>>(
@@ -781,7 +842,7 @@ app.post("/api/orders/staff", authenticate, requireRoles("owner","manager","cash
   const result = await transaction((client) => createOrder(client, req.auth as Claims, {
     customerId: String(req.body?.customerId || "") || null,
     customerNotes: String(req.body?.customerNotes || "").trim().slice(0, 1000),
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: nonEmpty(req.body?.idempotencyKey, 160),
     items: req.body?.items as OrderItemInput[],
     paymentMethod: nonEmpty(req.body?.paymentMethod, 40),
     ...place,
@@ -832,7 +893,7 @@ app.get("/api/staff/queues", authenticate, requireRoles("owner","manager","cashi
   res.json({ cashier, kitchen });
 }));
 
-app.get("/api/staff/orders", authenticate, requireRoles("owner","manager","cashier","barista","waiter"), asyncRoute(async (_req, res) => {
+app.get("/api/staff/orders", authenticate, requireRoles("owner","manager","cashier"), asyncRoute(async (_req, res) => {
   const orders = await queueRows(
     "o.status in ('picked_up','rejected','cancelled')",
     [],
@@ -1022,20 +1083,39 @@ app.post("/api/orders/:id/status", authenticate, requireRoles("owner","manager",
       const invalidItems = await client.query<{ count: string }>(
         `select count(*)::text as count
          from order_items oi
-         join menu_items i on i.id=oi.menu_item_id
-         join menu_item_sizes s on s.menu_item_id=oi.menu_item_id
+         left join menu_items i on i.id=oi.menu_item_id
+         left join menu_item_sizes s on s.menu_item_id=oi.menu_item_id
            and s.size_name=oi.size_name
          where oi.order_id=$1
            and (
-             not i.active or i.availability_status <> 'available'
+             i.id is null or s.id is null
+             or not i.active or i.availability_status <> 'available'
              or round(s.price * 100) <> round(oi.unit_price * 100)
            )`,
         [req.params.id],
       );
-      if (Number(invalidItems.rows[0]?.count || 0) > 0) {
+      const invalidModifiers = await client.query<{ count: string }>(
+        `select count(*)::text as count
+         from order_item_modifiers oim
+         join order_items oi on oi.id=oim.order_item_id
+         left join menu_modifiers m on m.id=oim.modifier_id
+         left join menu_item_modifiers link
+           on link.menu_item_id=oi.menu_item_id
+          and link.modifier_id=oim.modifier_id
+         where oi.order_id=$1
+           and (
+             m.id is null or not m.active or link.modifier_id is null
+             or round(m.price * 100) <> round(oim.unit_price * 100)
+           )`,
+        [req.params.id],
+      );
+      if (
+        Number(invalidItems.rows[0]?.count || 0) > 0 ||
+        Number(invalidModifiers.rows[0]?.count || 0) > 0
+      ) {
         throw new HttpError(
           409,
-          "A product changed price or availability. Review the order before confirming.",
+          "A product, size, option, price, or availability changed. Review the order before confirming.",
         );
       }
     }
@@ -1078,29 +1158,43 @@ app.post("/api/orders/:id/status", authenticate, requireRoles("owner","manager",
       !row.rewards_applied
     ) {
       const points = Math.floor(Number(row.total));
-      const rewardResult = await client.query<{ points_balance: number }>(
-        `insert into rewards_accounts(customer_id,points_balance,eligible_purchase_count)
-         values($1,$2,1) on conflict(customer_id) do update
-         set points_balance=rewards_accounts.points_balance+$2,
-             eligible_purchase_count=rewards_accounts.eligible_purchase_count+1,updated_at=now()
-         returning points_balance`,
-        [row.customer_id, points],
-      );
       await client.query(
+        "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
+        [row.customer_id],
+      );
+      const rewardAccount = await client.query<{ points_balance: number }>(
+        "select points_balance from rewards_accounts where customer_id=$1 for update",
+        [row.customer_id],
+      );
+      const balanceAfter =
+        Number(rewardAccount.rows[0]?.points_balance || 0) + points;
+      const ledger = await client.query<{ id: string }>(
         `insert into loyalty_ledger(
           customer_id,order_id,points_delta,balance_after,reason,changed_by
         ) values($1,$2,$3,$4,'completed_order',$5)
-        on conflict(order_id,reason) do nothing`,
+        on conflict(order_id,reason) do nothing returning id`,
         [
           row.customer_id,
           req.params.id,
           points,
-          Number(rewardResult.rows[0]?.points_balance || points),
+          balanceAfter,
           req.auth?.sub,
         ],
       );
+      if (ledger.rows[0]) {
+        await client.query(
+          `update rewards_accounts
+           set points_balance=$2,eligible_purchase_count=eligible_purchase_count+1,
+               updated_at=now()
+           where customer_id=$1`,
+          [row.customer_id, balanceAfter],
+        );
+        await client.query(
+          "insert into reporting_outbox(topic,entity_id,payload) values('rewards_accounts',$1,'{}'::jsonb)",
+          [row.customer_id],
+        );
+      }
       await client.query("update orders set rewards_applied=true where id=$1", [req.params.id]);
-      await client.query("insert into reporting_outbox(topic,entity_id,payload) values('rewards_accounts',$1,'{}'::jsonb)", [row.customer_id]);
     }
     await client.query("insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'change_status','order',$3,$4::jsonb)", [req.auth?.sub,req.auth?.role,req.params.id,JSON.stringify({ from: row.status, reason, to: status })]);
     await client.query("insert into reporting_outbox(topic,entity_id,payload) values('orders',$1,$2::jsonb)", [req.params.id,JSON.stringify({ status })]);
@@ -1179,10 +1273,20 @@ app.post("/api/orders/:id/payment", authenticate, requireRoles("owner","manager"
 }));
 
 app.post("/api/admin/end-day", authenticate, requireRoles("owner", "manager"), asyncRoute(async (req, res) => {
-  const businessDate = String(req.body?.businessDate || getCairoBusinessDate());
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) throw new HttpError(400, "Business date must use YYYY-MM-DD.");
+  const businessDate = getCairoBusinessDate();
+  const requestedDate = String(req.body?.businessDate || businessDate);
+  if (requestedDate !== businessDate) {
+    throw new HttpError(400, "End Day can close only the current Cairo business date.");
+  }
   const report = await transaction(async (client) => {
     await client.query("select pg_advisory_xact_lock(hashtext($1))", [`joy-corner-end-day:${businessDate}`]);
+    const existing = await client.query<{ id: string }>(
+      "select id from end_day_reports where business_date=$1::date",
+      [businessDate],
+    );
+    if (existing.rows[0]) {
+      throw new HttpError(409, "End Day is already complete for this business date.");
+    }
     const active = await client.query<{ count: string }>(
       `select count(*)::text as count from orders
        where (created_at at time zone 'Africa/Cairo')::date=$1::date
@@ -1222,13 +1326,6 @@ app.post("/api/admin/end-day", authenticate, requireRoles("owner", "manager"), a
           gross_sales,payments_received,loyalty_points_issued,performed_by,payment_count,
           best_selling_item,best_selling_qty,latest_receipt_serial)
        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       on conflict(business_date) do update set
-          order_count=excluded.order_count,closed_order_count=excluded.closed_order_count,
-          cancelled_order_count=excluded.cancelled_order_count,gross_sales=excluded.gross_sales,
-          payments_received=excluded.payments_received,loyalty_points_issued=excluded.loyalty_points_issued,
-          payment_count=excluded.payment_count,best_selling_item=excluded.best_selling_item,
-          best_selling_qty=excluded.best_selling_qty,latest_receipt_serial=excluded.latest_receipt_serial,
-          performed_by=excluded.performed_by,performed_at=now()
        returning *`,
       [businessDate,row.order_count || 0,row.closed_order_count || 0,row.cancelled_order_count || 0,
        row.gross_sales || 0,row.payments_received || 0,row.loyalty_points_issued || 0,req.auth?.sub,
@@ -1248,6 +1345,206 @@ app.post("/api/admin/end-day", authenticate, requireRoles("owner", "manager"), a
 
 app.get("/api/owner/menu", authenticate, requireRoles("owner"), asyncRoute(async (_req, res) => {
   res.json({ items: await menuItems(true) });
+}));
+
+app.post("/api/owner/menu/import/preview", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  if (isProduction) {
+    throw new HttpError(403, "Menu import preview is available only in staging.");
+  }
+  const source = req.body?.source;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new HttpError(400, "Select a valid menu JSON file.");
+  }
+  const preview = previewMenuImport(source, await menuItems(true));
+  res.json({
+    preview: {
+      ...preview,
+      canApply: preview.errors.length === 0,
+      requiresOwnerConfirmation: true,
+    },
+  });
+}));
+
+app.post("/api/owner/menu/import/apply", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  if (isProduction) {
+    throw new HttpError(403, "Menu import is available only in staging.");
+  }
+  const source = req.body?.source;
+  const confirmedDigest = String(req.body?.digest || "");
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new HttpError(400, "Select a valid menu JSON file.");
+  }
+  if (req.body?.confirmation !== "APPLY MENU IMPORT") {
+    throw new HttpError(400, "Type APPLY MENU IMPORT to confirm this staging import.");
+  }
+  const result = await transaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext('joy-corner-menu-import'))");
+    const before = await menuItems(true, client);
+    const preview = previewMenuImport(source, before);
+    if (preview.errors.length) {
+      throw new HttpError(409, "Menu data changed or failed validation. Run preview again.");
+    }
+    if (!confirmedDigest || confirmedDigest !== preview.digest) {
+      throw new HttpError(409, "The menu preview is stale. Run preview again before applying.");
+    }
+    const normalized = normalizeMenuImport(source).menu;
+    const categoryIds = new Map<string, string>();
+    const categories = new Map(
+      normalized.products.map((product) => [
+        product.categoryId,
+        {
+          name: product.categoryName,
+          sortOrder: product.categorySortOrder,
+        },
+      ]),
+    );
+    for (const [canonicalId, category] of categories) {
+      const saved = await client.query<{ id: string }>(
+        `insert into menu_categories(name,sort_order,active)
+         values($1,$2,true)
+         on conflict(name) do update set sort_order=excluded.sort_order,active=true
+         returning id`,
+        [category.name, category.sortOrder],
+      );
+      categoryIds.set(canonicalId, saved.rows[0]!.id);
+    }
+
+    const incomingIds = new Set<string>();
+    for (const product of normalized.products) {
+      incomingIds.add(product.id);
+      const categoryId = categoryIds.get(product.categoryId);
+      if (!categoryId) throw new HttpError(409, "A normalized category is missing.");
+      const active = product.availabilityStatus !== "archived";
+      const available = product.availabilityStatus === "available";
+      const station = /sandwich|dessert/i.test(product.categoryName)
+        ? "kitchen"
+        : "barista";
+      const saved = await client.query<{ id: string }>(
+        `insert into menu_items(
+           legacy_id,category_id,name,description,active,available,
+           availability_status,loyalty_eligible,preparation_station,sort_order,
+           image_url,image_provider
+         ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         on conflict(legacy_id) do update set
+           category_id=excluded.category_id,name=excluded.name,
+           description=excluded.description,active=excluded.active,
+           available=excluded.available,
+           availability_status=excluded.availability_status,
+           loyalty_eligible=excluded.loyalty_eligible,
+           preparation_station=excluded.preparation_station,
+           sort_order=excluded.sort_order,
+           image_url=coalesce(excluded.image_url,menu_items.image_url),
+           image_provider=coalesce(excluded.image_provider,menu_items.image_provider)
+         returning id`,
+        [
+          product.id,
+          categoryId,
+          product.name,
+          product.description,
+          active,
+          available,
+          product.availabilityStatus,
+          product.loyaltyEligible,
+          station,
+          product.sortOrder,
+          product.imageUrl,
+          product.imageProvider,
+        ],
+      );
+      const itemId = saved.rows[0]!.id;
+      const priorSizes = await client.query<{
+        id: string;
+        price_minor: number;
+        size_name: string;
+      }>(
+        `select id,size_name,round(price*100)::int as price_minor
+         from menu_item_sizes where menu_item_id=$1 for update`,
+        [itemId],
+      );
+      const sizesByName = new Map(
+        priorSizes.rows.map((size) => [size.size_name, size]),
+      );
+      for (const variant of product.variants) {
+        const prior = sizesByName.get(variant.name);
+        const size = await client.query<{ id: string }>(
+          `insert into menu_item_sizes(menu_item_id,size_name,price,sort_order)
+           values($1,$2,$3::numeric/100,$4)
+           on conflict(menu_item_id,size_name) do update
+             set price=excluded.price,sort_order=excluded.sort_order
+           returning id`,
+          [itemId, variant.name, variant.priceMinor, variant.sortOrder],
+        );
+        if (prior && prior.price_minor !== variant.priceMinor) {
+          await client.query(
+            `insert into menu_price_history(
+               menu_item_id,size_id,previous_price_minor,new_price_minor,changed_by
+             ) values($1,$2,$3,$4,$5)`,
+            [itemId, size.rows[0]!.id, prior.price_minor, variant.priceMinor, req.auth!.sub],
+          );
+        }
+      }
+      const variantNames = product.variants.map((variant) => variant.name);
+      await client.query(
+        "delete from menu_item_sizes where menu_item_id=$1 and not (size_name = any($2::text[]))",
+        [itemId, variantNames],
+      );
+
+      const modifierIds: string[] = [];
+      for (const extra of product.extras) {
+        const modifier = await client.query<{ id: string }>(
+          `insert into menu_modifiers(name,price,active)
+           values($1,$2::numeric/100,true)
+           on conflict(name) do update set price=excluded.price,active=true
+           returning id`,
+          [extra.name, extra.priceMinor],
+        );
+        modifierIds.push(modifier.rows[0]!.id);
+        await client.query(
+          `insert into menu_item_modifiers(menu_item_id,modifier_id)
+           values($1,$2) on conflict do nothing`,
+          [itemId, modifier.rows[0]!.id],
+        );
+      }
+      await client.query(
+        `delete from menu_item_modifiers
+         where menu_item_id=$1 and not (modifier_id = any($2::uuid[]))`,
+        [itemId, modifierIds],
+      );
+    }
+
+    await client.query(
+      `update menu_items
+       set active=false,available=false,availability_status='archived'
+       where (legacy_id is null or not (legacy_id = any($1::text[])))
+         and availability_status <> 'archived'`,
+      [[...incomingIds]],
+    );
+    await client.query(
+      `insert into audit_logs(
+         actor_id,actor_role,action,entity_type,entity_id,details
+       ) values($1,$2,'menu_import','menu',$3,$4::jsonb)`,
+      [
+        req.auth!.sub,
+        req.auth!.role,
+        preview.digest,
+        JSON.stringify({
+          additions: preview.additions.length,
+          archives: preview.archives.length,
+          priceChanges: preview.priceChanges.length,
+          updates: preview.updates.length,
+        }),
+      ],
+    );
+    return {
+      additions: preview.additions.length,
+      archives: preview.archives.length,
+      digest: preview.digest,
+      priceChanges: preview.priceChanges.length,
+      updates: preview.updates.length,
+    };
+  });
+  publish("menu", result.digest);
+  res.json({ result });
 }));
 
 app.post("/api/owner/menu/items", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
@@ -1314,17 +1611,23 @@ app.patch("/api/owner/menu/items/:id", authenticate, requireRoles("owner"), asyn
     throw new HttpError(400, "Product availability is invalid.");
   }
   await transaction(async (client) => {
-    await client.query(
+    const categoryId = nonEmpty(req.body?.categoryId, 160);
+    const category = await client.query<{ id: string }>(
+      "select id from menu_categories where id=$1 and active=true",
+      [categoryId],
+    );
+    if (!category.rows[0]) throw new HttpError(400, "Select a valid category.");
+    const updated = await client.query<{ id: string }>(
       `update menu_items set
         name=$2,description=$3,category_id=$4,sort_order=$5,
         active=$6,available=$7,availability_status=$8,
         loyalty_eligible=$9,preparation_station=$10
-       where id=$1`,
+       where id=$1 returning id`,
       [
         req.params.id,
         nonEmpty(req.body?.name),
         String(req.body?.description || "").trim().slice(0, 1000),
-        nonEmpty(req.body?.categoryId, 160),
+        categoryId,
         Math.max(0, Number(req.body?.sortOrder) || 0),
         availabilityStatus !== "archived" && Boolean(req.body?.active),
         availabilityStatus === "available",
@@ -1333,6 +1636,7 @@ app.patch("/api/owner/menu/items/:id", authenticate, requireRoles("owner"), asyn
         req.body?.preparationStation === "kitchen" ? "kitchen" : "barista",
       ],
     );
+    if (!updated.rows[0]) throw new HttpError(404, "Product not found.");
     await client.query(
       `insert into audit_logs(
         actor_id,actor_role,action,entity_type,entity_id,details
@@ -1401,6 +1705,11 @@ app.patch("/api/owner/menu/sizes/:id", authenticate, requireRoles("owner"), asyn
 }));
 
 app.put("/api/owner/menu/items/:id/image", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
+  const current = await query<{ image_public_id: string | null }>(
+    "select image_public_id from menu_items where id=$1",
+    [req.params.id],
+  );
+  if (!current[0]) throw new HttpError(404, "Product not found.");
   const stored = await storeMenuImage(
     String(req.params.id),
     String(req.body?.dataUrl || ""),
@@ -1410,33 +1719,70 @@ app.put("/api/owner/menu/items/:id/image", authenticate, requireRoles("owner"), 
       error instanceof Error ? error.message : "The image upload failed.",
     );
   });
-  await query(
-    `update menu_items set
-      image_url=$2,image_provider=$3,image_public_id=$4,
-      image_content_type=null,image_bytes=null
-     where id=$1`,
-    [req.params.id, stored.url, stored.provider, stored.publicId],
-  );
+  let previousPublicId: string | null;
+  try {
+    previousPublicId = await transaction(async (client) => {
+      const locked = await client.query<{ image_public_id: string | null }>(
+        "select image_public_id from menu_items where id=$1 for update",
+        [req.params.id],
+      );
+      if (!locked.rows[0]) throw new HttpError(404, "Product not found.");
+      await client.query(
+        `update menu_items set
+          image_url=$2,image_provider=$3,image_public_id=$4,
+          image_content_type=null,image_bytes=null
+         where id=$1`,
+        [req.params.id, stored.url, stored.provider, stored.publicId],
+      );
+      await client.query(
+        `insert into audit_logs(
+          actor_id,actor_role,action,entity_type,entity_id,details
+        ) values($1,$2,'replace_product_image','menu_item',$3,$4::jsonb)`,
+        [
+          req.auth?.sub,
+          req.auth?.role,
+          req.params.id,
+          JSON.stringify({ provider: stored.provider }),
+        ],
+      );
+      return locked.rows[0].image_public_id;
+    });
+  } catch (error) {
+    await removeMenuImage(stored.publicId).catch(() => undefined);
+    throw error;
+  }
+  if (previousPublicId && previousPublicId !== stored.publicId) {
+    await removeMenuImage(previousPublicId).catch(() => undefined);
+  }
   publish("menu", String(req.params.id));
   res.json({ imageUrl: stored.url });
 }));
 
 app.delete("/api/owner/menu/items/:id/image", authenticate, requireRoles("owner"), asyncRoute(async (req, res) => {
-  const rows = await query<{ image_public_id: string | null }>(
-    "select image_public_id from menu_items where id=$1",
-    [req.params.id],
-  );
-  if (!rows[0]) throw new HttpError(404, "Product not found.");
-  if (rows[0].image_public_id) {
-    await removeMenuImage(rows[0].image_public_id);
+  const previousPublicId = await transaction(async (client) => {
+    const rows = await client.query<{ image_public_id: string | null }>(
+      "select image_public_id from menu_items where id=$1 for update",
+      [req.params.id],
+    );
+    if (!rows.rows[0]) throw new HttpError(404, "Product not found.");
+    await client.query(
+      `update menu_items set
+        image_url=null,image_provider=null,image_public_id=null,
+        image_content_type=null,image_bytes=null
+       where id=$1`,
+      [req.params.id],
+    );
+    await client.query(
+      `insert into audit_logs(
+        actor_id,actor_role,action,entity_type,entity_id,details
+      ) values($1,$2,'remove_product_image','menu_item',$3,'{}'::jsonb)`,
+      [req.auth?.sub, req.auth?.role, req.params.id],
+    );
+    return rows.rows[0].image_public_id;
+  });
+  if (previousPublicId) {
+    await removeMenuImage(previousPublicId).catch(() => undefined);
   }
-  await query(
-    `update menu_items set
-      image_url=null,image_provider=null,image_public_id=null,
-      image_content_type=null,image_bytes=null
-     where id=$1`,
-    [req.params.id],
-  );
   publish("menu", String(req.params.id));
   res.json({ ok: true });
 }));

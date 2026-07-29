@@ -45,7 +45,7 @@ const groups: Array<{ label: string; items: Omit<NavItem, "badge">[] }> = [
       {
         id: "orders",
         label: "Orders",
-        roles: ["owner", "manager", "cashier", "barista", "waiter"],
+        roles: ["owner", "manager", "cashier"],
       },
     ],
   },

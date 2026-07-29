@@ -1,0 +1,4240 @@
+{
+  "brand": "Joy Corner",
+  "categories": [
+    {
+      "active": true,
+      "displayOrder": 1,
+      "id": "CAT-001",
+      "name": "Hot Beverages",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0001",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Turkish Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0001-SMALL",
+              "name": "Small",
+              "priceMinor": 3400
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0001-LARGE",
+              "name": "Large",
+              "priceMinor": 3900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0002",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "French Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0002-SMALL",
+              "name": "Small",
+              "priceMinor": 5900
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0002-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 6900
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0002-LARGE",
+              "name": "Large",
+              "priceMinor": 7900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0003",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nutella Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0003-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0003-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0003-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0004",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hazelnut Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0004-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0004-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0004-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0005",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hazelnut Coffee Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0005-SMALL",
+              "name": "Small",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0005-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 10000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0005-LARGE",
+              "name": "Large",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0006",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Espresso",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0006-SMALL",
+              "name": "Small",
+              "priceMinor": 4500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0006-LARGE",
+              "name": "Large",
+              "priceMinor": 5500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0007",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Ristretto",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0007-SMALL",
+              "name": "Small",
+              "priceMinor": 4500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0007-LARGE",
+              "name": "Large",
+              "priceMinor": 5500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0008",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Macchiato",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0008-SMALL",
+              "name": "Small",
+              "priceMinor": 6000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0008-LARGE",
+              "name": "Large",
+              "priceMinor": 7000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0009",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Espresso Con Panna",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0009-SMALL",
+              "name": "Small",
+              "priceMinor": 6500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0009-LARGE",
+              "name": "Large",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0010",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Espresso Affogato",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0010-SMALL",
+              "name": "Small",
+              "priceMinor": 7500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0010-LARGE",
+              "name": "Large",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [],
+          "id": "ITEM-0011",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Corto Classic",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0011-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [],
+          "id": "ITEM-0012",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Corto Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0012-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 13,
+          "extras": [],
+          "id": "ITEM-0013",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Corto Caramel",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0013-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 14,
+          "extras": [],
+          "id": "ITEM-0014",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "American Black",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0014-SMALL",
+              "name": "Small",
+              "priceMinor": 6000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0014-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 7000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0014-LARGE",
+              "name": "Large",
+              "priceMinor": 8000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 15,
+          "extras": [],
+          "id": "ITEM-0015",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "American White",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0015-SMALL",
+              "name": "Small",
+              "priceMinor": 7000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0015-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0015-LARGE",
+              "name": "Large",
+              "priceMinor": 9000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 16,
+          "extras": [],
+          "id": "ITEM-0016",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Cappuccino",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0016-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0016-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0016-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 17,
+          "extras": [],
+          "id": "ITEM-0017",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Latte",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0017-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0017-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0017-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 18,
+          "extras": [],
+          "id": "ITEM-0018",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Spanish Latte",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0018-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 19,
+          "extras": [],
+          "id": "ITEM-0019",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Flat White",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0019-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0019-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0019-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 20,
+          "extras": [],
+          "id": "ITEM-0020",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mocha",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0020-SMALL",
+              "name": "Small",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0020-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 10500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0020-LARGE",
+              "name": "Large",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 21,
+          "extras": [],
+          "id": "ITEM-0021",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mocha White",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0021-SMALL",
+              "name": "Small",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0021-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 11000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0021-LARGE",
+              "name": "Large",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 22,
+          "extras": [],
+          "id": "ITEM-0022",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Caramel Macchiato",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0022-SMALL",
+              "name": "Small",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0022-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 11000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0022-LARGE",
+              "name": "Large",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 23,
+          "extras": [],
+          "id": "ITEM-0023",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nescafe",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0023-SMALL",
+              "name": "Small",
+              "priceMinor": 6000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0023-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 7000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0023-LARGE",
+              "name": "Large",
+              "priceMinor": 8000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 24,
+          "extras": [],
+          "id": "ITEM-0024",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nescafe Black",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0024-SMALL",
+              "name": "Small",
+              "priceMinor": 5000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0024-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 6000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0024-LARGE",
+              "name": "Large",
+              "priceMinor": 7000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 25,
+          "extras": [],
+          "id": "ITEM-0025",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0025-SMALL",
+              "name": "Small",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0025-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0025-LARGE",
+              "name": "Large",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 26,
+          "extras": [],
+          "id": "ITEM-0026",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Chocolate Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0026-SMALL",
+              "name": "Small",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0026-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 10000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0026-LARGE",
+              "name": "Large",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 27,
+          "extras": [],
+          "id": "ITEM-0027",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot White Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0027-SMALL",
+              "name": "Small",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0027-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 10500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0027-LARGE",
+              "name": "Large",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 28,
+          "extras": [],
+          "id": "ITEM-0028",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Lotus Biscoff",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0028-SMALL",
+              "name": "Small",
+              "priceMinor": 12000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0028-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 13000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0028-LARGE",
+              "name": "Large",
+              "priceMinor": 14000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 29,
+          "extras": [
+            {
+              "id": "EXTRA-0001",
+              "name": "Apple",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0002",
+              "name": "Pineapple",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0003",
+              "name": "Orange",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0029",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Cider",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0029-SMALL",
+              "name": "Small",
+              "priceMinor": 5500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0029-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 6500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0029-LARGE",
+              "name": "Large",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 30,
+          "extras": [],
+          "id": "ITEM-0030",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Tea",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0030-SMALL",
+              "name": "Small",
+              "priceMinor": 2400
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0030-LARGE",
+              "name": "Large",
+              "priceMinor": 2900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 31,
+          "extras": [],
+          "id": "ITEM-0031",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Green Tea",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0031-SMALL",
+              "name": "Small",
+              "priceMinor": 2400
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0031-LARGE",
+              "name": "Large",
+              "priceMinor": 2900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 32,
+          "extras": [],
+          "id": "ITEM-0032",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Tea with Milk",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0032-SMALL",
+              "name": "Small",
+              "priceMinor": 2900
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0032-LARGE",
+              "name": "Large",
+              "priceMinor": 3900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 33,
+          "extras": [],
+          "id": "ITEM-0033",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Flavored Black Tea",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0033-SMALL",
+              "name": "Small",
+              "priceMinor": 2900
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0033-LARGE",
+              "name": "Large",
+              "priceMinor": 3900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 34,
+          "extras": [],
+          "id": "ITEM-0034",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Herbs",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0034-SMALL",
+              "name": "Small",
+              "priceMinor": 2400
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0034-LARGE",
+              "name": "Large",
+              "priceMinor": 2900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 35,
+          "extras": [],
+          "id": "ITEM-0035",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Herbs Cocktail",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0035-SMALL",
+              "name": "Small",
+              "priceMinor": 3900
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0035-LARGE",
+              "name": "Large",
+              "priceMinor": 4900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 36,
+          "extras": [],
+          "id": "ITEM-0036",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Vitamin C",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0036-SMALL",
+              "name": "Small",
+              "priceMinor": 4900
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0036-LARGE",
+              "name": "Large",
+              "priceMinor": 5900
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 37,
+          "extras": [
+            {
+              "id": "EXTRA-0004",
+              "name": "Caramel",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0005",
+              "name": "Kinder",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0006",
+              "name": "Nutella",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0037",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Sahlab",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0037-CLASSIC-SMALL",
+              "name": "Classic Small",
+              "priceMinor": 7000
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0037-CLASSIC-MEDIUM",
+              "name": "Classic Medium",
+              "priceMinor": 8000
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0037-CLASSIC-LARGE",
+              "name": "Classic Large",
+              "priceMinor": 9000
+            },
+            {
+              "displayOrder": 4,
+              "id": "ITEM-0037-FLAVORED-SMALL",
+              "name": "Flavored Small",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 5,
+              "id": "ITEM-0037-FLAVORED-MEDIUM",
+              "name": "Flavored Medium",
+              "priceMinor": 10500
+            },
+            {
+              "displayOrder": 6,
+              "id": "ITEM-0037-FLAVORED-LARGE",
+              "name": "Flavored Large",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 38,
+          "extras": [],
+          "id": "ITEM-0038",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Sahlab Nuts",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0038-SMALL",
+              "name": "Small",
+              "priceMinor": 8500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0038-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 9500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0038-LARGE",
+              "name": "Large",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 39,
+          "extras": [],
+          "id": "ITEM-0040",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Sahlab Pistachio",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0040-SMALL",
+              "name": "Small",
+              "priceMinor": 11500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0040-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 12500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0040-LARGE",
+              "name": "Large",
+              "priceMinor": 13500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 2,
+      "id": "CAT-002",
+      "name": "Iced Drinks",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0041",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0041-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0042",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Coffee Salted Caramel",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0042-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0043",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Cappuccino",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0043-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0044",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Latte",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0044-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0045",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Spanish Latte",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0045-STANDARD",
+              "name": "Standard",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0046",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Americano",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0046-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0047",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Mocha",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0047-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0048",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced White Mocha",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0048-STANDARD",
+              "name": "Standard",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0049",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0049-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0050",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Caramel Macchiato",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0050-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [
+            {
+              "id": "EXTRA-0007",
+              "name": "Peach",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0008",
+              "name": "Raspberry",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0009",
+              "name": "Lemon",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0051",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Iced Tea",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0051-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [],
+          "id": "ITEM-0052",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mojito Classic",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0052-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 13,
+          "extras": [
+            {
+              "id": "EXTRA-0010",
+              "name": "Passion",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0011",
+              "name": "Watermelon",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0012",
+              "name": "Blueberry",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0053",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mojito",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0053-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 3,
+      "id": "CAT-003",
+      "name": "Shakes",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0054",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Vanilla",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0054-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0055",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0055-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0056",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Mango",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0056-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0057",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0057-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0058",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0058-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0059",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Oreo",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0059-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0060",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Kinder",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0060-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0061",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Brownies",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0061-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0062",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Double Chocolate Cookie",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0062-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0063",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Lotus Biscoff",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0063-STANDARD",
+              "name": "Standard",
+              "priceMinor": 15000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [],
+          "id": "ITEM-0064",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Cheesecake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0064-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [],
+          "id": "ITEM-0065",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Cheesecake Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0065-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 13,
+          "extras": [],
+          "id": "ITEM-0066",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Cheesecake Pistachio",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0066-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 14,
+          "extras": [],
+          "id": "ITEM-0067",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Cheesecake Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0067-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 15,
+          "extras": [],
+          "id": "ITEM-0068",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Coffee",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0068-STANDARD",
+              "name": "Standard",
+              "priceMinor": 12500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 16,
+          "extras": [],
+          "id": "ITEM-0069",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Raspberry Boba Blueberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0069-STANDARD",
+              "name": "Standard",
+              "priceMinor": 15000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 17,
+          "extras": [],
+          "id": "ITEM-0070",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Date Nuts",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0070-STANDARD",
+              "name": "Standard",
+              "priceMinor": 15000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 18,
+          "extras": [],
+          "id": "ITEM-0071",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Pistachio",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0071-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 19,
+          "extras": [],
+          "id": "ITEM-0072",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Raspberry White Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0072-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 20,
+          "extras": [],
+          "id": "ITEM-0073",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Blueberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0073-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 21,
+          "extras": [],
+          "id": "ITEM-0074",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milkshake Caramel Shoko Cream",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0074-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 4,
+      "id": "CAT-004",
+      "name": "Smoothies",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0075",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Passion Fruit",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0075-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0076",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Green Apple",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0076-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0077",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pineapple",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0077-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0078",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pineapple Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0078-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0079",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Lemon Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0079-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0080",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Blueberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0080-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0081",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Peach",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0081-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0082",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Peach Passion",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0082-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0083",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Mango",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0083-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0084",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Mango Passion",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0084-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [],
+          "id": "ITEM-0085",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Strawberry Lemon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0085-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [],
+          "id": "ITEM-0086",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Watermelon Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0086-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 13,
+          "extras": [],
+          "id": "ITEM-0087",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pinacolada",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0087-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 14,
+          "extras": [],
+          "id": "ITEM-0088",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pineapple Lemon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0088-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 15,
+          "extras": [],
+          "id": "ITEM-0089",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pineapple Orange",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0089-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 16,
+          "extras": [],
+          "id": "ITEM-0090",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pineapple Green Apple",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0090-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 17,
+          "extras": [],
+          "id": "ITEM-0091",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Strawberry Kiwi",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0091-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 18,
+          "extras": [],
+          "id": "ITEM-0092",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Mix Berry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0092-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 19,
+          "extras": [],
+          "id": "ITEM-0093",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Pinacolada Boba Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0093-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 20,
+          "extras": [],
+          "id": "ITEM-0094",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Lemon Boba Cola",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0094-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 21,
+          "extras": [],
+          "id": "ITEM-0095",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoothie Cola",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0095-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 5,
+      "id": "CAT-005",
+      "name": "Juices",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0096",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Orange",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0096-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0097",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Lemon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0097-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0098",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Lemon Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0098-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0099",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Pink Lemon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0099-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0100",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Guava",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0100-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0101",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Guava Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0101-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0102",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mango",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0102-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0103",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mango Mint",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0103-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0104",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0104-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0105",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Banana",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0105-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [],
+          "id": "ITEM-0106",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Watermelon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0106-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [],
+          "id": "ITEM-0107",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Pomegranate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0107-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 13,
+          "extras": [],
+          "id": "ITEM-0108",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Kiwi",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0108-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 14,
+          "extras": [],
+          "id": "ITEM-0109",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Date",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0109-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 6,
+      "id": "CAT-006",
+      "name": "Frappes",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0110",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappuccino",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0110-STANDARD",
+              "name": "Standard",
+              "priceMinor": 10500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0111",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Caramel",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0111-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0112",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Salted Caramel",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0112-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0113",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Oreo",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0113-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0114",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Lotus",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0114-STANDARD",
+              "name": "Standard",
+              "priceMinor": 14500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0115",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Cookie",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0115-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0116",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Brownies",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0116-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0117",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Pistachio",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0117-STANDARD",
+              "name": "Standard",
+              "priceMinor": 12500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0118",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe White Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0118-STANDARD",
+              "name": "Standard",
+              "priceMinor": 12500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 7,
+      "id": "CAT-007",
+      "name": "Cocktails",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0119",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Tropical Night",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0119-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0120",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Florida",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0120-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0121",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mix Berry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0121-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0122",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Sweet & Sour Mix",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0122-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0123",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Kiwi / Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0123-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0124",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Strawberry / Pomegranate / Watermelon",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0124-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0125",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Guava / Banana",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0125-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 8,
+      "id": "CAT-008",
+      "name": "Soft Drinks",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0126",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mineral Water",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0126-STANDARD",
+              "name": "Standard",
+              "priceMinor": 1000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0127",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Can",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0127-STANDARD",
+              "name": "Standard",
+              "priceMinor": 3000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0128",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Red Bull",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0128-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0129",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Sunshine",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0129-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0130",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Cherry Cola",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0130-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0131",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Cinnamon Cola",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0131-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0132",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Vanilla Cola",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0132-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 9,
+      "id": "CAT-009",
+      "name": "Sandwiches",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0133",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Salami Turkey",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0133-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0134",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Smoked Turkey Sandwich",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0134-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0135",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Mix Cheese Sandwich",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0135-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0136",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Tuna Sandwich",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0136-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0137",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Roast Beef Sandwich",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0137-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0138",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Chicken Pesto",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0138-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 10,
+      "id": "CAT-010",
+      "name": "Matcha",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0139",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Hot Matcha",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0139-SMALL",
+              "name": "Small",
+              "priceMinor": 10500
+            },
+            {
+              "displayOrder": 2,
+              "id": "ITEM-0139-MEDIUM",
+              "name": "Medium",
+              "priceMinor": 11500
+            },
+            {
+              "displayOrder": 3,
+              "id": "ITEM-0139-LARGE",
+              "name": "Large",
+              "priceMinor": 12000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0140",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Ice Matcha Cubes",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0140-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0141",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Frappe Matcha",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0141-STANDARD",
+              "name": "Standard",
+              "priceMinor": 11500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0142",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Matcha Strawberry",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0142-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0143",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Matcha Mango",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0143-STANDARD",
+              "name": "Standard",
+              "priceMinor": 13500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 11,
+      "id": "CAT-011",
+      "name": "Dessert",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0144",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Flutes Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0144-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0145",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Honey Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0145-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0146",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Cheese Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0146-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0147",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Cheese Cake Flavoured",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0147-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0148",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nutella Molten Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0148-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0149",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Lotus Molten Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0149-STANDARD",
+              "name": "Standard",
+              "priceMinor": 8500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0150",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Brownies",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0150-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0151",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Tres Leches",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0151-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0152",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Eclair Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0152-STANDARD",
+              "name": "Standard",
+              "priceMinor": 6500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0153",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Eclair Lotus",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0153-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 11,
+          "extras": [
+            {
+              "id": "EXTRA-0005",
+              "name": "Kinder",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0013",
+              "name": "Lotus",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0004",
+              "name": "Caramel",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0006",
+              "name": "Nutella",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0154",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Milky Cake",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0154-STANDARD",
+              "name": "Standard",
+              "priceMinor": 7500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 12,
+          "extras": [
+            {
+              "id": "EXTRA-0013",
+              "name": "Lotus",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0006",
+              "name": "Nutella",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0155",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Swiss Roll",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0155-STANDARD",
+              "name": "Standard",
+              "priceMinor": 9500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 12,
+      "id": "CAT-012",
+      "name": "Extras",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [],
+          "id": "ITEM-0156",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Flavor",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0156-STANDARD",
+              "name": "Standard",
+              "priceMinor": 3500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 2,
+          "extras": [],
+          "id": "ITEM-0157",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Puree",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0157-STANDARD",
+              "name": "Standard",
+              "priceMinor": 4500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 3,
+          "extras": [],
+          "id": "ITEM-0158",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Espresso",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0158-STANDARD",
+              "name": "Standard",
+              "priceMinor": 2500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 4,
+          "extras": [],
+          "id": "ITEM-0159",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nutella",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0159-STANDARD",
+              "name": "Standard",
+              "priceMinor": 3000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 5,
+          "extras": [],
+          "id": "ITEM-0160",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "White Chocolate",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0160-STANDARD",
+              "name": "Standard",
+              "priceMinor": 3500
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 6,
+          "extras": [],
+          "id": "ITEM-0161",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Lotus",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0161-STANDARD",
+              "name": "Standard",
+              "priceMinor": 5000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 7,
+          "extras": [],
+          "id": "ITEM-0162",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Kinder",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0162-STANDARD",
+              "name": "Standard",
+              "priceMinor": 5000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 8,
+          "extras": [],
+          "id": "ITEM-0163",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Pistachio",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0163-STANDARD",
+              "name": "Standard",
+              "priceMinor": 5000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 9,
+          "extras": [],
+          "id": "ITEM-0164",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Nuts",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0164-STANDARD",
+              "name": "Standard",
+              "priceMinor": 4000
+            }
+          ]
+        },
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 10,
+          "extras": [],
+          "id": "ITEM-0165",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Whipped Cream",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0165-STANDARD",
+              "name": "Standard",
+              "priceMinor": 4000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "active": true,
+      "displayOrder": 13,
+      "id": "CAT-013",
+      "name": "Extra Boba",
+      "products": [
+        {
+          "active": true,
+          "archived": false,
+          "availabilityStatus": "available",
+          "costMinor": null,
+          "description": "",
+          "displayOrder": 1,
+          "extras": [
+            {
+              "id": "EXTRA-0014",
+              "name": "Strawberry",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0011",
+              "name": "Watermelon",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0012",
+              "name": "Blueberry",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0015",
+              "name": "Cola",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0016",
+              "name": "Green Apple",
+              "priceMinor": 0
+            },
+            {
+              "id": "EXTRA-0010",
+              "name": "Passion",
+              "priceMinor": 0
+            }
+          ],
+          "id": "ITEM-0166",
+          "imageProvider": null,
+          "imageUrl": null,
+          "loyaltyEligible": true,
+          "name": "Boba",
+          "variants": [
+            {
+              "displayOrder": 1,
+              "id": "ITEM-0166-STANDARD",
+              "name": "Standard",
+              "priceMinor": 4500
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "currency": "EGP",
+  "version": 1
+}

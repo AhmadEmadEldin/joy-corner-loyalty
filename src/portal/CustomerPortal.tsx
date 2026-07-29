@@ -4,6 +4,7 @@ import { CustomerMenu } from "./CustomerMenu";
 import { CustomerNavigation, CustomerSection } from "./CustomerNavigation";
 import { CustomerOrders } from "./CustomerOrders";
 import {
+  currentSessionUser,
   restoreSession,
   subscribeToSession,
   type SessionUser,
@@ -50,14 +51,20 @@ function errorMessage(error: unknown): string {
 }
 
 export function CustomerPortal() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [user, setUser] = useState<SessionUser | null>(currentSessionUser);
+  const [checkingSession, setCheckingSession] = useState(() =>
+    Boolean(currentSessionUser()),
+  );
 
   useEffect(() => {
-    void restoreSession().then((sessionUser) => {
-      setUser(sessionUser);
+    if (currentSessionUser()) {
+      void restoreSession().then((sessionUser) => {
+        setUser(sessionUser);
+        setCheckingSession(false);
+      });
+    } else {
       setCheckingSession(false);
-    });
+    }
     const unsubscribe = subscribeToSession((sessionUser) => {
       setUser(sessionUser);
       setCheckingSession(false);

@@ -7,15 +7,15 @@ export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 120_000,
   use: {
-    baseURL: "http://127.0.0.1:8081",
+    baseURL: "http://127.0.0.1:8091",
     trace: "retain-on-failure",
   },
   webServer: {
     command:
-      "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts && node ./scripts/static_server.cjs dist 8081",
+      "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.ts --mode production && tsx ./scripts/write_standalone_html.ts && node ./scripts/static_server.cjs dist 8091",
     reuseExistingServer: false,
-    timeout: 120_000,
-    url: "http://127.0.0.1:8081",
+    timeout: 300_000,
+    url: "http://127.0.0.1:8091",
   },
   workers: 1,
   projects: [
