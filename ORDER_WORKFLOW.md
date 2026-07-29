@@ -38,6 +38,10 @@ Confirmation:
 
 The locked current state prevents duplicate confirmation. UI actions disable while saving.
 
+Customer and staff order creation both send a client-stable idempotency key.
+The key is replaced only after a successful response, so a network retry
+returns the original order instead of creating a second order.
+
 ## Payment status
 
 Payment is independent from order lifecycle:
@@ -51,5 +55,5 @@ The server rejects overpayment and requires a unique idempotency key.
 
 ## Completion
 
-Picked-up orders leave active cashier and kitchen projections immediately but remain in history. A fully paid customer order awards points through a unique immutable ledger entry. Unpaid picked-up orders remain visible in customer unpaid receipts and financial reporting.
+Picked-up orders leave active cashier and kitchen projections immediately but remain in history. A fully paid customer order first inserts its unique immutable ledger entry and only then updates the rewards projection; an existing ledger entry cannot increment the balance again. Unpaid picked-up orders remain visible in customer unpaid receipts and financial reporting.
 

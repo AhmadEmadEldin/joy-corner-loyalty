@@ -1,84 +1,39 @@
 # Test Report
 
-Run date: 2026-07-27
+Run date: 2026-07-29
 
-## Automated results
+## Automated gates
 
-| Check | Result |
+| Gate | Result |
 |---|---|
-| TypeScript `tsc --noEmit` | Pass |
-| ESLint | Pass |
-| Jest | Pass: 23 suites, 101 tests |
-| Production webpack build | Pass |
-| Browser public/auth render | Pass |
-| Browser horizontal overflow at 390, 900, and 1440px | Pass |
-| Browser framework overlay after fixes | Pass |
+| TypeScript | PASS |
+| ESLint | PASS |
+| Jest | PASS |
+| Production webpack build | PASS |
+| Playwright browser suite | PASS: 10/10 |
+| Migration 005 preflight | READY |
+| Migration 005 dry run | PASS |
+| Migration 005 staging execution | PASS |
+| Menu normalization | PASS: 165 products, 227 variants, 0 findings |
+| Owner menu import | PASS |
+| Google reporting delivery/retry/idempotency | PASS |
+| Multi-role authenticated workflow | PASS |
+| End Day and second no-op reporting sync | PASS |
+| Cloudinary connector metadata/upload/delete | PASS |
+| Cloudinary application signed upload | BLOCKED by missing local API credentials |
 
-Production build warnings:
+## Coverage added
 
-- `app.js` is approximately 301 KiB.
-- Optimized coffee-farm WebP is approximately 290 KiB; the 1.42 MiB design PNG
-  is excluded from the runtime bundle.
+- deterministic menu IDs, variants, display order, minor-unit pricing, duplicate
+  Sahlab classification, schema validation, and secret screening;
+- Owner-only preview/apply with digest confirmation, transaction rollback,
+  audit, archives, historical price protection, and validation failures;
+- auth rate limiting, mandatory JWT configuration, customer ownership,
+  role-filtered data, and duplicate operation defenses;
+- image magic-byte validation and safe timestamped replacement;
+- migration target/checksum/transaction guards and no synthetic history;
+- customer checkout, price authority, unavailable state, cashier confirmation
+  and payment, barista transitions, queue removal, receipt retention, voucher
+  single redemption, loyalty single award, Sheet delivery, and End Day.
 
-These are performance risks, not build failures. Optimize the PNG and consider further lazy chunking before a constrained-network launch.
-
-## New coverage
-
-- Canonical order sequence.
-- Role ownership of cashier/barista transitions.
-- Legacy status normalization.
-- Unpaid, partial, and paid derivation from minor units.
-- Decimal-to-minor conversion.
-- Cart price-change detection and checkout blocking.
-- Cart unavailable-item invalidation.
-- Egyptian local phone normalization.
-- Legacy Google Sheets status import into canonical order states.
-- Imported confirmation and completion timestamp derivation.
-- End of Day completion counting based on `picked_up`.
-- Full canonical API transition sequence.
-- Migration 005 targeted updates, constraint guards, duplicate preflight, and
-  no-synthetic-history assertions.
-- Staging-only migration target guards and safe connection summaries.
-- Cloudinary staging folder validation.
-- Optimized farm-art runtime/reference separation and print suppression.
-
-Existing coverage continues to pass for permissions, receipt calculations/printing/visual state, menu normalization, customer menu/product dialog, mobile navigation, customer navigation, reporting mappings/write plan, cart drafts, and repository projections.
-
-## Browser QA
-
-The local frontend was run at `http://localhost:8081`.
-
-Verified:
-
-- meaningful content rendered;
-- no blank page;
-- no webpack overlay after fixes;
-- staff and customer auth visuals;
-- desktop staff shell and every navigation destination with empty QA projections;
-- tablet POS/Cashier/Barista/Menu layouts;
-- mobile auth/customer shell layouts;
-- customer drawer navigation after sticky-header fix;
-- no horizontal overflow at tested widths.
-
-The local backend could not start because `NEON_DATABASE_URL` is empty. Expected connection-refused console messages on unauthenticated restore requests are therefore environment failures, not frontend runtime exceptions.
-
-## Required staging tests
-
-The following must run with real staging data before production approval:
-
-- customer signup/login and staff role redirect;
-- customer lookup/autofill/create;
-- price edit SSE propagation to four roles;
-- cart acknowledgement and unavailable replacement;
-- staff POS variants/modifiers/place details/payment;
-- duplicate confirmation and duplicate payment idempotency;
-- complete customer → cashier → barista → pickup flow;
-- completed-order queue removal;
-- customer live tracking;
-- loyalty award exactly once;
-- voucher redemption exactly once;
-- receipt consistency and verification;
-- image upload/replace/remove;
-- End-of-Day blocking and idempotency;
-- reporting worker retry/delivery;
-- all required real-data screenshots.
+The final gate commands are rerun immediately before commit.

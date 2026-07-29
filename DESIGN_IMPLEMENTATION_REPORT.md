@@ -21,17 +21,18 @@ The implementation uses `design/DESIGN_GUIDE.md`, `design/UI_DESIGN_SPEC.md`, th
 
 ## Browser evidence
 
-Screenshots are stored in `test-results/screenshots`.
+Sanitized staging screenshots are stored in `artifacts/staging-screenshots`.
 
 Verified against the local frontend:
 
 - Desktop staff sign-in.
 - Mobile customer sign-in and sign-up.
-- Empty-state QA render of owner Overview, New Order, Cashier, Kitchen, Orders, Customers, Rewards, Vouchers, Menu & Images, Analytics, End of Day, and System.
-- Empty-state QA render of tablet POS, Cashier, Barista, and Menu.
-- Empty-state QA render of mobile Home, Menu, Orders, Rewards, Voucher, and Account.
-
-The empty-state staff/customer screenshots use browser-only intercepted empty responses to validate layout and never enter the production bundle. They are not substitutes for the required final real-data staging screenshots.
+- Authenticated staging render of owner Overview, New Order, Cashier, Kitchen,
+  Orders/receipts, Customers, Rewards, Vouchers, Menu & Images, Analytics, End
+  of Day, and System.
+- Authenticated staging render of tablet POS, Cashier, Barista, and Menu.
+- Staging mobile customer Home, Menu, Product Details, Cart, Checkout, Orders,
+  Receipts, Rewards, Voucher, and Profile plus sanitized sign-in/sign-up.
 
 ## Visual QA findings repaired
 
@@ -43,5 +44,19 @@ The empty-state staff/customer screenshots use browser-only intercepted empty re
 
 ## Remaining visual work
 
-Real-data staging screenshots remain required for product-heavy, receipt, tracking, voucher, and operational queue acceptance. Final image quality depends on owner-uploaded product photography and Cloudinary configuration.
+Final product photography depends on completing the backend Cloudinary signed
+upload acceptance test. Existing fallbacks and all responsive role layouts are
+verified.
+
+## 2026-07-28 verification
+
+- Local Playwright production-build smoke suite: 10/10 passed across desktop
+  Chromium and Pixel 5 emulation.
+- Startup network noise was removed by restoring a server session only when a
+  cached presentation session exists.
+- Root-level overflow protection fixed transient login-shell overflow.
+- The supplied style guide, full-app mockup, and voucher reference were
+  visually reviewed.
+- The referenced receipt PNG and several referenced menu PNGs are absent from
+  the checked-out design directory; exact comparison remains pending.
 

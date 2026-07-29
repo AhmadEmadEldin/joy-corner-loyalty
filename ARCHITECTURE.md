@@ -16,6 +16,12 @@ React/webpack frontend (Vercel)
 
 Google Sheets is never part of an operational request. Cloudinary contains product image bytes; Neon contains only image URLs and provider identifiers after migration.
 
+Staging menu JSON is parsed and diffed by `server/menuImport.ts`. The
+Owner-only preview endpoint is disabled in production, performs no writes, and
+classifies additions, updates, unchanged products, archives, and field-level
+changes. Confirmed application remains gated until stable source UUIDs and an
+isolated staging database are available.
+
 ## Frontend boundaries
 
 - `src/RootApp.tsx`: portal boundary.
@@ -25,6 +31,8 @@ Google Sheets is never part of an operational request. Cloudinary contains produ
 - `src/portal/CustomerMenu.tsx`: reusable database-driven menu/category/product/cart view.
 - `src/portal/ProductCustomizer.tsx`: size, modifier, quantity, and note selection.
 - `src/portal/OwnerMenuManager.tsx`: owner catalog and image management.
+- `server/menuImport.ts`: secret-safe menu JSON normalization, validation, and
+  database diff preview.
 - `src/orderWorkflow.ts`: canonical order/payment constants, normalization, transitions, role checks, labels, progress, and minor-unit helpers.
 - `src/styles/*`: centralized brand tokens and reusable application styling.
 
