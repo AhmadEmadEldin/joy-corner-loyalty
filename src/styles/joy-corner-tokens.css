@@ -4,6 +4,7 @@
   --jc-bg-secondary: #120c08;
   --jc-bg-tertiary: #1a120c;
   --jc-bg-elevated: #2b1b14;
+  --jc-bg-card: #241710;
   --jc-bg-soft: #342219;
   --jc-espresso: #2b1b14;
   --jc-coffee: #4a2c20;
@@ -49,6 +50,7 @@
   --jc-space-4: 16px;
   --jc-space-5: 20px;
   --jc-space-6: 24px;
+  --jc-space-7: 28px;
   --jc-space-8: 32px;
   --jc-space-10: 40px;
   --jc-space-12: 48px;
@@ -57,6 +59,14 @@
   --jc-duration-normal: 220ms;
   --jc-duration-slow: 300ms;
   --jc-ease: cubic-bezier(0.2, 0, 0, 1);
+  --jc-sidebar-width: 216px;
+  --jc-topbar-height: 68px;
+  --jc-content-wide: 1560px;
+  --jc-touch-target: 44px;
+  --jc-z-sticky: 30;
+  --jc-z-drawer: 100;
+  --jc-z-dialog: 120;
+  --jc-z-toast: 140;
 }
 
 *:focus-visible {

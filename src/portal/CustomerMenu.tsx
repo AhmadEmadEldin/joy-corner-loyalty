@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, MenuItem } from "./repository";
 import { ProductCustomizer } from "./ProductCustomizer";
 import { cartCanCheckout } from "./cartReconciliation";
+import { EmptyState } from "../components/JoyUI";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -24,6 +25,7 @@ export function CustomerMenu({
   onCheckout,
 }: CustomerMenuProps) {
   const [category, setCategory] = useState("All");
+  const [cartOpen, setCartOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<CartLine | null>(null);
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -43,6 +45,11 @@ export function CustomerMenu({
   }, [category, menu, query]);
   const quantity = cart.reduce((sum, line) => sum + line.quantity, 0);
   const total = cart.reduce((sum, line) => sum + lineTotal(line), 0);
+  const closeCart = useCallback(() => setCartOpen(false), []);
+  const checkoutFromCart = useCallback(() => {
+    setCartOpen(false);
+    onCheckout();
+  }, [onCheckout]);
 
   function saveLine(line: CartLine) {
     if (editing) {
@@ -105,10 +112,11 @@ export function CustomerMenu({
               ))}
             </div>
           ) : menu.length === 0 ? (
-            <div className="empty-menu-state">
-              <strong>No menu items available.</strong>
-              <p>Please check back later.</p>
-            </div>
+            <EmptyState
+              description="Please check back later."
+              icon="menu"
+              title="No menu items available."
+            />
           ) : visible.length ? (
             <div className="kiosk-product-grid">
               {visible.map((item) => (
@@ -126,6 +134,7 @@ export function CustomerMenu({
                     <span className="product-image-wrap">
                       <img
                         alt={item.name}
+                        decoding="async"
                         loading="lazy"
                         onError={(event) => {
                           event.currentTarget.src = "/assets/coffee-bean-field.jpg";
@@ -167,31 +176,40 @@ export function CustomerMenu({
               ))}
             </div>
           ) : (
-            <div className="empty-menu-state">
-              <strong>No matching drinks or bites</strong>
-              <p>Try another category or clear your search.</p>
-              <button onClick={() => setQuery("")} type="button">
-                Clear search
-              </button>
-            </div>
+            <EmptyState
+              action={<button onClick={() => setQuery("")} type="button">Clear search</button>}
+              description="Try another category or clear your search."
+              icon="search"
+              title="No matching drinks or bites"
+            />
           )}
         </section>
         <CartPanel
           cart={cart}
-          onCheckout={onCheckout}
+          mobileOpen={cartOpen}
+          onCheckout={checkoutFromCart}
           onEdit={(line) => {
             setEditing(line);
             setSelected(line.item);
           }}
           onQuantity={updateQuantity}
+          onMobileClose={closeCart}
           total={total}
         />
       </div>
+      {cartOpen ? (
+        <button
+          aria-label="Close cart"
+          className="mobile-cart-scrim"
+          onClick={closeCart}
+          type="button"
+        />
+      ) : null}
       {cart.length ? (
         <button
           className="mobile-cart-button"
           disabled={!cartCanCheckout(cart)}
-          onClick={onCheckout}
+          onClick={() => setCartOpen(true)}
           type="button"
         >
           <span>{quantity} {quantity === 1 ? "item" : "items"}</span>
@@ -220,30 +238,92 @@ export function lineTotal(line: CartLine): number {
 
 function CartPanel({
   cart,
+  mobileOpen,
   onCheckout,
   onEdit,
+  onMobileClose,
   onQuantity,
   total,
 }: {
   cart: CartLine[];
+  mobileOpen: boolean;
   onCheckout: () => void;
   onEdit: (line: CartLine) => void;
+  onMobileClose: () => void;
   onQuantity: (lineId: string, quantity: number) => void;
   total: number;
 }) {
+  const cartRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    cartRef.current?.querySelector<HTMLButtonElement>(".mobile-cart-close")?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onMobileClose();
+        return;
+      }
+      if (event.key !== "Tab" || !cartRef.current) return;
+      const focusable = Array.from(
+        cartRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mobileOpen, onMobileClose]);
+
   return (
-    <aside aria-label="Your order" className="kiosk-cart">
+    <aside
+      aria-label="Your order"
+      aria-modal={mobileOpen ? "true" : undefined}
+      className={`kiosk-cart ${mobileOpen ? "mobile-open" : ""}`}
+      ref={cartRef}
+      role={mobileOpen ? "dialog" : undefined}
+    >
       <header>
         <div>
           <p className="eyebrow">Your order</p>
           <h2>{cart.length ? "Ready when you are" : "Start your order"}</h2>
         </div>
         <span>{cart.reduce((sum, line) => sum + line.quantity, 0)}</span>
+        <button
+          aria-label="Close cart"
+          className="mobile-cart-close"
+          onClick={onMobileClose}
+          type="button"
+        >
+          ×
+        </button>
       </header>
       <div className="kiosk-cart-lines">
         {cart.length ? (
           cart.map((line) => (
             <article className="kiosk-cart-line" key={line.lineId}>
+              <img
+                alt=""
+                decoding="async"
+                loading="lazy"
+                onError={(event) => {
+                  event.currentTarget.src = "/assets/coffee-bean-field.jpg";
+                }}
+                src={line.item.image_url || "/assets/coffee-bean-field.jpg"}
+              />
               <div>
                 <strong>{line.item.name}</strong>
                 <small>
@@ -304,10 +384,11 @@ function CartPanel({
             </article>
           ))
         ) : (
-          <div className="empty-cart-state">
-            <img alt="" src="/assets/joy-corner-mark.png" />
-            <p>Your favorite Joy Corner order will appear here.</p>
-          </div>
+          <EmptyState
+            description="Your favorite Joy Corner order will appear here."
+            icon="cart"
+            title="Your order is empty"
+          />
         )}
       </div>
       <footer>

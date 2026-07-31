@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { JoyIcon, type JoyIconName } from "../components/JoyUI";
 
 export type CustomerSection =
   | "home"
@@ -14,6 +15,7 @@ export type CustomerSection =
 
 type NavigationItem = {
   badge?: number;
+  icon: JoyIconName;
   id: CustomerSection;
   label: string;
 };
@@ -26,16 +28,16 @@ type CustomerNavigationProps = {
 };
 
 const items: Array<Omit<NavigationItem, "badge">> = [
-  { id: "home", label: "Home" },
-  { id: "menu", label: "Menu" },
-  { id: "cart", label: "My cart" },
-  { id: "orders", label: "My orders" },
-  { id: "receipts", label: "Receipts" },
-  { id: "unpaid", label: "Unpaid receipts" },
-  { id: "rewards", label: "Rewards" },
-  { id: "vouchers", label: "Vouchers" },
-  { id: "notifications", label: "Notifications" },
-  { id: "profile", label: "Profile" },
+  { icon: "home", id: "home", label: "Home" },
+  { icon: "menu", id: "menu", label: "Menu" },
+  { icon: "cart", id: "cart", label: "My cart" },
+  { icon: "orders", id: "orders", label: "My orders" },
+  { icon: "receipt", id: "receipts", label: "Receipts" },
+  { icon: "cashier", id: "unpaid", label: "Unpaid receipts" },
+  { icon: "rewards", id: "rewards", label: "Rewards" },
+  { icon: "voucher", id: "vouchers", label: "Vouchers" },
+  { icon: "bell", id: "notifications", label: "Notifications" },
+  { icon: "profile", id: "profile", label: "Profile" },
 ];
 
 export function CustomerNavigation({
@@ -116,6 +118,34 @@ export function CustomerNavigation({
           />
         ))}
       </nav>
+      <nav aria-label="Customer mobile navigation" className="customer-bottom-nav">
+        {items
+          .filter((item) =>
+            ["home", "menu", "orders", "rewards"].includes(item.id),
+          )
+          .map((item) => (
+            <NavigationButton
+              active={active === item.id}
+              badge={badges[item.id]}
+              item={item}
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+            />
+          ))}
+        <button
+          aria-current={
+            ["home", "menu", "orders", "rewards"].includes(active)
+              ? undefined
+              : "page"
+          }
+          aria-label="More customer sections"
+          onClick={() => setOpen(true)}
+          type="button"
+        >
+          <JoyIcon name="more" />
+          <span>More</span>
+        </button>
+      </nav>
       {open ? (
         <div className="customer-drawer-layer">
           <button
@@ -132,14 +162,20 @@ export function CustomerNavigation({
             role="dialog"
           >
             <header>
-              <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+              <div className="customer-drawer-brand">
+                <img alt="" src="/assets/joy-corner-mark.png" />
+                <span>
+                  <strong>Joy Corner</strong>
+                  <small>Coffee &amp; Story</small>
+                </span>
+              </div>
               <button
                 aria-label="Close navigation"
                 className="drawer-close"
                 onClick={() => setOpen(false)}
                 type="button"
               >
-                ×
+                <JoyIcon name="close" />
               </button>
             </header>
             <nav aria-label="Mobile customer sections">
@@ -154,6 +190,7 @@ export function CustomerNavigation({
               ))}
             </nav>
             <button className="drawer-signout" onClick={onSignOut} type="button">
+              <JoyIcon name="logout" />
               Sign out
             </button>
           </div>
@@ -176,11 +213,13 @@ function NavigationButton({
 }) {
   return (
     <button
+      aria-label={item.label}
       aria-current={active ? "page" : undefined}
       className={active ? "active" : ""}
       onClick={onClick}
       type="button"
     >
+      <JoyIcon name={item.icon} />
       <span>{item.label}</span>
       {badge ? <span className="nav-badge">{badge > 99 ? "99+" : badge}</span> : null}
     </button>

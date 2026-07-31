@@ -26,6 +26,7 @@
     "sync:reporting": "tsx ./scripts/sync_neon_reporting.ts",
     "verify:api-workflow": "tsx ./scripts/verify_api_workflow.ts",
     "verify:cloudinary-staging": "tsx ./scripts/verify_cloudinary_staging.ts",
+    "verify:ui-redesign": "tsx ./scripts/capture_ui_redesign.ts",
     "verify:staging-workflow": "tsx ./scripts/verify_staging_workflow.ts",
     "test": "jest --no-cache --passWithNoTests",
     "test:watch": "jest --watchAll",
@@ -76,5 +77,9 @@
   },
   "overrides": {
     "websocket-driver": "0.7.5"
+  },
+  "scripts": {
+    "test:e2e": "npm run e2e"
   }
 }
+

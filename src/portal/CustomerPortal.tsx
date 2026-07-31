@@ -40,6 +40,13 @@ import {
   cartCanCheckout,
   reconcileCartWithMenu,
 } from "./cartReconciliation";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+} from "../components/JoyUI";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -75,8 +82,7 @@ export function CustomerPortal() {
   if (checkingSession) {
     return (
       <main className="joy-portal center-state" aria-busy="true">
-        <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
-        <p>Preparing your Joy Corner account…</p>
+        <LoadingState label="Preparing your Joy Corner account…" />
       </main>
     );
   }
@@ -84,9 +90,10 @@ export function CustomerPortal() {
 }
 
 function CustomerAccess() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "recovery" | "signup">("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,7 +101,17 @@ function CustomerAccess() {
     setMessage("");
     const form = new FormData(event.currentTarget);
     try {
+      if (mode === "recovery") {
+        setMessage(
+          "Online password recovery is not configured yet. Please contact Joy Corner and keep this email available for verification.",
+        );
+        return;
+      }
       if (mode === "signup") {
+        if (String(form.get("password")) !== String(form.get("confirmPassword"))) {
+          setMessage("Passwords do not match.");
+          return;
+        }
         await signUpCustomer({
           email: String(form.get("email") || ""),
           fullName: String(form.get("fullName") || ""),
@@ -127,11 +144,16 @@ function CustomerAccess() {
         />
         <p className="eyebrow">Joy Corner Loyalty</p>
         <h1>
-          {mode === "login" ? "Welcome back" : "Create your customer account"}
+          {mode === "login"
+            ? "Welcome back"
+            : mode === "signup"
+              ? "Create your customer account"
+              : "Recover your account"}
         </h1>
         <p className="muted">
-          Order ahead, follow preparation live, and keep every reward in one
-          place.
+          {mode === "recovery"
+            ? "Enter the email connected to your Joy Corner account."
+            : "Order ahead, follow preparation live, and keep every reward in one place."}
         </p>
         <form className="customer-order-form" onSubmit={submit}>
           {mode === "signup" ? (
@@ -156,24 +178,57 @@ function CustomerAccess() {
             Email
             <input autoComplete="email" name="email" required type="email" />
           </label>
-          <label>
-            Password
-            <input
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-              minLength={8}
-              name="password"
-              required
-              type="password"
-            />
-          </label>
+          {mode !== "recovery" ? (
+            <div className="auth-field">
+              <label htmlFor="customer-password">Password</label>
+              <span className="password-input">
+                <input
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
+                  minLength={8}
+                  name="password"
+                  id="customer-password"
+                  required
+                  type={showPassword ? "text" : "password"}
+                />
+                <button
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="auth-field-action"
+                  onClick={() => setShowPassword((current) => !current)}
+                  type="button"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </span>
+            </div>
+          ) : null}
+          {mode === "signup" ? (
+            <>
+              <label>
+                Confirm password
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  name="confirmPassword"
+                  required
+                  type={showPassword ? "text" : "password"}
+                />
+              </label>
+              <label className="auth-terms">
+                <input name="terms" required type="checkbox" />
+                <span>I agree to the Joy Corner account terms.</span>
+              </label>
+            </>
+          ) : null}
           <button disabled={busy} type="submit">
             {busy
               ? "Please wait…"
               : mode === "login"
                 ? "Sign in"
-                : "Create account"}
+                : mode === "signup"
+                  ? "Create account"
+                  : "Continue"}
           </button>
         </form>
         {message ? (
@@ -181,15 +236,32 @@ function CustomerAccess() {
             {message}
           </p>
         ) : null}
-        <button
-          className="button-secondary"
-          onClick={() => setMode(mode === "login" ? "signup" : "login")}
-          type="button"
-        >
-          {mode === "login"
-            ? "New customer? Create account"
-            : "Already registered? Sign in"}
-        </button>
+        <div className="auth-secondary-actions">
+          {mode === "login" ? (
+            <button
+              className="button-secondary"
+              onClick={() => {
+                setMessage("");
+                setMode("recovery");
+              }}
+              type="button"
+            >
+              Forgot password?
+            </button>
+          ) : null}
+          <button
+            className="button-secondary"
+            onClick={() => {
+              setMessage("");
+              setMode(mode === "signup" ? "login" : mode === "recovery" ? "login" : "signup");
+            }}
+            type="button"
+          >
+            {mode === "login"
+              ? "New customer? Create account"
+              : "Back to sign in"}
+          </button>
+        </div>
       </section>
     </main>
   );
@@ -342,19 +414,17 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
   if (!profile && loading) {
     return (
       <main className="joy-portal center-state" aria-busy="true">
-        Loading your live menu and rewards…
+        <LoadingState label="Loading your live menu and rewards…" />
       </main>
     );
   }
   if (!profile) {
     return (
       <main className="joy-portal center-state">
-        <p role="alert">
-          {message || "Your customer profile could not be loaded."}
-        </p>
-        <button onClick={() => void refresh()} type="button">
-          Try again
-        </button>
+        <ErrorState
+          message={message || "Your customer profile could not be loaded."}
+          onRetry={() => void refresh()}
+        />
       </main>
     );
   }
@@ -381,7 +451,11 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
           onClick={() => setSection("home")}
           type="button"
         >
-          <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+          <img alt="" src="/assets/joy-corner-mark.png" />
+          <span>
+            <strong>Joy Corner</strong>
+            <small>Coffee &amp; Story</small>
+          </span>
         </button>
         <div className="customer-account-actions">
           <button
@@ -410,6 +484,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
       ) : null}
       {section === "home" ? (
         <CustomerHome
+          menu={menu}
           onMenu={() => setSection("menu")}
           orders={orders}
           profile={profile}
@@ -484,12 +559,14 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
 }
 
 function CustomerHome({
+  menu,
   onMenu,
   orders,
   profile,
   rewards,
   vouchers,
 }: {
+  menu: MenuItem[];
   onMenu: () => void;
   orders: CustomerOrder[];
   profile: CustomerProfile;
@@ -503,6 +580,13 @@ function CustomerHome({
   const currentOrder = orders.find(
     (order) => !["picked_up", "rejected", "cancelled"].includes(order.status),
   );
+  const categories = Array.from(
+    menu.reduce((result, item) => {
+      result.set(item.category, (result.get(item.category) || 0) + 1);
+      return result;
+    }, new Map<string, number>()),
+  );
+  const featured = menu.filter((item) => item.available).slice(0, 4);
   return (
     <section className="customer-home">
       <div className="customer-hero">
@@ -529,26 +613,96 @@ function CustomerHome({
         />
       </div>
       <div className="home-summary-grid">
-        <article>
-          <small>Reward points</small>
-          <strong>{rewards.points_balance}</strong>
-          <span>{rewards.free_rewards_available} free rewards ready</span>
-        </article>
-        <article>
-          <small>Available vouchers</small>
-          <strong>{vouchers.length}</strong>
-          <span>Saved to your account</span>
-        </article>
-        <article>
-          <small>Current order</small>
-          <strong>{currentOrder?.order_number || "—"}</strong>
-          <span>
-            {currentOrder
+        <MetricCard
+          hint={`${rewards.free_rewards_available} free rewards ready`}
+          icon="rewards"
+          label="Reward points"
+          value={rewards.points_balance}
+        />
+        <MetricCard
+          hint="Saved to your account"
+          icon="voucher"
+          label="Available vouchers"
+          value={vouchers.length}
+        />
+        <MetricCard
+          hint={
+            currentOrder
               ? currentOrder.status.replace(/_/g, " ")
-              : "No active order"}
-          </span>
-        </article>
+              : "No active order"
+          }
+          icon="orders"
+          label="Current order"
+          value={currentOrder?.order_number || "—"}
+        />
       </div>
+      {categories.length ? (
+        <section className="customer-home-section">
+          <PageHeader
+            action={<button onClick={onMenu} type="button">View full menu</button>}
+            description="Browse the live Joy Corner menu by category."
+            eyebrow="Freshly prepared"
+            title="Explore the menu"
+          />
+          <div className="customer-category-grid">
+            {categories.map(([name, count]) => {
+              const image = menu.find(
+                (item) => item.category === name && item.image_url,
+              )?.image_url;
+              return (
+                <button key={name} onClick={onMenu} type="button">
+                  <img
+                    alt=""
+                    decoding="async"
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = "/assets/coffee-bean-field.jpg";
+                    }}
+                    src={image || "/assets/coffee-bean-field.jpg"}
+                  />
+                  <span>
+                    <strong>{name}</strong>
+                    <small>{count} {count === 1 ? "item" : "items"}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+      {featured.length ? (
+        <section className="customer-home-section">
+          <PageHeader
+            description="Available now and selected from the live menu."
+            eyebrow="Joy Corner favorites"
+            title="Featured products"
+          />
+          <div className="customer-featured-grid">
+            {featured.map((item) => (
+              <button key={item.id} onClick={onMenu} type="button">
+                <img
+                  alt={item.name}
+                  decoding="async"
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.src = "/assets/coffee-bean-field.jpg";
+                  }}
+                  src={item.image_url || "/assets/coffee-bean-field.jpg"}
+                />
+                <span>
+                  <small>{item.category}</small>
+                  <strong>{item.name}</strong>
+                  <em>
+                    {item.sizes[0]
+                      ? `From ${money.format(item.sizes[0].price)}`
+                      : "Unavailable"}
+                  </em>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
@@ -565,21 +719,15 @@ function RewardsPanel({
   const progress = rewards.eligible_purchase_count % 7;
   return (
     <section className="portal-section customer-detail-page">
-      <p className="eyebrow">Joy Corner Loyalty</p>
-      <h2>Your rewards</h2>
+      <PageHeader
+        description="Track eligible purchases and rewards calculated from your completed orders."
+        eyebrow="Joy Corner Loyalty"
+        title="Your rewards"
+      />
       <div className="reward-grid">
-        <article className="reward-stat">
-          <strong>{rewards.points_balance}</strong>
-          <span>Points</span>
-        </article>
-        <article className="reward-stat">
-          <strong>{progress}/7</strong>
-          <span>Drinks toward the next reward</span>
-        </article>
-        <article className="reward-stat">
-          <strong>{rewards.free_rewards_available}</strong>
-          <span>Free rewards</span>
-        </article>
+        <MetricCard label="Points" value={rewards.points_balance} />
+        <MetricCard label="Drinks toward the next reward" value={`${progress}/7`} />
+        <MetricCard label="Free rewards" value={rewards.free_rewards_available} />
       </div>
       <div className="loyalty-progress">
         <span style={{ width: `${(progress / 7) * 100}%` }} />
@@ -602,13 +750,11 @@ function VouchersPanel({
   const [copied, setCopied] = useState("");
   return (
     <section className="portal-section customer-detail-page">
-      <header className="voucher-page-heading">
-        <div>
-          <p className="eyebrow">From farm to cup</p>
-          <h2>Your vouchers</h2>
-          <p>Personal rewards secured to your Joy Corner account.</p>
-        </div>
-      </header>
+      <PageHeader
+        description="Personal rewards secured to your Joy Corner account."
+        eyebrow="From farm to cup"
+        title="Your vouchers"
+      />
       {vouchers.length ? (
         <div className="voucher-grid">
           {vouchers.map((voucher) => (
@@ -624,7 +770,13 @@ function VouchersPanel({
               />
               <div className="voucher-card-content">
                 <header>
-                  <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+                  <div className="voucher-card-brand">
+                    <img alt="" src="/assets/joy-corner-mark.png" />
+                    <span>
+                      <strong>Joy Corner</strong>
+                      <small>Coffee &amp; Story</small>
+                    </span>
+                  </div>
                   <span>{voucher.status}</span>
                 </header>
                 <p className="eyebrow">A Joy Corner reward for</p>
@@ -659,7 +811,11 @@ function VouchersPanel({
           ))}
         </div>
       ) : (
-        <p className="muted">No vouchers yet.</p>
+        <EmptyState
+          description="Eligible vouchers will appear here automatically when they are assigned to your account."
+          icon="voucher"
+          title="No vouchers yet"
+        />
       )}
     </section>
   );
@@ -680,8 +836,11 @@ function NotificationsPanel({
 }) {
   return (
     <section className="portal-section customer-detail-page">
-      <p className="eyebrow">Live account updates</p>
-      <h2>Notifications</h2>
+      <PageHeader
+        description="Order, reward, voucher, and account activity will appear here."
+        eyebrow="Live account updates"
+        title="Notifications"
+      />
       {notifications.length ? (
         <div className="notification-list">
           {notifications.map((notification) => (
@@ -708,7 +867,11 @@ function NotificationsPanel({
           ))}
         </div>
       ) : (
-        <p className="muted">You are all caught up.</p>
+        <EmptyState
+          description="There are no unread or historical account updates to show."
+          icon="bell"
+          title="You are all caught up"
+        />
       )}
     </section>
   );
@@ -745,8 +908,11 @@ function ProfileForm({
   }
   return (
     <section className="portal-section customer-detail-page">
-      <p className="eyebrow">Customer {profile.customer_number}</p>
-      <h2>Your profile</h2>
+      <PageHeader
+        description="Keep your contact and preference information current."
+        eyebrow={`Customer ${profile.customer_number}`}
+        title="Your profile"
+      />
       <form className="profile-grid" onSubmit={submit}>
         <label>
           Full name

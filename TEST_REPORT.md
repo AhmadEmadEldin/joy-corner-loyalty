@@ -1,40 +1,41 @@
 # Test Report
 
-Run date: 2026-07-29
+Run date: 2026-07-30
 
-## Automated gates
+## Final automated gates
 
 | Gate | Result |
 |---|---|
-| TypeScript | PASS |
-| ESLint | PASS |
-| Jest | PASS |
-| Production webpack build | PASS |
-| Playwright browser suite | PASS: 10/10 |
-| Migration 005 preflight | READY |
-| Migration 005 dry run | PASS |
-| Migration 005 staging execution | PASS |
-| Menu normalization | PASS: 165 products, 227 variants, 0 findings |
-| Owner menu import | PASS |
-| Google reporting delivery/retry/idempotency | PASS |
-| Multi-role authenticated workflow | PASS |
-| End Day and second no-op reporting sync | PASS |
-| Cloudinary connector metadata/upload/delete | PASS |
-| Cloudinary application upload/replace/remove and four-role projection | PASS |
-| Cloudinary disposable staging-asset cleanup | PASS: 0 assets remain |
+| TypeScript (`npm run lint:types`) | PASS |
+| ESLint (`npm run lint`) | PASS |
+| Git whitespace check (`git diff --check`) | PASS |
+| Jest (`npm test -- --runInBand`) | PASS: 27 suites, 126 tests |
+| Production webpack build (`npm run build`) | PASS with 2 size warnings |
+| Playwright E2E (`npm run e2e`) | PASS: 10/10 |
+| Authenticated responsive capture (`npm run verify:ui-redesign`) | PASS: 31 screenshots |
 
-## Coverage added
+## Responsive capture coverage
 
-- deterministic menu IDs, variants, display order, minor-unit pricing, duplicate
-  Sahlab classification, schema validation, and secret screening;
-- Owner-only preview/apply with digest confirmation, transaction rollback,
-  audit, archives, historical price protection, and validation failures;
-- auth rate limiting, mandatory JWT configuration, customer ownership,
-  role-filtered data, and duplicate operation defenses;
-- image magic-byte validation and safe timestamped replacement;
-- migration target/checksum/transaction guards and no synthetic history;
-- customer checkout, price authority, unavailable state, cashier confirmation
-  and payment, barista transitions, queue removal, receipt retention, voucher
-  single redemption, loyalty single award, Sheet delivery, and End Day.
+- Desktop: all 12 staff/owner sections at 1440px.
+- Tablet: POS, cashier, kitchen, and menu management at 820px.
+- Mobile: sign-in, sign-up, home, menu, product details, cart, checkout,
+  orders, tracking, receipts, unpaid receipts, rewards, vouchers,
+  notifications, and account at 390px.
+- The capture harness fails on page errors or horizontal viewport overflow.
+- Evidence uses viewport captures to match the composition of the uploaded
+  mockups rather than stitched full-page images.
+- Sensitive login inputs are sanitized before screenshots are written.
 
-The final gate commands are rerun immediately before commit.
+## Build observations
+
+Webpack reports the application entry (`app.js`, 337 KiB) and coffee-farm
+artwork (290 KiB) above its recommended 244 KiB performance threshold. These
+are warnings, not compilation failures, and are recorded as follow-up work.
+
+## Manual visual inspection
+
+Representative desktop, tablet, mobile home, cart, checkout, and tracking
+screens were reviewed after the final capture. The dark theme, responsive
+navigation, touch layouts, real-data states, and fallback imagery render
+consistently. Missing staging product photography is visibly identified in menu
+management rather than replaced with fake content.

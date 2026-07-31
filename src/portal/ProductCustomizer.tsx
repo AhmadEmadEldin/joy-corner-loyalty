@@ -115,6 +115,7 @@ export function ProductCustomizer({
         <div className="product-dialog-media">
           <img
             alt={item.name}
+            decoding="async"
             loading="lazy"
             onError={(event) => {
               event.currentTarget.src = "/assets/coffee-bean-field.jpg";

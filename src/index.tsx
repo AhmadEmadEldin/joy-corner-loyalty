@@ -4,6 +4,7 @@ import { RootApp } from "./RootApp";
 import "./app.css";
 import "./styles/joy-corner-tokens.css";
 import "./styles/joy-corner-components.css";
+import "./styles/joy-corner-responsive.css";
 
 const root = document.getElementById("root");
 

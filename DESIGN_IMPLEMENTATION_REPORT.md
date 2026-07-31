@@ -1,63 +1,84 @@
 # Design Implementation Report
 
+Run date: 2026-07-30
+
+## Outcome
+
+The Joy Corner staff and customer interfaces now reproduce the supplied
+mockups' responsive dark espresso, caramel, gold, and ivory visual system.
+Logo treatment, typography, compact navigation, image-led product cards,
+customer/order rail, mobile list cards, voucher hierarchy, and viewport density
+are extracted from the supplied PNGs. Existing repositories, permissions, real
+staging data, workflows, and API contracts remain in place. No mockup sample
+content was copied into application data.
+
 ## Source of truth
 
-The implementation uses `design/DESIGN_GUIDE.md`, `design/UI_DESIGN_SPEC.md`, the supplied full-app/menu/voucher/receipt PNGs, and real application records. Mockup names, totals, codes, dates, prices, and order numbers were not copied into production components.
+- `design/style-guide-tokens.png`, `design/full-app-ui-mockup.png`, the
+  `design/ui-menu-*.png` family, and `design/ui-voucher-coffee-farm.png` are the
+  primary visual references.
+- `design/DESIGN_REFERENCE_AUDIT.md` records how every uploaded visual maps to
+  reusable runtime views.
+- `design/NEW_DESIGN_SYSTEM.md` defines the visual language.
+- `design/COMPONENT_LIBRARY.md` describes shared UI primitives.
+- `design/RESPONSIVE_GUIDE.md` and `design/ACCESSIBILITY_GUIDE.md` define
+  viewport and interaction behavior.
+- `src/styles/joy-corner-tokens.css` contains the reusable tokens.
+- `src/styles/joy-corner-responsive.css`, imported last, is the final responsive
+  compatibility layer.
 
-## Implemented system
+## Implemented surfaces
 
-- Black/espresso base with caramel/gold actions and ivory/cream type.
-- Playfair Display headings and Poppins operational text.
-- Central tokens for color, type, spacing, radii, shadows, glass, motion, and status.
-- Grouped desktop staff sidebar, sticky utility bar, tablet/mobile drawer, and real name/role.
-- Reusable dark panels, metrics, status/payment badges, queue cards, tables, empty states, error messages, dialogs, product cards, cart summaries, voucher cards, and receipt surfaces.
-- Responsive layouts at mobile, tablet, desktop, and wide breakpoints.
-- Visible focus rings, 44px targets, semantic labels, status text plus color, reduced motion, and no tested horizontal overflow.
-- Coffee photography on authentication and fallback product imagery.
-- Selective coffee-farm artwork on vouchers, receipts, and staff navigation.
-- Temporarily unavailable and sold-out product overlays with disabled actions.
-- Farm-style customer voucher cards with customer, benefit, code copy, expiry, terms, and status.
-- Farm-style digital receipt with low-ink print rules retained in `src/app.css`.
+- Staff: sign-in shell, owner overview, POS/new order, cashier queue, kitchen
+  queue, orders and receipts, customers, rewards, vouchers, menu and images,
+  analytics, End Day, and system readiness.
+- Customer: sign-in, sign-up, recovery guidance, home, menu, product
+  customization, full-screen mobile cart, checkout, orders, live tracking,
+  receipts, unpaid receipts, rewards, vouchers, notifications, and profile.
+- Shared: SVG icon system, page headers, metrics, loading, empty, error, and
+  phrase-confirmation dialog states.
+
+## Responsive behavior
+
+- Mobile customer navigation uses a five-item fixed bottom bar and an
+  accessible More drawer.
+- The mobile cart becomes a focus-trapped full-screen surface.
+- Staff navigation becomes a focus-managed drawer on tablet/mobile.
+- Tablet layouts preserve operational context while reducing columns.
+- Desktop and wide layouts use the mockups' compact staff navigation,
+  four-column desktop/five-column wide POS grid, and persistent order rail
+  without horizontal overflow.
+
+## Accessibility and interaction
+
+- Semantic navigation and dialog roles, explicit labels, visible focus rings,
+  keyboard focus traps, Escape handling, focus restoration, 44px touch targets,
+  status text in addition to color, reduced-motion handling, and low-ink receipt
+  print overrides are included.
+- Destructive End Day and image removal actions require typed confirmation.
 
 ## Browser evidence
 
-Sanitized staging screenshots are stored in `artifacts/staging-screenshots`.
+Sanitized screenshots are stored in `artifacts/ui-redesign-screenshots`:
 
-Verified against the local frontend:
+- 12 desktop staff screenshots
+- 4 tablet staff screenshots
+- 15 mobile customer screenshots
 
-- Desktop staff sign-in.
-- Mobile customer sign-in and sign-up.
-- Authenticated staging render of owner Overview, New Order, Cashier, Kitchen,
-  Orders/receipts, Customers, Rewards, Vouchers, Menu & Images, Analytics, End
-  of Day, and System.
-- Authenticated staging render of tablet POS, Cashier, Barista, and Menu.
-- Staging mobile customer Home, Menu, Product Details, Cart, Checkout, Orders,
-  Receipts, Rewards, Voucher, and Profile plus sanitized sign-in/sign-up.
+The authenticated capture checks browser errors and horizontal overflow while
+exercising real staging responses.
 
-## Visual QA findings repaired
+## React implementation review
 
-- Authentication was still inheriting the old light theme; it was replaced with the dark coffee-photo glass design.
-- Global `main` sizing introduced light outer gutters; staff/auth shells now explicitly occupy the viewport.
-- A global button rule overrode inactive sidebar styles; navigation now retains dark glass states.
-- The customer drawer header intercepted navigation clicks because it inherited global sticky-header rules; its position is now reset within the drawer.
-- A public asset URL was initially resolved as a CSS module path during hot reload; it now uses a build-resolvable asset path.
+The redesigned TSX was reviewed using the React best-practices checklist.
+Derived menu data is memoized, cart actions use functional state updates,
+initialization is idempotent under React Strict Mode, images use lazy/async
+decoding, expensive below-fold content uses content visibility, and overlays
+clean up document listeners and body scroll state.
 
-## Remaining visual work
+## Production note
 
-The backend Cloudinary signed upload, replacement, removal, and fallback
-acceptance test now passes. Production-quality product photography is a content
-selection task; existing fallbacks and all responsive role layouts are
-verified.
-
-## 2026-07-28 verification
-
-- Local Playwright production-build smoke suite: 10/10 passed across desktop
-  Chromium and Pixel 5 emulation.
-- Startup network noise was removed by restoring a server session only when a
-  cached presentation session exists.
-- Root-level overflow protection fixed transient login-shell overflow.
-- The supplied style guide, full-app mockup, and voucher reference were
-  visually reviewed.
-- The referenced receipt PNG and several referenced menu PNGs are absent from
-  the checked-out design directory; exact comparison remains pending.
-
+The work is ready for staging UI review, not production release. Product images
+currently use the approved coffee fallback wherever staging records have no
+Cloudinary image. Backend capabilities that do not exist were not simulated;
+they are listed in `REMAINING_UI_RISKS.md`.

@@ -11,6 +11,11 @@ import {
   updateOwnerMenuSize,
   uploadOwnerMenuImage,
 } from "./repository";
+import {
+  ConfirmDialog,
+  EmptyState,
+  LoadingState,
+} from "../components/JoyUI";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -20,6 +25,8 @@ export function OwnerMenuManager() {
   const [items, setItems] = useState<OwnerMenuItem[]>([]);
   const [selected, setSelected] = useState<OwnerMenuItem | null>(null);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [missingOnly, setMissingOnly] = useState(false);
   const [message, setMessage] = useState("Loading owner menu…");
   const [creating, setCreating] = useState(false);
@@ -54,11 +61,22 @@ export function OwnerMenuManager() {
     return items.filter(
       (item) =>
         (!missingOnly || !item.image_url) &&
+        (categoryFilter === "all" || item.category_id === categoryFilter) &&
+        (statusFilter === "all" ||
+          item.availability_status === statusFilter) &&
         (!normalized ||
           item.name.toLowerCase().includes(normalized) ||
           item.category.toLowerCase().includes(normalized)),
     );
-  }, [items, missingOnly, query]);
+  }, [categoryFilter, items, missingOnly, query, statusFilter]);
+  const categories = useMemo(
+    () =>
+      Array.from(
+        new Map(items.map((item) => [item.category_id, item.category])),
+      ),
+    [items],
+  );
+  const loading = !items.length && message.startsWith("Loading");
 
   async function previewImport(file: File | undefined) {
     if (!file) return;
@@ -146,6 +164,35 @@ export function OwnerMenuManager() {
               value={query}
             />
           </label>
+          <label>
+            Category
+            <select
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              value={categoryFilter}
+            >
+              <option value="all">All categories</option>
+              {categories.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Status
+            <select
+              onChange={(event) => setStatusFilter(event.target.value)}
+              value={statusFilter}
+            >
+              <option value="all">All statuses</option>
+              <option value="available">Available</option>
+              <option value="temporarily_unavailable">
+                Temporarily unavailable
+              </option>
+              <option value="sold_out">Sold out</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
           <label className="owner-menu-checkbox">
             <input
               checked={missingOnly}
@@ -156,7 +203,7 @@ export function OwnerMenuManager() {
           </label>
         </div>
       </header>
-      {message ? (
+      {message && !loading ? (
         <p aria-live="polite" className="portal-message">
           {message}
         </p>
@@ -239,6 +286,9 @@ export function OwnerMenuManager() {
           )}
         </section>
       ) : null}
+      {loading ? (
+        <LoadingState label="Loading owner catalog…" />
+      ) : (
       <div className="owner-menu-layout">
         <div aria-label="Menu products" className="owner-menu-list">
           {filtered.map((item) => (
@@ -251,6 +301,8 @@ export function OwnerMenuManager() {
             >
               <img
                 alt=""
+                decoding="async"
+                loading="lazy"
                 onError={(event) => {
                   event.currentTarget.src = "/assets/coffee-bean-field.jpg";
                 }}
@@ -264,7 +316,11 @@ export function OwnerMenuManager() {
             </button>
           ))}
           {!filtered.length ? (
-            <p className="muted">No matching products.</p>
+            <EmptyState
+              description="Adjust the category, status, image, or search filters."
+              icon="search"
+              title="No matching products"
+            />
           ) : null}
         </div>
         {selected ? (
@@ -275,12 +331,14 @@ export function OwnerMenuManager() {
             onChanged={async () => refresh(selected.id)}
           />
         ) : (
-          <div className="owner-menu-empty">
-            <img alt="" src="/assets/coffee-bean-field.jpg" />
-            <p>Select a product to manage its details and image.</p>
-          </div>
+          <EmptyState
+            description="Select a product to manage its details, availability, prices, and image."
+            icon="menu"
+            title="Choose a product"
+          />
         )}
       </div>
+      )}
     </section>
   );
 }
@@ -296,6 +354,7 @@ function OwnerMenuEditor({
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmingImageRemoval, setConfirmingImageRemoval] = useState(false);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -346,12 +405,12 @@ function OwnerMenuEditor({
   }
 
   async function removeImage() {
-    if (!window.confirm(`Remove the image for ${item.name}?`)) return;
     setBusy(true);
     try {
       await removeOwnerMenuImage(item.id, item.image_url);
       await onChanged();
       setMessage("Product image removed.");
+      setConfirmingImageRemoval(false);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -380,7 +439,7 @@ function OwnerMenuEditor({
             <button
               className="button-danger"
               disabled={busy}
-              onClick={() => void removeImage()}
+              onClick={() => setConfirmingImageRemoval(true)}
               type="button"
             >
               Remove image
@@ -511,6 +570,16 @@ function OwnerMenuEditor({
           {message}
         </p>
       ) : null}
+      <ConfirmDialog
+        busy={busy}
+        confirmLabel="Remove image"
+        description={`Remove the current image for ${item.name}? The menu will use its fallback artwork until a replacement is uploaded.`}
+        onCancel={() => setConfirmingImageRemoval(false)}
+        onConfirm={() => void removeImage()}
+        open={confirmingImageRemoval}
+        phrase="REMOVE IMAGE"
+        title="Remove product image"
+      />
     </form>
   );
 }

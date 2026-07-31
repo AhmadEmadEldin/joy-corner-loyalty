@@ -1,5 +1,6 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import type { StaffProfile } from "../portal/repository";
+import { JoyIcon, type JoyIconName } from "./JoyUI";
 
 export type StaffSection =
   | "overview"
@@ -17,6 +18,7 @@ export type StaffSection =
 
 type NavItem = {
   badge?: number;
+  icon: JoyIconName;
   id: StaffSection;
   label: string;
   roles: StaffProfile["role"][];
@@ -26,23 +28,27 @@ const groups: Array<{ label: string; items: Omit<NavItem, "badge">[] }> = [
   {
     label: "Operations",
     items: [
-      { id: "overview", label: "Overview", roles: ["owner", "manager"] },
+      { icon: "home", id: "overview", label: "Overview", roles: ["owner", "manager"] },
       {
+        icon: "newOrder",
         id: "new_order",
         label: "New Order",
         roles: ["owner", "manager", "cashier", "waiter"],
       },
       {
+        icon: "cashier",
         id: "cashier",
         label: "Cashier",
         roles: ["owner", "manager", "cashier"],
       },
       {
+        icon: "kitchen",
         id: "kitchen",
         label: "Kitchen",
         roles: ["owner", "manager", "barista"],
       },
       {
+        icon: "orders",
         id: "orders",
         label: "Orders",
         roles: ["owner", "manager", "cashier"],
@@ -53,26 +59,27 @@ const groups: Array<{ label: string; items: Omit<NavItem, "badge">[] }> = [
     label: "Customers",
     items: [
       {
+        icon: "customers",
         id: "customers",
         label: "Customers",
         roles: ["owner", "manager", "cashier"],
       },
-      { id: "rewards", label: "Rewards", roles: ["owner", "manager"] },
-      { id: "vouchers", label: "Vouchers", roles: ["owner", "manager"] },
+      { icon: "rewards", id: "rewards", label: "Rewards", roles: ["owner", "manager"] },
+      { icon: "voucher", id: "vouchers", label: "Vouchers", roles: ["owner", "manager"] },
     ],
   },
   {
     label: "Catalog",
     items: [
-      { id: "menu", label: "Menu & Images", roles: ["owner"] },
+      { icon: "menu", id: "menu", label: "Menu & Images", roles: ["owner"] },
     ],
   },
   {
     label: "Business",
     items: [
-      { id: "analytics", label: "Analytics", roles: ["owner", "manager"] },
-      { id: "end_day", label: "End of Day", roles: ["owner", "manager"] },
-      { id: "system", label: "System", roles: ["owner"] },
+      { icon: "analytics", id: "analytics", label: "Analytics", roles: ["owner", "manager"] },
+      { icon: "endDay", id: "end_day", label: "End of Day", roles: ["owner", "manager"] },
+      { icon: "settings", id: "system", label: "System", roles: ["owner"] },
     ],
   },
 ];
@@ -95,13 +102,40 @@ export function StaffAppShell({
   profile: StaffProfile;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!drawerOpen) return;
     const previous = document.body.style.overflow;
+    const menuButton = menuButtonRef.current;
     document.body.style.overflow = "hidden";
+    const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.[0]?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previous;
+      document.removeEventListener("keydown", handleKeyDown);
+      menuButton?.focus();
     };
   }, [drawerOpen]);
 
@@ -129,7 +163,7 @@ export function StaffAppShell({
                 type="button"
               >
                 <span className="staff-nav-icon" aria-hidden="true">
-                  {item.label.slice(0, 1)}
+                  <JoyIcon name={item.icon} size={18} />
                 </span>
                 <span>{item.label}</span>
                 {badges[item.id] ? <em>{badges[item.id]}</em> : null}
@@ -149,7 +183,11 @@ export function StaffAppShell({
           onClick={() => navigate("overview")}
           type="button"
         >
-          <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+          <img alt="" src="/assets/joy-corner-mark.png" />
+          <span>
+            <strong>Joy Corner</strong>
+            <small>Coffee &amp; Story</small>
+          </span>
         </button>
         <nav aria-label="Staff navigation">{navigation}</nav>
         <div className="staff-user-card">
@@ -159,7 +197,7 @@ export function StaffAppShell({
             <small>{profile.role}</small>
           </div>
           <button aria-label="Sign out" onClick={onSignOut} type="button">
-            ↗
+            <JoyIcon name="logout" size={18} />
           </button>
         </div>
       </aside>
@@ -171,22 +209,33 @@ export function StaffAppShell({
             aria-label="Open staff navigation"
             className="staff-menu-button"
             onClick={() => setDrawerOpen(true)}
+            ref={menuButtonRef}
             type="button"
           >
-            ☰
+            <JoyIcon name="menu" />
           </button>
+          <div className="staff-topbar-context">
+            <small>{profile.role}</small>
+            <strong>
+              {groups
+                .flatMap((group) => group.items)
+                .find((item) => item.id === active)?.label || "Workspace"}
+            </strong>
+          </div>
           <label className="staff-global-search">
             <span className="sr-only">Search the current workspace</span>
+            <JoyIcon name="search" size={18} />
             <input placeholder="Search orders, products, customers…" type="search" />
           </label>
           <label className="staff-branch-select">
             <span className="sr-only">Branch</span>
+            <JoyIcon name="branch" size={18} />
             <select aria-label="Branch" defaultValue="joy-corner">
               <option value="joy-corner">Joy Corner</option>
             </select>
           </label>
           <button aria-label="Notifications" className="staff-notifications" type="button">
-            ◌
+            <JoyIcon name="bell" />
           </button>
         </header>
         {message ? (
@@ -209,16 +258,23 @@ export function StaffAppShell({
             aria-label="Staff navigation"
             aria-modal="true"
             className="staff-drawer"
+            ref={drawerRef}
             role="dialog"
           >
             <header>
-              <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+              <div className="staff-drawer-brand">
+                <img alt="" src="/assets/joy-corner-mark.png" />
+                <span>
+                  <strong>Joy Corner</strong>
+                  <small>Coffee &amp; Story</small>
+                </span>
+              </div>
               <button
                 aria-label="Close navigation"
                 onClick={() => setDrawerOpen(false)}
                 type="button"
               >
-                ×
+                <JoyIcon name="close" />
               </button>
             </header>
             <nav>{navigation}</nav>

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { lineTotal } from "./CustomerMenu";
 import type {
   CartLine,
@@ -48,6 +48,7 @@ export function CustomerCheckout({
   profile: CustomerProfile;
   vouchers: CustomerVoucher[];
 }) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
   const [voucherCode, setVoucherCode] = useState("");
   const [paymentMethod, setPaymentMethod] =
@@ -61,11 +62,38 @@ export function CustomerCheckout({
   );
 
   useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) onClose();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    shellRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-label="Close checkout"]')
+      ?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !shellRef.current) return;
+      const focusable = Array.from(
+        shellRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [busy, onClose]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -76,7 +104,13 @@ export function CustomerCheckout({
 
   return (
     <div className="checkout-layer">
-      <div className="checkout-shell" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+      <div
+        aria-labelledby="checkout-title"
+        aria-modal="true"
+        className="checkout-shell"
+        ref={shellRef}
+        role="dialog"
+      >
         <header className="checkout-header">
           <div>
             <p className="eyebrow">Secure checkout</p>
