@@ -1822,7 +1822,6 @@ async function seedStaffAccounts(): Promise<void> {
     console.log(`Synchronized staff account: ${email}`);
   }
 }
-
 async function start(): Promise<void> {
   await applyNeonMigrations();
   await seedStaffAccounts();
