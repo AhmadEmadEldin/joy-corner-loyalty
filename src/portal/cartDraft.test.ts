@@ -3,6 +3,7 @@ import type { CartLine } from "./repository";
 
 const line: CartLine = {
   item: {
+    availability_state: "available",
     available: true,
     category: "Coffee",
     description: "",

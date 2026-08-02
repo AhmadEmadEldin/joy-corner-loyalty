@@ -28,6 +28,7 @@ import {
   loadMenu,
   loadVoucherRequests,
   MenuItem,
+  MenuSize,
   OwnerOrder,
   OwnerOverviewStats,
   OwnerVoucher,
@@ -160,6 +161,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
   const [message, setMessage] = useState("Loading operational queues…");
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
   const [endingDay, setEndingDay] = useState(false);
+  const [menuRefreshVersion, setMenuRefreshVersion] = useState(0);
 
   async function refreshQueues(role: StaffProfile["role"]) {
     try {
@@ -213,7 +215,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         void refreshQueues(role);
-        void loadMenu().then(setMenu).catch(() => undefined);
+        setMenuRefreshVersion((current) => current + 1);
       }, 150);
     });
     return () => {
@@ -491,6 +493,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
       {tab === "new_order" && canCreate ? (
         <StaffOrderForm
           customers={customers}
+          menuRefreshVersion={menuRefreshVersion}
           onCreated={async (orderNumber) => {
             setMessage(`Order ${orderNumber} was sent to the cashier for confirmation.`);
             if (profile) await refreshQueues(profile.role);
@@ -781,9 +784,11 @@ function OwnerSystemStatus() {
 
 function StaffOrderForm({
   customers: _customers,
+  menuRefreshVersion,
   onCreated,
 }: {
   customers: Array<Record<string, unknown>>;
+  menuRefreshVersion: number;
   onCreated: (orderNumber: string) => Promise<void>;
 }) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -805,7 +810,7 @@ function StaffOrderForm({
     void loadMenu()
       .then(setMenu)
       .catch((error) => setMessage(getMessage(error)));
-  }, []);
+  }, [menuRefreshVersion]);
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(menu.map((item) => item.category).filter(Boolean)))],
     [menu],
@@ -1069,7 +1074,7 @@ function StaffOrderForm({
                 <div key={line.lineId} className="staff-cart-line">
                   <div className="staff-cart-line-info">
                     <strong>{line.item.name}</strong>
-                    <small>{line.size.sizeName} — {money.format(line.size.price)}</small>
+                    <small>{line.size.size_name} — {money.format(line.size.price)}</small>
                   </div>
                   <div className="staff-cart-line-actions">
                     <button className="button-secondary" onClick={() => updateLineQuantity(line.lineId, -1)} type="button" style={{ padding: "0.2rem 0.5rem", minWidth: "2rem" }}>−</button>
@@ -1109,7 +1114,7 @@ function StaffOrderForm({
                   style={{ display: "flex", justifyContent: "space-between", padding: "0.75rem 1rem", borderRadius: "6px", border: "1px solid var(--border, #ccc)", background: "var(--surface, #fff)", cursor: "pointer" }}
                   type="button"
                 >
-                  <span>{size.sizeName}</span>
+                  <span>{size.size_name}</span>
                   <strong>{money.format(size.price)}</strong>
                 </button>
               ))}
