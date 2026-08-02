@@ -1771,33 +1771,57 @@ if (isProduction) {
 
 async function seedStaffAccounts(): Promise<void> {
   const staff = [
-    { email: "owner@joycorner.com", envKey: "SEED_OWNER_PASSWORD", role: "owner" as const, fullName: "Owner" },
-    { email: "cashier@joycorner.com", envKey: "SEED_CASHIER_PASSWORD", role: "cashier" as const, fullName: "Cashier" },
-    { email: "waiter@joycorner.com", envKey: "SEED_WAITER_PASSWORD", role: "waiter" as const, fullName: "Waiter" },
-    { email: "barista@joycorner.com", envKey: "SEED_BARISTA_PASSWORD", role: "barista" as const, fullName: "Barista" },
+    {
+      email: "owner@joycorner.com",
+      envKey: "SEED_OWNER_PASSWORD",
+      role: "owner" as const,
+      fullName: "Owner",
+    },
+    {
+      email: "cashier@joycorner.com",
+      envKey: "SEED_CASHIER_PASSWORD",
+      role: "cashier" as const,
+      fullName: "Cashier",
+    },
+    {
+      email: "waiter@joycorner.com",
+      envKey: "SEED_WAITER_PASSWORD",
+      role: "waiter" as const,
+      fullName: "Waiter",
+    },
+    {
+      email: "barista@joycorner.com",
+      envKey: "SEED_BARISTA_PASSWORD",
+      role: "barista" as const,
+      fullName: "Barista",
+    },
   ];
+
   for (const { email, envKey, role, fullName } of staff) {
     const password = process.env[envKey];
+
     if (!password) {
-      console.warn(`Skipping seed for ${email}: ${envKey} is not set.`);
+      console.warn(`Skipping staff sync for ${email}: ${envKey} is not set.`);
       continue;
     }
-    const existing = await query<{ id: string }>(
-      "select id from accounts where email=$1 limit 1",
-      [email],
-    );
-    if (existing[0]) continue;
+
     const passwordHash = await hashPassword(password);
+
     await query(
-      `insert into accounts(email,password_hash,full_name,role)
-       values($1,$2,$3,$4)
-       on conflict(email) do nothing`,
+      `insert into accounts(email,password_hash,full_name,role,active)
+       values($1,$2,$3,$4,true)
+       on conflict(email) do update set
+         password_hash=excluded.password_hash,
+         full_name=excluded.full_name,
+         role=excluded.role,
+         active=true,
+         updated_at=now()`,
       [email, passwordHash, fullName, role],
     );
-    console.log(`Seeded staff account: ${email}`);
+
+    console.log(`Synchronized staff account: ${email}`);
   }
 }
-
 async function start(): Promise<void> {
   await applyNeonMigrations();
   await seedStaffAccounts();
