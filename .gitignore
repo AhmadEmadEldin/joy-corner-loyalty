@@ -147,3 +147,4 @@ dist
 .dev-logs/
 devserver.log
 supabase/
+.vercel

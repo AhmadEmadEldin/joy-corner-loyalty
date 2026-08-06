@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AppIcon, type AppIconName } from "./AppIcon";
+import { BrandLogo } from "./BrandLogo";
 
 export type CustomerSection =
   | "home"
@@ -14,6 +17,7 @@ export type CustomerSection =
 
 type NavigationItem = {
   badge?: number;
+  icon: AppIconName;
   id: CustomerSection;
   label: string;
 };
@@ -26,17 +30,21 @@ type CustomerNavigationProps = {
 };
 
 const items: Array<Omit<NavigationItem, "badge">> = [
-  { id: "home", label: "Home" },
-  { id: "menu", label: "Menu" },
-  { id: "cart", label: "My cart" },
-  { id: "orders", label: "My orders" },
-  { id: "receipts", label: "Receipts" },
-  { id: "unpaid", label: "Unpaid receipts" },
-  { id: "rewards", label: "Rewards" },
-  { id: "vouchers", label: "Vouchers" },
-  { id: "notifications", label: "Notifications" },
-  { id: "profile", label: "Profile" },
+  { id: "home", icon: "home", label: "Home" },
+  { id: "menu", icon: "menu", label: "Menu" },
+  { id: "cart", icon: "cart", label: "My cart" },
+  { id: "orders", icon: "orders", label: "My orders" },
+  { id: "receipts", icon: "receipts", label: "Receipts" },
+  { id: "unpaid", icon: "unpaid", label: "Unpaid receipts" },
+  { id: "rewards", icon: "rewards", label: "Rewards" },
+  { id: "vouchers", icon: "vouchers", label: "Vouchers" },
+  { id: "notifications", icon: "notifications", label: "Notifications" },
+  { id: "profile", icon: "profile", label: "Profile" },
 ];
+
+const mobileItems = items.filter(({ id }) =>
+  ["home", "menu", "orders", "rewards", "profile"].includes(id),
+);
 
 export function CustomerNavigation({
   active,
@@ -93,9 +101,9 @@ export function CustomerNavigation({
     <>
       <button
         aria-expanded={open}
-        aria-label="Open navigation"
-        className="customer-menu-trigger"
-        onClick={() => setOpen(true)}
+        aria-label={open ? "Close navigation" : "Open navigation"}
+        className={`customer-menu-trigger${open ? " open" : ""}`}
+        onClick={() => setOpen((current) => !current)}
         ref={triggerRef}
         type="button"
       >
@@ -116,7 +124,7 @@ export function CustomerNavigation({
           />
         ))}
       </nav>
-      {open ? (
+      {open ? createPortal(
         <div className="customer-drawer-layer">
           <button
             aria-label="Close navigation"
@@ -132,15 +140,7 @@ export function CustomerNavigation({
             role="dialog"
           >
             <header>
-              <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
-              <button
-                aria-label="Close navigation"
-                className="drawer-close"
-                onClick={() => setOpen(false)}
-                type="button"
-              >
-                ×
-              </button>
+              <BrandLogo compact />
             </header>
             <nav aria-label="Mobile customer sections">
               {items.map((item) => (
@@ -153,12 +153,31 @@ export function CustomerNavigation({
                 />
               ))}
             </nav>
-            <button className="drawer-signout" onClick={onSignOut} type="button">
+            <button
+              className="drawer-signout"
+              onClick={onSignOut}
+              type="button"
+            >
               Sign out
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
+      <nav
+        aria-label="Mobile customer sections"
+        className="customer-mobile-nav"
+      >
+        {mobileItems.map((item) => (
+          <NavigationButton
+            active={active === item.id}
+            badge={badges[item.id]}
+            item={item}
+            key={item.id}
+            onClick={() => navigate(item.id)}
+          />
+        ))}
+      </nav>
     </>
   );
 }
@@ -181,8 +200,13 @@ function NavigationButton({
       onClick={onClick}
       type="button"
     >
+      <span aria-hidden="true" className="customer-navigation-icon">
+        <AppIcon name={item.icon} />
+      </span>
       <span>{item.label}</span>
-      {badge ? <span className="nav-badge">{badge > 99 ? "99+" : badge}</span> : null}
+      {badge ? (
+        <span className="nav-badge">{badge > 99 ? "99+" : badge}</span>
+      ) : null}
     </button>
   );
 }

@@ -8,6 +8,7 @@ import {
   updateOwnerMenuSize,
   uploadOwnerMenuImage,
 } from "./repository";
+import { ProductImage } from "./ProductImage";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -50,16 +51,28 @@ export function OwnerMenuManager() {
     );
   }, [items, missingOnly, query]);
 
-  const categories = useMemo(
-    () => {
-      const seen = new Map<string, string>();
-      items.forEach((item) => {
-        if (!seen.has(item.category)) seen.set(item.category, item.category_id);
-      });
-      return Array.from(seen.entries()).map(([name, id]) => ({ id, name }));
-    },
-    [items],
+  const categories = useMemo(() => {
+    const seen = new Map<string, string>();
+    items.forEach((item) => {
+      if (!seen.has(item.category)) seen.set(item.category, item.category_id);
+    });
+    return Array.from(seen.entries()).map(([name, id]) => ({ id, name }));
+  }, [items]);
+  const imageCoverage = useMemo(
+    () =>
+      categories.map((category) => {
+        const categoryItems = items.filter(
+          (item) => item.category_id === category.id,
+        );
+        return {
+          ...category,
+          missing: categoryItems.filter((item) => !item.image_url).length,
+          total: categoryItems.length,
+        };
+      }),
+    [categories, items],
   );
+  const missingImageCount = items.filter((item) => !item.image_url).length;
 
   return (
     <section className="portal-section owner-menu-manager">
@@ -68,9 +81,23 @@ export function OwnerMenuManager() {
           <p className="eyebrow">Owner catalog tools</p>
           <h2>Menu and product images</h2>
           <p className="muted">
-            {items.length} products ·{" "}
-            {items.filter((item) => !item.image_url).length} missing images
+            {items.length} products · {missingImageCount} missing images
           </p>
+          {missingImageCount ? (
+            <details className="owner-image-coverage">
+              <summary>Review image coverage by category</summary>
+              <ul>
+                {imageCoverage.map((category) => (
+                  <li key={category.id}>
+                    <span>{category.name}</span>
+                    <strong>
+                      {category.missing} of {category.total} needed
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
         <div className="owner-menu-filters">
           <label>
@@ -120,21 +147,19 @@ export function OwnerMenuManager() {
               onClick={() => setSelected(item)}
               type="button"
             >
-              <img
-                alt=""
-                onError={(event) => {
-                  event.currentTarget.src = "/assets/joy-corner-mark.png";
-                }}
-                src={item.image_url || "/assets/joy-corner-mark.png"}
-              />
+              <ProductImage alt={item.name} size="sm" src={item.image_url} />
               <span>
                 <strong>{item.name}</strong>
                 <small>{item.category}</small>
                 {item.availability_state !== "available" ? (
-                  <small className={`availability-badge availability-badge--${item.availability_state}`}>
-                    {item.availability_state === "sold_out" ? "Sold out"
-                      : item.availability_state === "temporarily_unavailable" ? "Paused"
-                      : "Archived"}
+                  <small
+                    className={`availability-badge availability-badge--${item.availability_state}`}
+                  >
+                    {item.availability_state === "sold_out"
+                      ? "Sold out"
+                      : item.availability_state === "temporarily_unavailable"
+                        ? "Paused"
+                        : "Archived"}
                   </small>
                 ) : null}
               </span>
@@ -153,7 +178,7 @@ export function OwnerMenuManager() {
           />
         ) : (
           <div className="owner-menu-empty">
-            <img alt="" src="/assets/joy-corner-mark.png" />
+            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
             <p>Select a product to manage its details and image.</p>
           </div>
         )}
@@ -179,11 +204,9 @@ function OwnerMenuEditor({
     setMessage("");
     try {
       await updateOwnerMenuItem({
-        availabilityState: String(form.get("availabilityState") || "available") as
-          | "available"
-          | "temporarily_unavailable"
-          | "sold_out"
-          | "archived",
+        availabilityState: String(
+          form.get("availabilityState") || "available",
+        ) as "available" | "temporarily_unavailable" | "sold_out" | "archived",
         description: String(form.get("description") || ""),
         id: item.id,
         loyaltyEligible: form.get("loyaltyEligible") === "on",
@@ -234,9 +257,10 @@ function OwnerMenuEditor({
   return (
     <form className="owner-menu-editor" onSubmit={save}>
       <div className="owner-menu-image-preview">
-        <img
+        <ProductImage
           alt={item.image_url ? item.name : `${item.name} image missing`}
-          src={item.image_url || "/assets/joy-corner-mark.png"}
+          size="lg"
+          src={item.image_url}
         />
         <div>
           <label className="button-like">
@@ -293,7 +317,9 @@ function OwnerMenuEditor({
             name="availabilityState"
           >
             <option value="available">Available</option>
-            <option value="temporarily_unavailable">Temporarily unavailable</option>
+            <option value="temporarily_unavailable">
+              Temporarily unavailable
+            </option>
             <option value="sold_out">Sold out</option>
             <option value="archived">Archived</option>
           </select>
@@ -403,7 +429,9 @@ function OwnerMenuCreator({
         <select name="categoryId" required>
           <option value="">Select category…</option>
           {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
           ))}
         </select>
       </label>

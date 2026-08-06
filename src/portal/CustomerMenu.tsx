@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, MenuItem } from "./repository";
 import { ProductCustomizer } from "./ProductCustomizer";
 import { ProductImage } from "./ProductImage";
+import { MenuCategoryGallery } from "./MenuCategoryGallery";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -68,7 +69,11 @@ export function CustomerMenu({
 
   function saveLine(line: CartLine) {
     if (editing) {
-      onCartChange(cart.map((current) => (current.lineId === line.lineId ? line : current)));
+      onCartChange(
+        cart.map((current) =>
+          current.lineId === line.lineId ? line : current,
+        ),
+      );
     } else {
       onCartChange([...cart, line]);
     }
@@ -83,7 +88,9 @@ export function CustomerMenu({
     }
     onCartChange(
       cart.map((line) =>
-        line.lineId === lineId ? { ...line, quantity: Math.min(99, nextQuantity) } : line,
+        line.lineId === lineId
+          ? { ...line, quantity: Math.min(99, nextQuantity) }
+          : line,
       ),
     );
   }
@@ -107,6 +114,13 @@ export function CustomerMenu({
               />
             </label>
           </header>
+          {category === "All" && !query.trim() ? (
+            <MenuCategoryGallery
+              categories={categories.filter((name) => name !== "All")}
+              items={menu}
+              onSelect={setCategory}
+            />
+          ) : null}
           <nav aria-label="Menu categories" className="category-rail">
             {categories.map((name) => (
               <button
@@ -137,10 +151,13 @@ export function CustomerMenu({
                 const isUnavailable = item.availability_state !== "available";
                 const cardClass = `kiosk-product-card${isUnavailable ? " product-card--unavailable" : ""}`;
                 const overlayLabel =
-                  item.availability_state === "temporarily_unavailable" ? "Temporarily unavailable"
-                  : item.availability_state === "sold_out" ? "Sold out"
-                  : item.availability_state === "archived" ? "Unavailable"
-                  : "";
+                  item.availability_state === "temporarily_unavailable"
+                    ? "Temporarily unavailable"
+                    : item.availability_state === "sold_out"
+                      ? "Sold out"
+                      : item.availability_state === "archived"
+                        ? "Unavailable"
+                        : "";
                 return (
                   <article className={cardClass} key={item.id}>
                     <button
@@ -159,15 +176,21 @@ export function CustomerMenu({
                       {isUnavailable ? (
                         <div className="product-card__availability-overlay">
                           <span className="product-card__availability-icon">
-                            {item.availability_state === "sold_out" ? "!" : "\u23F8"}
+                            {item.availability_state === "sold_out"
+                              ? "!"
+                              : "\u23F8"}
                           </span>
-                          <span className="product-card__availability-text">{overlayLabel}</span>
+                          <span className="product-card__availability-text">
+                            {overlayLabel}
+                          </span>
                         </div>
                       ) : null}
                       <span className="product-card-copy">
                         <small>{item.category}</small>
                         <strong>{item.name}</strong>
-                        <span>{item.description || "Freshly prepared to order."}</span>
+                        <span>
+                          {item.description || "Freshly prepared to order."}
+                        </span>
                       </span>
                     </button>
                     <footer>
@@ -176,7 +199,9 @@ export function CustomerMenu({
                           ? `From ${money.format(item.sizes[0].price)}`
                           : "Unavailable"}
                       </span>
-                      {item.loyalty_eligible ? <small>Reward eligible</small> : null}
+                      {item.loyalty_eligible ? (
+                        <small>Reward eligible</small>
+                      ) : null}
                       <button
                         aria-disabled={isUnavailable || !item.sizes.length}
                         disabled={isUnavailable || !item.sizes.length}
@@ -199,6 +224,24 @@ export function CustomerMenu({
               </button>
             </div>
           )}
+          <aside
+            className="customer-brand-story"
+            aria-label="The Joy Corner story"
+          >
+            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
+            <div>
+              <p className="eyebrow">From farm to cup</p>
+              <h3>Every cup tells a story</h3>
+              <p>
+                Carefully selected beans, warm hospitality, and drinks made for
+                the small moments that bring people together.
+              </p>
+            </div>
+            <div className="customer-brand-values" aria-label="Our values">
+              <span>Est. 2016</span>
+              <span>Brewed with care</span>
+            </div>
+          </aside>
         </section>
         <CartPanel
           cart={cart}
@@ -214,8 +257,14 @@ export function CustomerMenu({
         />
       </div>
       {cart.length ? (
-        <button className="mobile-cart-button" onClick={onCheckout} type="button">
-          <span>{quantity} {quantity === 1 ? "item" : "items"}</span>
+        <button
+          className="mobile-cart-button"
+          onClick={onCheckout}
+          type="button"
+        >
+          <span>
+            {quantity} {quantity === 1 ? "item" : "items"}
+          </span>
           <strong>View order · {money.format(total)}</strong>
         </button>
       ) : null}
@@ -235,7 +284,10 @@ export function CustomerMenu({
 }
 
 export function lineTotal(line: CartLine): number {
-  const modifierPrice = line.modifiers.reduce((sum, modifier) => sum + modifier.price, 0);
+  const modifierPrice = line.modifiers.reduce(
+    (sum, modifier) => sum + modifier.price,
+    0,
+  );
   return (line.size.price + modifierPrice) * line.quantity;
 }
 
@@ -268,7 +320,9 @@ function CartPanel({
       {priceChanged ? (
         <div className="cart-price-change-banner" role="status">
           <span>Prices have been updated. Please review your order.</span>
-          <button onClick={onDismissPriceChange} type="button">OK</button>
+          <button onClick={onDismissPriceChange} type="button">
+            OK
+          </button>
         </div>
       ) : null}
       <div className="kiosk-cart-lines">
@@ -287,7 +341,9 @@ function CartPanel({
               </div>
               <strong>{money.format(lineTotal(line))}</strong>
               <div className="cart-line-actions">
-                <button onClick={() => onEdit(line)} type="button">Edit</button>
+                <button onClick={() => onEdit(line)} type="button">
+                  Edit
+                </button>
                 <div className="quantity-control">
                   <button
                     aria-label={`Remove one ${line.item.name}`}
@@ -310,13 +366,16 @@ function CartPanel({
           ))
         ) : (
           <div className="empty-cart-state">
-            <img alt="" src="/assets/joy-corner-mark.png" />
+            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
             <p>Your favorite Joy Corner order will appear here.</p>
           </div>
         )}
       </div>
       <footer>
-        <div><span>Subtotal</span><strong>{money.format(total)}</strong></div>
+        <div>
+          <span>Subtotal</span>
+          <strong>{money.format(total)}</strong>
+        </div>
         <small>Discounts are calculated securely at checkout.</small>
         <button disabled={!cart.length} onClick={onCheckout} type="button">
           Continue to checkout

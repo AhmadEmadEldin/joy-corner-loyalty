@@ -84,7 +84,7 @@ async function syncAccount(id: string): Promise<void> {
 
 async function syncOrder(id: string): Promise<void> {
   const orders = await query<DatabaseRow>(
-    `select o.*,c.customer_number,c.phone as customer_phone,s.full_name as staff_name,s.role as staff_role
+    `select o.*,c.customer_number,coalesce(c.phone,o.guest_phone) as customer_phone,s.full_name as staff_name,s.role as staff_role
      from orders o left join accounts c on c.id=o.customer_id left join accounts s on s.id=o.created_by
      where o.id=$1`, [id],
   );

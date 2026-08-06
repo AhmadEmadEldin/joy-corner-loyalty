@@ -3,6 +3,7 @@ import type {
   CustomerOrderItem,
   CustomerOrderModifier,
 } from "./repository";
+import { BrandLogo } from "./BrandLogo";
 import { statusLabel } from "./workflow";
 
 const money = new Intl.NumberFormat("en-EG", {
@@ -100,7 +101,8 @@ export function CustomerOrders({
                 <div>
                   <dt>Payment</dt>
                   <dd>
-                    {money.format(order.paid_amount)} paid · {money.format(order.remaining_amount)} remaining
+                    {money.format(order.paid_amount)} paid ·{" "}
+                    {money.format(order.remaining_amount)} remaining
                   </dd>
                 </div>
                 <div>
@@ -116,7 +118,7 @@ export function CustomerOrders({
         </div>
       ) : (
         <div className="orders-empty-state">
-          <img alt="" src="/assets/joy-corner-mark.png" />
+          <img alt="" src="/assets/joy-corner-emblem-v2.png" />
           <h3>
             {mode === "unpaid" ? "You are all paid up" : "Nothing here yet"}
           </h3>
@@ -169,7 +171,7 @@ function OrderReceipt({
         </button>
       </div>
       <div className="order-confirmation-hero">
-        <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+        <BrandLogo stacked />
         <p>
           {terminalFailure
             ? "Order update"

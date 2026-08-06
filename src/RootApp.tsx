@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { apiConfigPresent } from "./dataProvider";
+import { BrandLogo } from "./portal/BrandLogo";
 
 const CustomerPortal = lazy(() =>
   import("./portal/CustomerPortal").then((module) => ({
@@ -16,7 +17,7 @@ export function RootApp() {
   if (!apiConfigPresent) {
     return (
       <main className="joy-portal center-state" role="alert">
-        <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+        <BrandLogo />
         <h1>Backend connection required</h1>
         <p>API configuration is missing. Restart the app.</p>
       </main>
@@ -36,7 +37,7 @@ export function RootApp() {
 function LoadingState({ label }: { label: string }) {
   return (
     <main className="joy-portal center-state" aria-busy="true">
-      <img alt="Joy Corner" src="/assets/joy-corner-logo.svg" />
+      <BrandLogo />
       <p>{label}</p>
     </main>
   );

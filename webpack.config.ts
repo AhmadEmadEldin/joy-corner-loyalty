@@ -7,7 +7,9 @@ import type { Configuration as DevServerConfiguration } from "webpack-dev-server
 
 dotenv.config({ path: [".env.local", ".env"] });
 
-const port = Number(process.env.PORT || process.env.FRONTEND_PORT || 8081);
+// PORT belongs to the API process in local/full-stack development. Reusing it
+// here makes webpack bind to the API port and proxy /api back into itself.
+const port = Number(process.env.FRONTEND_PORT || 8081);
 const isProduction = process.env.NODE_ENV === "production";
 const configuredApiUrl = process.env.VITE_API_URL?.trim();
 

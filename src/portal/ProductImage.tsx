@@ -16,7 +16,10 @@ const SIZE_MAP = {
   sm: { height: 100, width: 130 },
 };
 
-const PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none"><rect width="80" height="80" rx="12" fill="#f5ebe0"/><path d="M28 52c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="#a54728" stroke-width="2.5" stroke-linecap="round"/><circle cx="40" cy="32" r="6" fill="#a54728" opacity=".18"/><path d="M36 28c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="#a54728" stroke-width="1.5" stroke-linecap="round"/><path d="M52 44v4a8 8 0 01-8 8" stroke="#a54728" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+const PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none"><rect width="80" height="80" rx="12" fill="#1A120C"/><path d="M27 48h24a8 8 0 0 1-8 8h-8a8 8 0 0 1-8-8Z" stroke="#D6A756" stroke-width="2"/><path d="M51 49h3a5 5 0 0 0 0-10h-3" stroke="#D6A756" stroke-width="2"/><path d="M31 27c0 3 3 3 3 6s-3 3-3 6M40 24c0 3 3 3 3 6s-3 3-3 6M48 27c0 3 3 3 3 6" stroke="#B9783D" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+const PLACEHOLDER_BACKGROUND =
+  "radial-gradient(circle at 50% 35%, #342219, #0f0a07)";
 
 export function ProductImage({
   alt,
@@ -58,7 +61,7 @@ export function ProductImage({
           ...wrapperStyle,
           alignItems: "center",
           aspectRatio: "4 / 3",
-          background: "radial-gradient(circle at 50% 40%, #fff9ee, #eadbc6)",
+          background: PLACEHOLDER_BACKGROUND,
           display: "flex",
           flexDirection: "column",
           gap: 6,
@@ -74,7 +77,7 @@ export function ProductImage({
         />
         <span
           style={{
-            color: "#766650",
+            color: "#e9ddcc",
             fontSize: 12,
             fontWeight: 600,
             maxWidth: "80%",
@@ -130,8 +133,7 @@ export function ProductImage({
           aria-label={alt}
           style={{
             alignItems: "center",
-            background:
-              "radial-gradient(circle at 50% 40%, #fff9ee, #eadbc6)",
+            background: PLACEHOLDER_BACKGROUND,
             display: "flex",
             flexDirection: "column",
             gap: 6,
@@ -148,7 +150,7 @@ export function ProductImage({
           />
           <span
             style={{
-              color: "#766650",
+              color: "#e9ddcc",
               fontSize: 11,
               maxWidth: "80%",
               overflow: "hidden",

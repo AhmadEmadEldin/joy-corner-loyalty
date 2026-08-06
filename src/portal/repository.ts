@@ -20,7 +20,11 @@ export type CustomerProfile = {
 export type MenuSize = { id: string; price: number; size_name: string };
 export type MenuModifier = { id: string; name: string; price: number };
 export type MenuItem = {
-  availability_state: "available" | "temporarily_unavailable" | "sold_out" | "archived";
+  availability_state:
+    | "available"
+    | "temporarily_unavailable"
+    | "sold_out"
+    | "archived";
   available: boolean;
   category: string;
   description: string;
@@ -37,6 +41,29 @@ export type OwnerMenuItem = MenuItem & {
   preparation_station: "barista" | "kitchen";
   sort_order: number;
 };
+
+const GENERATED_MENU_IMAGES: Record<string, string> = {
+  "Corto Classic": "/assets/menu/generated/corto-classic.png",
+  Espresso: "/assets/menu/generated/espresso.png",
+  "Espresso Affogato": "/assets/menu/generated/espresso-affogato.png",
+  "Espresso con panna": "/assets/menu/generated/espresso-con-panna.png",
+  "French Coffee": "/assets/menu/generated/french-coffee.png",
+  "Hazelnut Coffee": "/assets/menu/generated/hazelnut-coffee.png",
+  "Hazelnut Coffee Nutella":
+    "/assets/menu/generated/hazelnut-coffee-nutella.png",
+  "Iced Coffee": "/assets/menu/generated/iced-coffee.png",
+  "Nutella Coffee": "/assets/menu/generated/nutella-coffee.png",
+  Macchiato: "/assets/menu/generated/macchiato.png",
+  Ristretto: "/assets/menu/generated/ristretto.png",
+  "Turkish Coffee": "/assets/menu/generated/turkish-coffee.png",
+};
+
+function withGeneratedMenuImage<T extends MenuItem>(item: T): T {
+  return {
+    ...item,
+    image_url: item.image_url || GENERATED_MENU_IMAGES[item.name] || null,
+  };
+}
 export type CustomerOrder = {
   cancellation_reason: string | null;
   confirmation_status: string;
@@ -116,7 +143,10 @@ export type QueueOrder = {
   confirmation_status?: string;
   created_at?: string;
   customer_notes?: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   item_summary: Array<{
+    id?: string;
     itemName?: string;
     name?: string;
     quantity?: number;
@@ -142,7 +172,13 @@ export type QueueOrder = {
 
 export function staffQueueTables(
   role: StaffProfile["role"],
-): Array<"cashier_order_queue" | "kitchen_order_queue" | "orders" | "notifications" | "menu"> {
+): Array<
+  | "cashier_order_queue"
+  | "kitchen_order_queue"
+  | "orders"
+  | "notifications"
+  | "menu"
+> {
   return [
     ...(["owner", "manager", "cashier"].includes(role)
       ? (["cashier_order_queue"] as const)
@@ -188,7 +224,10 @@ export async function signUpCustomer(input: {
   setSession(result.user);
 }
 
-export async function signInCustomer(email: string, password: string): Promise<void> {
+export async function signInCustomer(
+  email: string,
+  password: string,
+): Promise<void> {
   const result = await apiRequest<AuthResult>("/auth/login", {
     body: JSON.stringify({ email: email.trim(), password }),
     method: "POST",
@@ -203,7 +242,10 @@ export async function signOut(): Promise<void> {
 
 export const signOutCustomer = signOut;
 
-export async function signInStaff(email: string, password: string): Promise<void> {
+export async function signInStaff(
+  email: string,
+  password: string,
+): Promise<void> {
   await signInCustomer(email, password);
   const profile = await loadStaffProfile();
   if (profile.role === "customer") {
@@ -213,7 +255,9 @@ export async function signInStaff(email: string, password: string): Promise<void
 }
 
 export async function sendStaffMagicLink(): Promise<void> {
-  throw new Error("Email sign-in links are not enabled. Sign in with your password.");
+  throw new Error(
+    "Email sign-in links are not enabled. Sign in with your password.",
+  );
 }
 
 export async function loadStaffProfile(): Promise<AuthProfile> {
@@ -241,7 +285,11 @@ export async function changeOrderStatus(
 export async function confirmOrderPayment(input: {
   amount: number;
   orderId: string;
-  paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
+  paymentMethod:
+    | "cash_at_cashier"
+    | "card_at_branch"
+    | "instapay"
+    | "manual_transfer";
   reference: string;
 }): Promise<void> {
   await apiRequest(`/orders/${encodeURIComponent(input.orderId)}/payment`, {
@@ -250,12 +298,37 @@ export async function confirmOrderPayment(input: {
   });
 }
 
-export async function loadCustomerDirectory(): Promise<Array<Record<string, unknown>>> {
-  return (await apiRequest<{ customers: Array<Record<string, unknown>> }>("/staff/customers"))
-    .customers;
+export async function updateCashierOrderItem(input: {
+  orderId: string;
+  orderItemId: string;
+  quantity: number;
+  replacementSizeId?: string;
+}): Promise<void> {
+  await apiRequest(
+    `/orders/${encodeURIComponent(input.orderId)}/items/${encodeURIComponent(input.orderItemId)}`,
+    {
+      body: JSON.stringify({
+        quantity: input.quantity,
+        replacementSizeId: input.replacementSizeId,
+      }),
+      method: "PATCH",
+    },
+  );
 }
 
-export async function searchCustomerByPhone(phone: string): Promise<Record<string, unknown> | null> {
+export async function loadCustomerDirectory(): Promise<
+  Array<Record<string, unknown>>
+> {
+  return (
+    await apiRequest<{ customers: Array<Record<string, unknown>> }>(
+      "/staff/customers",
+    )
+  ).customers;
+}
+
+export async function searchCustomerByPhone(
+  phone: string,
+): Promise<Record<string, unknown> | null> {
   const result = await apiRequest<{ customer: Record<string, unknown> | null }>(
     `/staff/customers/search?phone=${encodeURIComponent(phone)}`,
   );
@@ -267,10 +340,13 @@ export async function createStaffCustomer(input: {
   fullName: string;
   phone: string;
 }): Promise<Record<string, unknown>> {
-  const result = await apiRequest<{ customer: Record<string, unknown> }>("/staff/customers", {
-    body: JSON.stringify(input),
-    method: "POST",
-  });
+  const result = await apiRequest<{ customer: Record<string, unknown> }>(
+    "/staff/customers",
+    {
+      body: JSON.stringify(input),
+      method: "POST",
+    },
+  );
   return result.customer;
 }
 
@@ -286,10 +362,12 @@ export type EndDayReport = {
 };
 
 export async function runEndDay(): Promise<EndDayReport> {
-  return (await apiRequest<{ report: EndDayReport }>("/admin/end-day", {
-    body: JSON.stringify({}),
-    method: "POST",
-  })).report;
+  return (
+    await apiRequest<{ report: EndDayReport }>("/admin/end-day", {
+      body: JSON.stringify({}),
+      method: "POST",
+    })
+  ).report;
 }
 
 export function subscribeToStaffQueues(
@@ -300,7 +378,8 @@ export function subscribeToStaffQueues(
 }
 
 export async function loadCustomerProfile(): Promise<CustomerProfile> {
-  return (await apiRequest<{ profile: CustomerProfile }>("/customer/profile")).profile;
+  return (await apiRequest<{ profile: CustomerProfile }>("/customer/profile"))
+    .profile;
 }
 
 export async function updateCustomerProfile(input: {
@@ -310,19 +389,30 @@ export async function updateCustomerProfile(input: {
   marketingConsent?: boolean;
   phone: string;
 }): Promise<void> {
-  await apiRequest("/customer/profile", { body: JSON.stringify(input), method: "PATCH" });
+  await apiRequest("/customer/profile", {
+    body: JSON.stringify(input),
+    method: "PATCH",
+  });
 }
 
 export async function loadMenu(): Promise<MenuItem[]> {
-  return (await apiRequest<{ items: MenuItem[] }>("/menu")).items;
+  return (await apiRequest<{ items: MenuItem[] }>("/menu")).items.map(
+    withGeneratedMenuImage,
+  );
 }
 
 export async function loadOwnerMenu(): Promise<OwnerMenuItem[]> {
-  return (await apiRequest<{ items: OwnerMenuItem[] }>("/owner/menu")).items;
+  return (
+    await apiRequest<{ items: OwnerMenuItem[] }>("/owner/menu")
+  ).items.map(withGeneratedMenuImage);
 }
 
 export async function updateOwnerMenuItem(input: {
-  availabilityState?: "available" | "temporarily_unavailable" | "sold_out" | "archived";
+  availabilityState?:
+    | "available"
+    | "temporarily_unavailable"
+    | "sold_out"
+    | "archived";
   description: string;
   id: string;
   loyaltyEligible: boolean;
@@ -350,8 +440,12 @@ export async function createOwnerMenuItem(input: {
   });
 }
 
-export async function updateOwnerMenuSize(sizeId: string, price: number): Promise<void> {
-  if (!Number.isFinite(price) || price <= 0) throw new Error("Size price must be greater than zero.");
+export async function updateOwnerMenuSize(
+  sizeId: string,
+  price: number,
+): Promise<void> {
+  if (!Number.isFinite(price) || price <= 0)
+    throw new Error("Size price must be greater than zero.");
   await apiRequest(`/owner/menu/sizes/${encodeURIComponent(sizeId)}`, {
     body: JSON.stringify({ price }),
     method: "PATCH",
@@ -372,13 +466,19 @@ export async function uploadOwnerMenuImage(
   file: File,
   _previousUrl: string | null,
 ): Promise<string> {
-  if (!["image/avif", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+  if (
+    !["image/avif", "image/jpeg", "image/png", "image/webp"].includes(file.type)
+  ) {
     throw new Error("Choose a JPG, PNG, WebP, or AVIF image.");
   }
-  if (file.size > 5 * 1024 * 1024) throw new Error("Menu images must be 5 MB or smaller.");
+  if (file.size > 5 * 1024 * 1024)
+    throw new Error("Menu images must be 5 MB or smaller.");
   const result = await apiRequest<{ imageUrl: string }>(
     `/owner/menu/items/${encodeURIComponent(itemId)}/image`,
-    { body: JSON.stringify({ dataUrl: await fileAsDataUrl(file) }), method: "PUT" },
+    {
+      body: JSON.stringify({ dataUrl: await fileAsDataUrl(file) }),
+      method: "PUT",
+    },
   );
   return result.imageUrl;
 }
@@ -387,7 +487,9 @@ export async function removeOwnerMenuImage(
   itemId: string,
   _imageUrl: string | null,
 ): Promise<void> {
-  await apiRequest(`/owner/menu/items/${encodeURIComponent(itemId)}/image`, { method: "DELETE" });
+  await apiRequest(`/owner/menu/items/${encodeURIComponent(itemId)}/image`, {
+    method: "DELETE",
+  });
 }
 
 export type OwnerVoucher = {
@@ -402,7 +504,9 @@ export type OwnerVoucher = {
   voucherType: string;
 };
 
-export async function loadCustomerVouchers(customerId: string): Promise<OwnerVoucher[]> {
+export async function loadCustomerVouchers(
+  customerId: string,
+): Promise<OwnerVoucher[]> {
   return (
     await apiRequest<{ vouchers: OwnerVoucher[] }>(
       `/owner/customers/${encodeURIComponent(customerId)}/vouchers`,
@@ -418,12 +522,18 @@ export async function createCustomerVoucher(input: {
   freeItemId?: string;
   percentageValue?: number;
   voucherType: "fixed" | "percentage" | "free_item";
-}): Promise<{ customer: { fullName: string; phone: string | null }; voucher: OwnerVoucher }> {
+}): Promise<{
+  customer: { fullName: string; phone: string | null };
+  voucher: OwnerVoucher;
+}> {
   const { customerId, ...body } = input;
-  return apiRequest(`/owner/customers/${encodeURIComponent(customerId)}/vouchers`, {
-    body: JSON.stringify(body),
-    method: "POST",
-  });
+  return apiRequest(
+    `/owner/customers/${encodeURIComponent(customerId)}/vouchers`,
+    {
+      body: JSON.stringify(body),
+      method: "POST",
+    },
+  );
 }
 
 export function buildWhatsAppVoucherLink(
@@ -435,14 +545,20 @@ export function buildWhatsAppVoucherLink(
   const label = description || `${code} voucher`;
   const text = `Hi ${customerName}! 🎉\n\nYou've received a voucher from Joy Corner:\n*${label}*\nVoucher code: *${code}*\n\nShow this code at checkout to redeem. Valid at any Joy Corner branch.\n\n— Joy Corner Team`;
   const digits = (phone || "").replace(/\D/g, "");
-  const num = digits.startsWith("20") ? digits : digits.length >= 8 ? `20${digits}` : "";
+  const num = digits.startsWith("20")
+    ? digits
+    : digits.length >= 8
+      ? `20${digits}`
+      : "";
   return num
     ? `https://wa.me/${num}?text=${encodeURIComponent(text)}`
     : `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
 export async function revokeVoucher(voucherId: string): Promise<void> {
-  await apiRequest(`/owner/vouchers/${encodeURIComponent(voucherId)}/revoke`, { method: "POST" });
+  await apiRequest(`/owner/vouchers/${encodeURIComponent(voucherId)}/revoke`, {
+    method: "POST",
+  });
 }
 
 export type VoucherRequest = {
@@ -466,9 +582,15 @@ export type VoucherRequest = {
   updatedAt: string;
 };
 
-export async function loadVoucherRequests(status?: string): Promise<VoucherRequest[]> {
+export async function loadVoucherRequests(
+  status?: string,
+): Promise<VoucherRequest[]> {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-  return (await apiRequest<{ requests: VoucherRequest[] }>(`/owner/voucher-requests${qs}`)).requests;
+  return (
+    await apiRequest<{ requests: VoucherRequest[] }>(
+      `/owner/voucher-requests${qs}`,
+    )
+  ).requests;
 }
 
 export async function reviewVoucherRequest(input: {
@@ -484,10 +606,13 @@ export async function reviewVoucherRequest(input: {
   voucherType?: string;
 }): Promise<{ voucher?: OwnerVoucher; status: string }> {
   const { requestId, ...body } = input;
-  return apiRequest(`/owner/voucher-requests/${encodeURIComponent(requestId)}`, {
-    body: JSON.stringify(body),
-    method: "PATCH",
-  });
+  return apiRequest(
+    `/owner/voucher-requests/${encodeURIComponent(requestId)}`,
+    {
+      body: JSON.stringify(body),
+      method: "PATCH",
+    },
+  );
 }
 
 export type CustomerVoucherRequest = {
@@ -511,12 +636,21 @@ export async function createVoucherRequest(input: {
   });
 }
 
-export async function loadCustomerVoucherRequests(): Promise<CustomerVoucherRequest[]> {
-  return (await apiRequest<{ requests: CustomerVoucherRequest[] }>("/customer/voucher-requests")).requests;
+export async function loadCustomerVoucherRequests(): Promise<
+  CustomerVoucherRequest[]
+> {
+  return (
+    await apiRequest<{ requests: CustomerVoucherRequest[] }>(
+      "/customer/voucher-requests",
+    )
+  ).requests;
 }
 
 export async function cancelVoucherRequest(requestId: string): Promise<void> {
-  await apiRequest(`/customer/voucher-requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" });
+  await apiRequest(
+    `/customer/voucher-requests/${encodeURIComponent(requestId)}/cancel`,
+    { method: "POST" },
+  );
 }
 
 export type CustomerDashboard = {
@@ -536,34 +670,66 @@ export async function loadCustomerDashboard(): Promise<CustomerDashboard> {
   return apiRequest("/customer/dashboard");
 }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
-  await apiRequest(`/customer/notifications/${encodeURIComponent(notificationId)}/read`, {
-    method: "POST",
-  });
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<void> {
+  await apiRequest(
+    `/customer/notifications/${encodeURIComponent(notificationId)}/read`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function placeCustomerOrder(input: {
   cart: CartLine[];
   customerNotes: string;
   idempotencyKey: string;
-  paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
+  paymentMethod:
+    | "cash_at_cashier"
+    | "card_at_branch"
+    | "instapay"
+    | "manual_transfer";
   voucherCode: string;
 }): Promise<{ orderId: string; orderNumber: string }> {
   return apiRequest("/orders/customer", {
-    body: JSON.stringify({ ...input, cart: undefined, items: cartPayload(input.cart) }),
+    body: JSON.stringify({
+      ...input,
+      cart: undefined,
+      items: cartPayload(input.cart),
+    }),
     method: "POST",
   });
 }
 
 export async function createStaffOrder(input: {
   cart: CartLine[];
+  carColor: string;
+  carType: string;
   customerId: string | null;
+  customerPhone: string;
   customerNotes: string;
-  paymentMethod: "cash_at_cashier" | "card_at_branch" | "instapay" | "manual_transfer";
+  orderPlace: "dine_in" | "takeaway" | "car" | "outside" | "delivery";
+  paidAmount: number;
+  paymentMethod:
+    | "cash_at_cashier"
+    | "card_at_branch"
+    | "instapay"
+    | "manual_transfer";
   pickupName: string;
-}): Promise<{ orderId: string; orderNumber: string }> {
+}): Promise<{
+  changeDue: number;
+  orderId: string;
+  orderNumber: string;
+  tenderedAmount: number;
+}> {
   return apiRequest("/orders/staff", {
-    body: JSON.stringify({ ...input, cart: undefined, items: cartPayload(input.cart), idempotencyKey: crypto.randomUUID() }),
+    body: JSON.stringify({
+      ...input,
+      cart: undefined,
+      items: cartPayload(input.cart),
+      idempotencyKey: crypto.randomUUID(),
+    }),
     method: "POST",
   });
 }
@@ -590,30 +756,60 @@ export type BusinessDay = {
 };
 
 export async function loadCurrentBusinessDay(): Promise<BusinessDay | null> {
-  return (await apiRequest<{ businessDay: BusinessDay | null }>("/owner/business-days/current")).businessDay;
+  return (
+    await apiRequest<{ businessDay: BusinessDay | null }>(
+      "/owner/business-days/current",
+    )
+  ).businessDay;
 }
 
 export async function loadBusinessDays(limit = 30): Promise<BusinessDay[]> {
-  return (await apiRequest<{ businessDays: BusinessDay[] }>(`/owner/business-days?limit=${limit}`)).businessDays;
+  return (
+    await apiRequest<{ businessDays: BusinessDay[] }>(
+      `/owner/business-days?limit=${limit}`,
+    )
+  ).businessDays;
 }
 
 export async function startBusinessDay(): Promise<BusinessDay> {
-  return (await apiRequest<{ businessDay: BusinessDay }>("/owner/business-days/start", { method: "POST", body: JSON.stringify({}) })).businessDay;
+  return (
+    await apiRequest<{ businessDay: BusinessDay }>(
+      "/owner/business-days/start",
+      { method: "POST", body: JSON.stringify({}) },
+    )
+  ).businessDay;
 }
 
-export async function closeBusinessDay(businessDayId: string, notes?: string): Promise<Record<string, unknown>> {
-  return (await apiRequest<{ report: Record<string, unknown> }>(`/owner/business-days/${encodeURIComponent(businessDayId)}/close`, {
+export async function closeBusinessDay(
+  businessDayId: string,
+  notes?: string,
+): Promise<Record<string, unknown>> {
+  return (
+    await apiRequest<{ report: Record<string, unknown> }>(
+      `/owner/business-days/${encodeURIComponent(businessDayId)}/close`,
+      {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      },
+    )
+  ).report;
+}
+
+export async function loadBusinessDayReport(
+  businessDayId: string,
+): Promise<Record<string, unknown>> {
+  return apiRequest(
+    `/owner/business-days/${encodeURIComponent(businessDayId)}/report`,
+  );
+}
+
+export async function assignOrdersToBusinessDay(): Promise<{
+  assigned: number;
+}> {
+  return apiRequest("/owner/business-days/assign-orders", {
     method: "POST",
-    body: JSON.stringify({ notes }),
-  })).report;
-}
-
-export async function loadBusinessDayReport(businessDayId: string): Promise<Record<string, unknown>> {
-  return apiRequest(`/owner/business-days/${encodeURIComponent(businessDayId)}/report`);
-}
-
-export async function assignOrdersToBusinessDay(): Promise<{ assigned: number }> {
-  return apiRequest("/owner/business-days/assign-orders", { method: "POST", body: JSON.stringify({}) });
+    body: JSON.stringify({}),
+  });
 }
 
 // ─── Owner Orders & Receipts ─────────────────
@@ -634,7 +830,15 @@ export type OwnerOrder = {
   customer_phone: string | null;
   discount_total: number;
   id: string;
-  item_summary: Array<{ itemName: string; originalUnitPrice?: number; overrideReason?: string; quantity: number; size: string; totalPrice: number; unitPrice: number }>;
+  item_summary: Array<{
+    itemName: string;
+    originalUnitPrice?: number;
+    overrideReason?: string;
+    quantity: number;
+    size: string;
+    totalPrice: number;
+    unitPrice: number;
+  }>;
   order_number: string;
   paid_amount: number;
   payment_method: string | null;
@@ -648,16 +852,23 @@ export type OwnerOrder = {
   voucher_discount: number;
 };
 
-export async function loadOwnerOrders(params: {
-  businessDayId?: string;
-  dateFilter?: string;
-  includeArchived?: boolean;
-  limit?: number;
-  page?: number;
-  paymentStatus?: string;
-  search?: string;
-  status?: string;
-} = {}): Promise<{ orders: OwnerOrder[]; total: number; page: number; totalPages: number }> {
+export async function loadOwnerOrders(
+  params: {
+    businessDayId?: string;
+    dateFilter?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    page?: number;
+    paymentStatus?: string;
+    search?: string;
+    status?: string;
+  } = {},
+): Promise<{
+  orders: OwnerOrder[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
   const qs = new URLSearchParams();
   if (params.status) qs.set("status", params.status);
   if (params.paymentStatus) qs.set("paymentStatus", params.paymentStatus);
@@ -689,12 +900,26 @@ export type OwnerOverviewStats = {
   unique_customers: number;
 };
 
-export async function loadOwnerOverview(dateFilter = "today", startDate?: string, endDate?: string): Promise<{
+export async function loadOwnerOverview(
+  dateFilter = "today",
+  startDate?: string,
+  endDate?: string,
+): Promise<{
   categories: Array<{ name: string; qty: number }>;
-  paymentMethods: Array<{ count: number; total: number; payment_method: string }>;
+  paymentMethods: Array<{
+    count: number;
+    total: number;
+    payment_method: string;
+  }>;
   sizes: Array<{ name: string; qty: number }>;
   stats: OwnerOverviewStats;
-  topProducts: Array<{ discount: number; gross_revenue: number; order_count: number; product: string; units_sold: number }>;
+  topProducts: Array<{
+    discount: number;
+    gross_revenue: number;
+    order_count: number;
+    product: string;
+    units_sold: number;
+  }>;
 }> {
   const qs = new URLSearchParams({ dateFilter });
   if (startDate) qs.set("startDate", startDate);
@@ -710,20 +935,33 @@ export async function recordOwnerPayment(input: {
   reference?: string;
   receiptId: string;
 }): Promise<void> {
-  await apiRequest(`/owner/receipts/${encodeURIComponent(input.receiptId)}/payments`, {
-    body: JSON.stringify({ amount: input.amount, paymentMethod: input.paymentMethod, reference: input.reference }),
-    method: "POST",
-  });
+  await apiRequest(
+    `/owner/receipts/${encodeURIComponent(input.receiptId)}/payments`,
+    {
+      body: JSON.stringify({
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        reference: input.reference,
+      }),
+      method: "POST",
+    },
+  );
 }
 
-export async function voidReceipt(receiptId: string, reason: string): Promise<void> {
+export async function voidReceipt(
+  receiptId: string,
+  reason: string,
+): Promise<void> {
   await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/void`, {
     body: JSON.stringify({ reason }),
     method: "POST",
   });
 }
 
-export async function archiveReceipt(receiptId: string, reason?: string): Promise<void> {
+export async function archiveReceipt(
+  receiptId: string,
+  reason?: string,
+): Promise<void> {
   await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/archive`, {
     body: JSON.stringify({ reason }),
     method: "POST",
@@ -731,10 +969,17 @@ export async function archiveReceipt(receiptId: string, reason?: string): Promis
 }
 
 export async function unarchiveReceipt(receiptId: string): Promise<void> {
-  await apiRequest(`/owner/receipts/${encodeURIComponent(receiptId)}/unarchive`, { method: "POST", body: JSON.stringify({}) });
+  await apiRequest(
+    `/owner/receipts/${encodeURIComponent(receiptId)}/unarchive`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
 }
 
-export async function overrideItemPrice(input: { newUnitPrice: number; orderItemId: string; reason: string }): Promise<void> {
+export async function overrideItemPrice(input: {
+  newUnitPrice: number;
+  orderItemId: string;
+  reason: string;
+}): Promise<void> {
   await apiRequest(`/owner/receipts/${input.orderItemId}/price-override`, {
     body: JSON.stringify(input),
     method: "POST",

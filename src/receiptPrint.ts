@@ -68,7 +68,7 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         position: absolute;
         inset: 0;
         background: linear-gradient(135deg, rgba(184,121,62,0.04) 0%, rgba(107,70,52,0.06) 50%, rgba(184,121,62,0.03) 100%);
-        background-image: url("/brand/joy-corner-receipt-farm.webp");
+        background-image: url("/brand/joy-corner-receipt-farm.svg");
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
@@ -88,17 +88,24 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
       .brand { font-family: "Fraunces", Georgia, serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; color: #2A1812; }
       .sub { color: #74645D; margin-top: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
       .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 12px 0 20px; font-size: 14px; position: relative; z-index: 1; }
-      table { width: 100%; border-collapse: collapse; margin-top: 10px; position: relative; z-index: 1; }
-      th, td { border-bottom: 1px solid #DFD2C4; padding: 8px 6px; text-align: left; }
+      .meta > div, td, th, .totals span, .totals strong { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; position: relative; z-index: 1; }
+      th, td { border-bottom: 1px solid #DFD2C4; padding: 8px 6px; text-align: left; vertical-align: top; }
+      th:first-child, td:first-child { width: 36%; }
+      th:nth-child(2), td:nth-child(2) { width: 18%; }
+      th:nth-child(3), td:nth-child(3) { width: 9%; text-align: center; }
+      th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { width: 18.5%; text-align: right; }
       th { background: #EEE1D0; font-size: 13px; text-transform: uppercase; color: #6B4634; }
       .totals { margin-top: 12px; display: grid; gap: 6px; font-size: 15px; position: relative; z-index: 1; }
-      .totals div { display: flex; justify-content: space-between; }
+      .totals div { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(110px, auto); }
+      .totals strong { text-align: right; }
       .strong { font-weight: 800; font-size: 16px; }
       .actions { margin-top: 20px; display: flex; gap: 10px; position: relative; z-index: 1; }
       .actions button { border: 0; border-radius: 6px; background: #2A1812; color: #fff; padding: 10px 14px; cursor: pointer; font-size: 14px; }
       .actions button:hover { background: #3B241B; }
       .footer-note { margin-top: 24px; text-align: center; font-size: 12px; color: #74645D; position: relative; z-index: 1; }
-      @media print { .actions { display: none; } .page::before { opacity: 0; } .page::after { opacity: 0; } }
+      @media (max-width: 560px) { .meta { grid-template-columns: 1fr; } .page { padding: 14px; } th, td { font-size: 12px; padding: 7px 3px; } }
+      @media print { .actions { display: none; } .page { overflow: visible; } .page::before { opacity: 0; } .page::after { opacity: 0; } }
     </style>
   </head>
   <body>

@@ -117,9 +117,9 @@ export function ProductCustomizer({
             alt={item.name}
             loading="lazy"
             onError={(event) => {
-              event.currentTarget.src = "/assets/joy-corner-mark.png";
+              event.currentTarget.src = "/assets/joy-corner-emblem-v2.png";
             }}
-            src={item.image_url || "/assets/joy-corner-mark.png"}
+            src={item.image_url || "/assets/joy-corner-emblem-v2.png"}
           />
         </div>
         <form className="product-customizer" onSubmit={submit}>
