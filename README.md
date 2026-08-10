@@ -8,7 +8,7 @@ Production staff and customer ordering app for Joy Corner.
 - `server/api.ts`: Northflank API, authentication, authorization, and realtime SSE
 - `server/migrations/001_initial.sql`: Neon PostgreSQL schema
 - `scripts/sync_neon_reporting.ts`: asynchronous Google Sheets reporting export
-- Vercel serves only the built frontend
+- Northflank serves the built frontend and API from one same-origin service
 - Google Sheets is reporting-only and is never queried by a live request
 
 ## Local development
@@ -28,4 +28,4 @@ npm run check
 
 ## Production
 
-See `DEPLOYMENT.md`. Secrets belong in Neon/Northflank/Vercel configuration and must never be committed.
+See `DEPLOYMENT.md`. Secrets belong in Neon/Northflank configuration and must never be committed.
