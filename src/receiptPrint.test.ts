@@ -22,10 +22,13 @@ describe("buildReceiptPrintHtml", () => {
       notes: "Takeaway",
     });
 
-    expect(html).toContain("JOY CORNER");
     expect(html).toContain("<strong>Receipt:</strong> REC-1001");
     expect(html).toContain("Mona");
     expect(html).toContain("Latte");
     expect(html).toContain("Save as PDF");
+    expect(html).toContain("size: 80mm auto");
+    expect(html).toContain("joy-corner-receipt-farm.svg");
+    expect(html).toContain("joy-corner-logo-master.png");
+    expect(html).toContain("Remaining");
   });
 });

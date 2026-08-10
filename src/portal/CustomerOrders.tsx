@@ -118,7 +118,7 @@ export function CustomerOrders({
         </div>
       ) : (
         <div className="orders-empty-state">
-          <img alt="" src="/assets/joy-corner-emblem-v2.png" />
+          <img alt="" src="/assets/joy-corner-logo-mark.png" />
           <h3>
             {mode === "unpaid" ? "You are all paid up" : "Nothing here yet"}
           </h3>

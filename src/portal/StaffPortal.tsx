@@ -10,12 +10,12 @@ import { restoreSession, subscribeToSession, type SessionUser } from "./client";
 import {
   archiveReceipt,
   assignOrdersToBusinessDay,
-  buildWhatsAppVoucherLink,
   BusinessDay,
   CartLine,
   changeOrderStatus,
   closeBusinessDay,
   createCustomerVoucher,
+  createVoucherCampaign,
   createStaffCustomer,
   createStaffOrder,
   confirmOrderPayment,
@@ -37,6 +37,8 @@ import {
   OwnerVoucher,
   QueueOrder,
   recordOwnerPayment,
+  removeRedeemedVoucher,
+  previewVoucher,
   reviewVoucherRequest,
   runEndDay,
   searchCustomerByPhone,
@@ -47,6 +49,7 @@ import {
   subscribeToStaffQueues,
   updateCashierOrderItem,
   VoucherRequest,
+  VoucherCampaignRecipient,
   voidReceipt,
 } from "./repository";
 import { OperationalOrderStatus, statusLabel } from "./workflow";
@@ -55,7 +58,9 @@ import { BrandLogo } from "./BrandLogo";
 import { AppIcon, type AppIconName } from "./AppIcon";
 import { MenuCategoryGallery } from "./MenuCategoryGallery";
 import { ProductImage } from "./ProductImage";
+import { VoucherCard, shareVoucherArtwork } from "./VoucherCard";
 import { createClientId } from "./cartDraft";
+import { CoffeeWorldGame } from "./CoffeeWorldGame";
 import {
   buildDailyReportHtml,
   buildReceiptPrintHtml,
@@ -126,6 +131,7 @@ const STAFF_NAVIGATION_ICONS: Record<string, AppIconName> = {
   analytics: "analytics",
   cashier: "cashier",
   customers: "customers",
+  coffee_game: "game",
   end_day: "end-day",
   kitchen: "kitchen",
   menu: "menu-images",
@@ -232,7 +238,7 @@ function StaffAccess() {
         aria-label="Joy Corner staff access"
       >
         <aside className="auth-story-panel">
-          <BrandLogo />
+          <BrandLogo markOnly showName />
           <div>
             <p className="eyebrow">Joy Corner operations</p>
             <h2>
@@ -247,7 +253,7 @@ function StaffAccess() {
           <small>Authorized staff only</small>
         </aside>
         <section className="auth-card">
-          <BrandLogo compact />
+          <BrandLogo compact markOnly showName />
           <p className="eyebrow">Secure staff workspace</p>
           <h1>Staff sign in</h1>
           <form className="customer-order-form" onSubmit={submit}>
@@ -301,6 +307,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     | "cashier"
     | "kitchen"
     | "customers"
+    | "coffee_game"
     | "menu"
     | "voucher_requests"
     | "orders_receipts"
@@ -376,11 +383,14 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
     const role = profile?.role;
     if (!role) return;
     let refreshTimer: number | undefined;
-    const unsubscribe = subscribeToStaffQueues(role, () => {
+    const unsubscribe = subscribeToStaffQueues(role, (event) => {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
-        void refreshQueues(role);
-        setMenuRefreshVersion((current) => current + 1);
+        if (event?.topic === "menu") {
+          setMenuRefreshVersion((current) => current + 1);
+        } else {
+          void refreshQueues(role);
+        }
       }, 150);
     });
     return () => {
@@ -582,6 +592,11 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           tab: "voucher_requests",
           visible: profile?.role === "owner",
         },
+        {
+          label: "Coffee world game",
+          tab: "coffee_game",
+          visible: true,
+        },
       ],
     },
     {
@@ -712,7 +727,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           <p>{roleBanner.message}</p>
         </div>
         <div className="staff-role-account">
-          <img alt="" src="/assets/joy-corner-emblem-v2.png" />
+          <img alt="" src="/assets/joy-corner-logo-mark.png" />
           <div>
             <small>{activeRole} account</small>
             <strong>{profile?.full_name || "Staff"}</strong>
@@ -935,6 +950,7 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           onError={setMessage}
         />
       ) : null}
+      {tab === "coffee_game" ? <CoffeeWorldGame /> : null}
       {tab === "menu" && profile?.role === "owner" ? (
         <OwnerMenuManager />
       ) : null}
@@ -1323,6 +1339,12 @@ function StaffOrderForm({
   const [category, setCategory] = useState("All");
   const [menuQuery, setMenuQuery] = useState("");
   const [sizePickerItem, setSizePickerItem] = useState<MenuItem | null>(null);
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherPreview, setVoucherPreview] = useState<{
+    discount: number;
+    total: number;
+  } | null>(null);
+  const [voucherChecking, setVoucherChecking] = useState(false);
   useEffect(() => {
     void loadMenu()
       .then(setMenu)
@@ -1357,16 +1379,20 @@ function StaffOrderForm({
     0,
   );
   const roundedOrderTotal = Math.round(orderTotal * 100) / 100;
+  const payableOrderTotal = voucherPreview?.total ?? roundedOrderTotal;
   const numericPaidAmount =
     Math.round(Math.max(0, Number(paidAmount || 0)) * 100) / 100;
-  const appliedPaidAmount = Math.min(roundedOrderTotal, numericPaidAmount);
+  const appliedPaidAmount = Math.min(payableOrderTotal, numericPaidAmount);
   const remainingAmount =
-    Math.max(0, Math.round((roundedOrderTotal - appliedPaidAmount) * 100)) /
+    Math.max(0, Math.round((payableOrderTotal - appliedPaidAmount) * 100)) /
     100;
   const changeDue =
-    Math.max(0, Math.round((numericPaidAmount - roundedOrderTotal) * 100)) /
+    Math.max(0, Math.round((numericPaidAmount - payableOrderTotal) * 100)) /
     100;
   const canReceivePayment = ["owner", "manager", "cashier"].includes(role);
+  useEffect(() => {
+    setVoucherPreview(null);
+  }, [roundedOrderTotal, selectedCustomerId]);
   function addWithSize(item: MenuItem, size: MenuSize) {
     setCart((current) => {
       const found = current.find((line) => line.size.id === size.id);
@@ -1439,14 +1465,40 @@ function StaffOrderForm({
       setSearching(false);
     }
   }
+  async function checkVoucher() {
+    if (!voucherCode.trim() || !selectedCustomerId || !cart.length) return;
+    setVoucherChecking(true);
+    setMessage("");
+    try {
+      const preview = await previewVoucher({
+        code: voucherCode.trim(),
+        customerId: selectedCustomerId,
+        subtotal: roundedOrderTotal,
+      });
+      setVoucherCode(preview.code);
+      setVoucherPreview({ discount: preview.discount, total: preview.total });
+      setMessage(
+        `Voucher applied: ${money.format(preview.discount)} discount.`,
+      );
+    } catch (error) {
+      setVoucherPreview(null);
+      setMessage(getMessage(error));
+    } finally {
+      setVoucherChecking(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!cart.length) return;
     if (
       paymentMethod !== "cash_at_cashier" &&
-      numericPaidAmount > roundedOrderTotal + 0.01
+      numericPaidAmount > payableOrderTotal + 0.01
     ) {
       setMessage("Non-cash payments cannot exceed the order total.");
+      return;
+    }
+    if (voucherCode.trim() && !voucherPreview) {
+      setMessage("Apply and verify the voucher before creating the order.");
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -1464,6 +1516,7 @@ function StaffOrderForm({
         paidAmount: canReceivePayment ? numericPaidAmount : 0,
         paymentMethod,
         pickupName: String(form.get("pickupName") || ""),
+        voucherCode: voucherPreview ? voucherCode.trim() : "",
       });
       setCart([]);
       setFoundCustomer(null);
@@ -1475,6 +1528,8 @@ function StaffOrderForm({
       setCarType("");
       setCarColor("");
       setSelectedCustomerId(null);
+      setVoucherCode("");
+      setVoucherPreview(null);
       await onCreated(result.orderNumber, result.changeDue);
     } catch (error) {
       setMessage(getMessage(error));
@@ -1597,6 +1652,8 @@ function StaffOrderForm({
                     setSelectedCustomerId(null);
                     setCarType("");
                     setCarColor("");
+                    setVoucherCode("");
+                    setVoucherPreview(null);
                   }}
                   placeholder="+201234567890"
                   value={customerPhone}
@@ -1628,6 +1685,44 @@ function StaffOrderForm({
               />
             ) : null}
           </fieldset>
+          <section className="staff-voucher-entry">
+            <label>
+              Voucher ID / code
+              <div>
+                <input
+                  autoComplete="off"
+                  disabled={!selectedCustomerId || !cart.length}
+                  onChange={(event) => {
+                    setVoucherCode(event.target.value.toLocaleUpperCase());
+                    setVoucherPreview(null);
+                  }}
+                  placeholder="JC-XXXXXX"
+                  value={voucherCode}
+                />
+                <button
+                  disabled={
+                    voucherChecking ||
+                    !voucherCode.trim() ||
+                    !selectedCustomerId ||
+                    !cart.length
+                  }
+                  onClick={() => void checkVoucher()}
+                  type="button"
+                >
+                  {voucherChecking ? "Checking…" : "Apply"}
+                </button>
+              </div>
+              <small>
+                Vouchers belong to saved customer accounts and are single use.
+              </small>
+            </label>
+            {voucherPreview ? (
+              <dl>
+                <div><dt>Voucher discount</dt><dd>− {money.format(voucherPreview.discount)}</dd></div>
+                <div><dt>New total</dt><dd>{money.format(voucherPreview.total)}</dd></div>
+              </dl>
+            ) : null}
+          </section>
           <fieldset className="order-place-options">
             <legend>Order place</legend>
             <div role="group" aria-label="Order place">
@@ -1724,7 +1819,7 @@ function StaffOrderForm({
                 setPaymentMethod(event.target.value as typeof paymentMethod);
                 if (event.target.value !== "cash_at_cashier") {
                   setPaidAmount((current) =>
-                    String(Math.min(Number(current || 0), roundedOrderTotal)),
+                    String(Math.min(Number(current || 0), payableOrderTotal)),
                   );
                 }
               }}
@@ -1747,7 +1842,7 @@ function StaffOrderForm({
                   max={
                     paymentMethod === "cash_at_cashier"
                       ? undefined
-                      : roundedOrderTotal
+                      : payableOrderTotal
                   }
                   min="0"
                   onChange={(event) => setPaidAmount(event.target.value)}
@@ -1760,7 +1855,7 @@ function StaffOrderForm({
               <dl>
                 <div>
                   <dt>Order total</dt>
-                  <dd>{money.format(roundedOrderTotal)}</dd>
+                  <dd>{money.format(payableOrderTotal)}</dd>
                 </div>
                 <div>
                   <dt>Paid</dt>
@@ -1841,7 +1936,7 @@ function StaffOrderForm({
                 <span>
                   {cart.reduce((sum, line) => sum + line.quantity, 0)} items
                 </span>
-                <strong>Total {money.format(roundedOrderTotal)}</strong>
+                <strong>Total {money.format(payableOrderTotal)}</strong>
                 <small>Payment is confirmed separately at the cashier.</small>
               </div>
             ) : null}
@@ -2237,7 +2332,7 @@ function Queue({
                 ))}
               </ul>
               <OrderPlaceAndNotes customerNotes={order.customer_notes} />
-              {typeof order.total === "number" ? (
+              {variant === "cashier" && typeof order.total === "number" ? (
                 <dl className="queue-payment-summary">
                   <div>
                     <dt>Total</dt>
@@ -2278,7 +2373,13 @@ function StaffOverview({
   kitchen: QueueOrder[];
   onEndDay: () => void;
   onNavigate: (
-    tab: "overview" | "new_order" | "cashier" | "kitchen" | "customers",
+    tab:
+      | "overview"
+      | "new_order"
+      | "cashier"
+      | "kitchen"
+      | "customers"
+      | "analytics",
   ) => void;
 }) {
   const pending = cashier.filter(
@@ -2288,6 +2389,45 @@ function StaffOverview({
     (order) => order.payment_status !== "paid",
   ).length;
   const ready = kitchen.filter((order) => order.status === "ready").length;
+  const orderTotal = cashier.reduce(
+    (sum, order) => sum + Number(order.total || 0),
+    0,
+  );
+  const paidTotal = cashier.reduce(
+    (sum, order) => sum + Number(order.paid_amount || 0),
+    0,
+  );
+  const remainingTotal = cashier.reduce(
+    (sum, order) => sum + remainingBalance(order),
+    0,
+  );
+  const activeKitchen = kitchen.filter((order) =>
+    ["accepted", "preparing"].includes(order.status),
+  ).length;
+  const finished = kitchen.filter((order) =>
+    ["picked_up", "closed"].includes(order.status),
+  ).length;
+  const waiting = Math.max(0, kitchen.length - activeKitchen - ready - finished);
+  const paymentCoverage = orderTotal
+    ? Math.min(100, Math.round((paidTotal / orderTotal) * 100))
+    : 0;
+  const completionRate = kitchen.length
+    ? Math.round((finished / kitchen.length) * 100)
+    : 0;
+  const orderFlow = [
+    { key: "waiting", label: "Waiting", value: waiting },
+    { key: "active", label: "Preparing", value: activeKitchen },
+    { key: "ready", label: "Ready", value: ready },
+    { key: "finished", label: "Finished", value: finished },
+  ];
+  const insight =
+    unpaid > 0
+      ? `${unpaid} order${unpaid === 1 ? "" : "s"} need payment follow-up before End Day.`
+      : ready > 0
+        ? `${ready} order${ready === 1 ? " is" : "s are"} ready for a fast guest handoff.`
+        : activeKitchen > 0
+          ? `${activeKitchen} order${activeKitchen === 1 ? " is" : "s are"} being prepared. The queue is moving.`
+          : "Today’s active queue is clear. You are ready for the next order.";
   return (
     <section className="staff-overview">
       <header>
@@ -2320,15 +2460,79 @@ function StaffOverview({
           <span>Permission-filtered records</span>
         </button>
       </div>
-      <div className="portal-section">
-        <h3>Daily reporting</h3>
-        <p>
-          End Day is available when every order for today is closed, rejected,
-          or cancelled.
-        </p>
-        <button disabled={endingDay} onClick={onEndDay} type="button">
-          {endingDay ? "Closing day…" : "End Day & queue Google Sheets report"}
-        </button>
+      <div className="owner-command-grid">
+        <article className="owner-analysis-card owner-analysis-card--flow">
+          <header>
+            <div>
+              <p className="eyebrow">Live order flow</p>
+              <h3>From queue to pickup</h3>
+            </div>
+            <strong>{completionRate}% complete</strong>
+          </header>
+          <div className="owner-flow-bar" aria-label="Order status distribution">
+            {orderFlow.map((stage) => (
+              <span
+                className={`owner-flow-segment owner-flow-segment--${stage.key}`}
+                key={stage.key}
+                style={{
+                  flexGrow: stage.value,
+                  display: stage.value ? undefined : "none",
+                }}
+                title={`${stage.label}: ${stage.value}`}
+              />
+            ))}
+          </div>
+          <div className="owner-flow-legend">
+            {orderFlow.map((stage) => (
+              <button
+                key={stage.key}
+                onClick={() => onNavigate("kitchen")}
+                type="button"
+              >
+                <i className={`owner-flow-dot owner-flow-dot--${stage.key}`} />
+                <span>{stage.label}</span>
+                <strong>{stage.value}</strong>
+              </button>
+            ))}
+          </div>
+        </article>
+        <article className="owner-analysis-card owner-analysis-card--money">
+          <header>
+            <div>
+              <p className="eyebrow">Payment health</p>
+              <h3>Today’s collection</h3>
+            </div>
+            <strong>{paymentCoverage}% covered</strong>
+          </header>
+          <div className="owner-payment-progress" aria-label={`${paymentCoverage}% of order value paid`}>
+            <span style={{ width: `${paymentCoverage}%` }} />
+          </div>
+          <dl className="owner-money-summary">
+            <div><dt>Order value</dt><dd>{money.format(orderTotal)}</dd></div>
+            <div><dt>Paid</dt><dd>{money.format(paidTotal)}</dd></div>
+            <div><dt>Remaining</dt><dd>{money.format(remainingTotal)}</dd></div>
+          </dl>
+        </article>
+        <article className="owner-insight-card">
+          <div>
+            <p className="eyebrow">Owner insight</p>
+            <h3>{insight}</h3>
+            <p>Calculated from the current cashier and barista queues.</p>
+          </div>
+          <button onClick={() => onNavigate("analytics")} type="button">
+            Open full analytics
+          </button>
+        </article>
+        <article className="owner-end-day-card">
+          <div>
+            <p className="eyebrow">Daily reporting</p>
+            <h3>Close today with confidence</h3>
+            <p>Available when every order is closed, rejected, or cancelled.</p>
+          </div>
+          <button disabled={endingDay} onClick={onEndDay} type="button">
+            {endingDay ? "Closing day…" : "End Day & queue report"}
+          </button>
+        </article>
       </div>
     </section>
   );
@@ -2350,9 +2554,12 @@ function StaffCustomerDirectory({
   const [addEmail, setAddEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
-  const [consentFilter, setConsentFilter] = useState<
-    "all" | "subscribed" | "not_subscribed"
+  const [directoryFilter, setDirectoryFilter] = useState<
+    "all" | "registered" | "guest" | "unpaid" | "vouchers"
   >("all");
+  const [sort, setSort] = useState<"newest" | "name" | "unpaid" | "orders">(
+    "newest",
+  );
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [vouchers, setVouchers] = useState<OwnerVoucher[]>([]);
@@ -2364,6 +2571,20 @@ function StaffCustomerDirectory({
   const [voucherDesc, setVoucherDesc] = useState("");
   const [voucherExpiry, setVoucherExpiry] = useState("");
   const [voucherBusy, setVoucherBusy] = useState(false);
+  const [removingVoucherId, setRemovingVoucherId] = useState<string | null>(null);
+  const [campaignAudience, setCampaignAudience] = useState<
+    "all" | "subscribed"
+  >("subscribed");
+  const [campaignType, setCampaignType] = useState<"fixed" | "percentage">(
+    "fixed",
+  );
+  const [campaignValue, setCampaignValue] = useState("");
+  const [campaignDescription, setCampaignDescription] = useState("");
+  const [campaignExpiry, setCampaignExpiry] = useState("");
+  const [campaignBusy, setCampaignBusy] = useState(false);
+  const [campaignResults, setCampaignResults] = useState<
+    VoucherCampaignRecipient[]
+  >([]);
   const PAGE_SIZE = 20;
   const canManageVouchers = userRole === "owner";
 
@@ -2373,9 +2594,13 @@ function StaffCustomerDirectory({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase();
-    return customers.filter((c) => {
-      if (consentFilter === "subscribed" && !c.marketingConsent) return false;
-      if (consentFilter === "not_subscribed" && c.marketingConsent)
+    const matching = customers.filter((c) => {
+      if (directoryFilter === "registered" && c.accountStatus !== "registered")
+        return false;
+      if (directoryFilter === "guest" && c.accountStatus !== "guest") return false;
+      if (directoryFilter === "unpaid" && Number(c.outstandingBalance || 0) <= 0)
+        return false;
+      if (directoryFilter === "vouchers" && Number(c.activeVoucherCount || 0) <= 0)
         return false;
       if (!q) return true;
       return (
@@ -2393,7 +2618,16 @@ function StaffCustomerDirectory({
           .includes(q)
       );
     });
-  }, [customers, search, consentFilter]);
+    return [...matching].sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+      if (sort === "name")
+        return String(a.fullName || "").localeCompare(String(b.fullName || ""));
+      if (sort === "unpaid")
+        return Number(b.outstandingBalance || 0) - Number(a.outstandingBalance || 0);
+      if (sort === "orders")
+        return Number(b.orderCount || 0) - Number(a.orderCount || 0);
+      return new Date(String(b.createdAt || 0)).getTime() - new Date(String(a.createdAt || 0)).getTime();
+    });
+  }, [customers, directoryFilter, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -2471,6 +2705,63 @@ function StaffCustomerDirectory({
     }
   }
 
+  async function removeRedeemed(customerId: string, voucher: OwnerVoucher) {
+    if (
+      !window.confirm(
+        `Confirm ${voucher.voucherCode} was redeemed and remove it from this customer? This cannot be undone.`,
+      )
+    )
+      return;
+    setRemovingVoucherId(voucher.id);
+    try {
+      await removeRedeemedVoucher(voucher.id);
+      setVouchers((current) => current.filter((item) => item.id !== voucher.id));
+      await onRefresh();
+      onError(`Redemption confirmed. Voucher ${voucher.voucherCode} was removed.`);
+    } catch (error) {
+      onError(getMessage(error));
+      const list = await loadCustomerVouchers(customerId);
+      setVouchers(list);
+    } finally {
+      setRemovingVoucherId(null);
+    }
+  }
+
+  async function issueCampaign() {
+    const value = Number(campaignValue);
+    if (!Number.isFinite(value) || value <= 0) return;
+    const audienceLabel =
+      campaignAudience === "subscribed"
+        ? `${subscribedCount} subscribed customers`
+        : `all ${customers.length} customer records, including unsubscribed customers`;
+    if (
+      !window.confirm(
+        `Create one unique, single-use voucher for ${audienceLabel}?`,
+      )
+    )
+      return;
+    setCampaignBusy(true);
+    setCampaignResults([]);
+    try {
+      const result = await createVoucherCampaign({
+        audience: campaignAudience,
+        description: campaignDescription.trim() || undefined,
+        expiresInDays: campaignExpiry ? Number(campaignExpiry) : undefined,
+        value,
+        voucherType: campaignType,
+      });
+      setCampaignResults(result.issued);
+      await onRefresh();
+      onError(
+        `${result.issued.length} unique vouchers created. Each customer account has its voucher; use the WhatsApp share list below for phone delivery.`,
+      );
+    } catch (error) {
+      onError(getMessage(error));
+    } finally {
+      setCampaignBusy(false);
+    }
+  }
+
   function formatCurrency(value: unknown): string {
     const num = Number(value || 0);
     return num > 0 ? `EGP ${num.toFixed(2)}` : "—";
@@ -2499,6 +2790,111 @@ function StaffCustomerDirectory({
           </p>
         </div>
       </div>
+      {canManageVouchers ? (
+        <section className="voucher-campaign-studio">
+          <div className="voucher-campaign-intro">
+            <p className="eyebrow">Voucher campaign</p>
+            <h3>Send a unique offer to an audience</h3>
+            <p>
+              Every recipient receives a different one-time code in their Joy
+              Corner account. WhatsApp sharing remains under your control.
+            </p>
+          </div>
+          <div className="voucher-campaign-controls">
+            <label>
+              Audience
+              <select
+                onChange={(event) =>
+                  setCampaignAudience(event.target.value as typeof campaignAudience)
+                }
+                value={campaignAudience}
+              >
+                <option value="subscribed">Subscribed only ({subscribedCount})</option>
+                <option value="all">All, including unsubscribed ({customers.length})</option>
+              </select>
+            </label>
+            <label>
+              Discount type
+              <select
+                onChange={(event) =>
+                  setCampaignType(event.target.value as typeof campaignType)
+                }
+                value={campaignType}
+              >
+                <option value="fixed">Fixed EGP</option>
+                <option value="percentage">Percentage</option>
+              </select>
+            </label>
+            <label>
+              Value
+              <input
+                inputMode="decimal"
+                max={campaignType === "percentage" ? 100 : undefined}
+                min="1"
+                onChange={(event) => setCampaignValue(event.target.value)}
+                placeholder={campaignType === "fixed" ? "80 EGP" : "10%"}
+                type="number"
+                value={campaignValue}
+              />
+            </label>
+            <label>
+              Expiry days
+              <input
+                inputMode="numeric"
+                min="1"
+                onChange={(event) => setCampaignExpiry(event.target.value)}
+                placeholder="30"
+                type="number"
+                value={campaignExpiry}
+              />
+            </label>
+            <label className="voucher-campaign-description">
+              Message / description
+              <input
+                maxLength={200}
+                onChange={(event) => setCampaignDescription(event.target.value)}
+                placeholder="A special drink reward from Joy Corner"
+                value={campaignDescription}
+              />
+            </label>
+            <button
+              disabled={campaignBusy || !Number(campaignValue)}
+              onClick={() => void issueCampaign()}
+              type="button"
+            >
+              {campaignBusy ? "Creating campaign…" : "Create account vouchers"}
+            </button>
+          </div>
+          {campaignResults.length ? (
+            <div className="voucher-campaign-results">
+              <header>
+                <strong>{campaignResults.length} vouchers ready</strong>
+                <span>Share each customer's voucher artwork to WhatsApp.</span>
+              </header>
+              <div>
+                {campaignResults.map((recipient) => (
+                  <button
+                    onClick={() => void shareVoucherArtwork({
+                      code: recipient.voucherCode,
+                      customerName: recipient.customerName,
+                      expiresAt: recipient.expiresAt,
+                      reward: recipient.description || (recipient.voucherType === "fixed"
+                        ? `${Number(recipient.fixedValue).toFixed(0)} EGP`
+                        : `${Number(recipient.percentageValue).toFixed(0)}% off`),
+                    })}
+                    key={recipient.id}
+                    type="button"
+                  >
+                    <span>{recipient.customerName}</span>
+                    <strong>{recipient.voucherCode}</strong>
+                    <small>Share voucher artwork</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <form
         className="profile-grid"
         onSubmit={(e) => {
@@ -2556,33 +2952,38 @@ function StaffCustomerDirectory({
           className="category-rail staff-category-rail"
           style={{ margin: 0 }}
         >
-          {(["all", "subscribed", "not_subscribed"] as const).map((option) => (
+          {(["all", "registered", "guest", "unpaid", "vouchers"] as const).map((option) => (
             <button
-              aria-pressed={consentFilter === option}
-              className={consentFilter === option ? "active" : ""}
+              aria-pressed={directoryFilter === option}
+              className={directoryFilter === option ? "active" : ""}
               key={option}
               onClick={() => {
-                setConsentFilter(option);
+                setDirectoryFilter(option);
                 setPage(1);
               }}
               type="button"
             >
-              {option === "all"
-                ? "All"
-                : option === "subscribed"
-                  ? "Subscribed"
-                  : "Not subscribed"}
+              {option === "all" ? "All" : option === "guest" ? "Unsubscribed" : option === "unpaid" ? "Has unpaid balance" : option === "vouchers" ? "Has active vouchers" : "Registered"}
             </button>
           ))}
         </div>
+        <label>
+          <span className="sr-only">Sort customers</span>
+          <select onChange={(event) => setSort(event.target.value as typeof sort)} value={sort}>
+            <option value="newest">Newest</option>
+            <option value="name">Name</option>
+            <option value="unpaid">Highest unpaid</option>
+            <option value="orders">Most orders</option>
+          </select>
+        </label>
       </div>
       <div className="staff-table">
         <div className="staff-table-row heading">
           <span>Customer</span>
+          <span>Account</span>
           <span>Orders</span>
-          <span>Total Spend</span>
-          <span>Last Order</span>
-          <span>Consent</span>
+          <span>Unpaid</span>
+          <span>Vouchers</span>
           {canManageVouchers ? <span>Actions</span> : null}
         </div>
         {paged.map((customer) => {
@@ -2601,24 +3002,22 @@ function StaffCustomerDirectory({
                   >
                     {String(customer.email || "—")}
                     {customer.phone ? ` · ${String(customer.phone)}` : ""}
+                    {` · Last visit ${timeAgo(customer.lastOrderAt)}`}
                   </span>
                 </div>
+                <span className={`consent-badge ${customer.accountStatus === "guest" ? "not-subscribed" : "subscribed"}`}>
+                  {customer.accountStatus === "guest" ? "Unsubscribed" : "Registered"}
+                </span>
                 <span>
                   <span className="stat-pill">
                     {Number(customer.orderCount || 0)}
                   </span>
                 </span>
-                <span>{formatCurrency(customer.totalSpend)}</span>
-                <span>{timeAgo(customer.lastOrderAt)}</span>
                 <span>
-                  {customer.marketingConsent ? (
-                    <span className="consent-badge subscribed">Subscribed</span>
-                  ) : (
-                    <span className="consent-badge not-subscribed">
-                      Not subscribed
-                    </span>
-                  )}
+                  <strong>{formatCurrency(customer.outstandingBalance)}</strong>
+                  <small className="muted">{Number(customer.unpaidReceiptCount || 0)} receipts</small>
                 </span>
+                <span>{Number(customer.activeVoucherCount || 0)}</span>
                 {canManageVouchers ? (
                   <span>
                     <button
@@ -2686,15 +3085,18 @@ function StaffCustomerDirectory({
                         const isRedeemable =
                           v.status === "active" &&
                           (!v.expiresAt || new Date(v.expiresAt) > new Date());
-                        const phone = String(customer.phone || "");
-                        const waLink = buildWhatsAppVoucherLink(
-                          phone,
-                          v.voucherCode,
-                          v.description,
-                          String(customer.fullName || "there"),
-                        );
                         return (
                           <div className="voucher-card" key={v.id}>
+                            <VoucherCard
+                              data={{
+                                code: v.voucherCode,
+                                customerName: String(customer.fullName || ""),
+                                expiresAt: v.expiresAt,
+                                reward: label,
+                                status: v.status,
+                              }}
+                              variant="standard"
+                            />
                             <div className="voucher-card-info">
                               <strong>{v.voucherCode}</strong>
                               <span>{label}</span>
@@ -2712,16 +3114,36 @@ function StaffCustomerDirectory({
                                   : ""}
                               </span>
                             </div>
-                            {isRedeemable && phone ? (
-                              <a
-                                className="compact-menu-btn wa-link"
-                                href={waLink}
-                                rel="noopener noreferrer"
-                                target="_blank"
+                            <div className="voucher-card-actions">
+                              <button
+                                className="compact-menu-btn"
+                                onClick={() => void navigator.clipboard.writeText(v.voucherCode)}
+                                type="button"
                               >
-                                Send via WhatsApp
-                              </a>
-                            ) : null}
+                                Copy code
+                              </button>
+                              {isRedeemable ? (
+                                <button
+                                  className="compact-menu-btn"
+                                  onClick={() => void shareVoucherArtwork({ code: v.voucherCode, customerName: String(customer.fullName || ""), expiresAt: v.expiresAt, reward: label })}
+                                  type="button"
+                                >
+                                  Share artwork to WhatsApp
+                                </button>
+                              ) : null}
+                              {v.status === "redeemed" ? (
+                                <button
+                                  className="button-danger compact-menu-btn"
+                                  disabled={removingVoucherId === v.id}
+                                  onClick={() => void removeRedeemed(cid, v)}
+                                  type="button"
+                                >
+                                  {removingVoucherId === v.id
+                                    ? "Removing…"
+                                    : "Confirm redeemed & remove"}
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         );
                       })}

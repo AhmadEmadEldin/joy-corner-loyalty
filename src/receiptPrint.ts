@@ -52,27 +52,30 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
     <meta charset="utf-8" />
     <title>${escapeHtml(title)}</title>
     <style>
-      @page { size: A4; margin: 14mm; }
-      body { font-family: "Inter", Arial, sans-serif; margin: 0; color: #241814; background: #fff; }
+      @page { size: 80mm auto; margin: 0; }
+      html, body { width: 80mm; min-height: 100%; }
+      body { font-family: "Arial Narrow", Arial, sans-serif; margin: 0; color: #111; background: #eee; }
       .page {
         position: relative;
         isolation: isolate;
         overflow: hidden;
-        max-width: 800px;
+        width: 72mm;
+        min-height: 110mm;
         margin: 0 auto;
-        padding: 20px;
-        background: #fffaf2;
+        padding: 4mm 3mm 6mm;
+        background: #fff;
+        box-shadow: 0 10px 35px rgba(0,0,0,.16);
       }
       .page::before {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(184,121,62,0.04) 0%, rgba(107,70,52,0.06) 50%, rgba(184,121,62,0.03) 100%);
         background-image: url("/brand/joy-corner-receipt-farm.svg");
-        background-position: center;
-        background-size: cover;
+        background-position: center bottom;
+        background-size: 100% auto;
         background-repeat: no-repeat;
-        opacity: 0.06;
+        filter: grayscale(1) contrast(1.35);
+        opacity: 0.075;
         pointer-events: none;
         z-index: -2;
       }
@@ -80,39 +83,42 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         content: "";
         position: absolute;
         inset: 0;
-        background: rgba(255, 250, 242, 0.72);
+        background: linear-gradient(#fff 0 74%, rgba(255,255,255,.88));
         pointer-events: none;
         z-index: -1;
       }
-      .header { border-bottom: 2px solid #2A1812; padding-bottom: 8px; margin-bottom: 16px; position: relative; z-index: 1; }
-      .brand { font-family: "Fraunces", Georgia, serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; color: #2A1812; }
-      .sub { color: #74645D; margin-top: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
-      .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 12px 0 20px; font-size: 14px; position: relative; z-index: 1; }
+      .header { border-bottom: 2px solid #111; padding-bottom: 3mm; margin-bottom: 3mm; position: relative; z-index: 1; text-align:center; }
+      .logo { width: 48mm; max-height: 29mm; object-fit: contain; object-position:center; filter: grayscale(1) contrast(1.5); }
+      .meta { display: grid; gap: 1.2mm; margin: 3mm 0; font-size: 10px; position: relative; z-index: 1; }
       .meta > div, td, th, .totals span, .totals strong { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
-      table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; position: relative; z-index: 1; }
-      th, td { border-bottom: 1px solid #DFD2C4; padding: 8px 6px; text-align: left; vertical-align: top; }
-      th:first-child, td:first-child { width: 36%; }
-      th:nth-child(2), td:nth-child(2) { width: 18%; }
-      th:nth-child(3), td:nth-child(3) { width: 9%; text-align: center; }
-      th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { width: 18.5%; text-align: right; }
-      th { background: #EEE1D0; font-size: 13px; text-transform: uppercase; color: #6B4634; }
-      .totals { margin-top: 12px; display: grid; gap: 6px; font-size: 15px; position: relative; z-index: 1; }
-      .totals div { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(110px, auto); }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 2mm; position: relative; z-index: 1; }
+      th, td { border-bottom: 1px dashed #777; padding: 1.8mm .7mm; text-align: left; vertical-align: top; font-size:10px; }
+      th:first-child, td:first-child { width: 56%; }
+      th:nth-child(2), td:nth-child(2) { width: 12%; text-align:center; }
+      th:nth-child(3), td:nth-child(3) { width: 32%; text-align:right; }
+      th { border-block: 1.5px solid #111; font-size: 9px; text-transform: uppercase; letter-spacing:.08em; }
+      .item-size { display:block; color:#444; font-size:8.5px; margin-top:.5mm; }
+      .totals { border-top: 2px solid #111; margin-top: 3mm; padding-top:2mm; display: grid; gap: 1.2mm; font-size: 10px; position: relative; z-index: 1; }
+      .totals div { display: grid; gap: 3mm; grid-template-columns: minmax(0, 1fr) minmax(27mm, auto); }
       .totals strong { text-align: right; }
-      .strong { font-weight: 800; font-size: 16px; }
-      .actions { margin-top: 20px; display: flex; gap: 10px; position: relative; z-index: 1; }
-      .actions button { border: 0; border-radius: 6px; background: #2A1812; color: #fff; padding: 10px 14px; cursor: pointer; font-size: 14px; }
-      .actions button:hover { background: #3B241B; }
-      .footer-note { margin-top: 24px; text-align: center; font-size: 12px; color: #74645D; position: relative; z-index: 1; }
-      @media (max-width: 560px) { .meta { grid-template-columns: 1fr; } .page { padding: 14px; } th, td { font-size: 12px; padding: 7px 3px; } }
-      @media print { .actions { display: none; } .page { overflow: visible; } .page::before { opacity: 0; } .page::after { opacity: 0; } }
+      .strong { border-block:1.5px solid #111; font-weight: 900; font-size: 13px; margin-block:1mm; padding-block:1.5mm; }
+      .remaining { font-size:12px; }
+      .note { border:1px dashed #555; margin-top:3mm; padding:2mm; font-size:9px; position:relative; z-index:1; }
+      .actions { margin: 5mm auto 0; display: flex; gap: 2mm; position: relative; z-index: 1; }
+      .actions button { border: 0; border-radius: 4px; background: #111; color: #fff; padding: 2.5mm 3mm; cursor: pointer; font-size: 10px; }
+      .footer-note { border-top:1px dashed #555; margin-top: 5mm; padding-top:3mm; text-align: center; font-family:Georgia,serif; font-size: 9px; color: #222; position: relative; z-index: 1; }
+      @media print {
+        html, body { background:#fff; }
+        .actions { display: none; }
+        .page { overflow: hidden; box-shadow:none; }
+        .page, .page::before, .page::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
     </style>
   </head>
   <body>
     <div class="page">
       <div class="header">
-        <div class="brand">JOY CORNER</div>
-        <div class="sub">Receipt / Order Slip</div>
+        <img class="logo" src="/assets/joy-corner-logo-master.png" alt="Joy Corner Coffee logo" />
       </div>
       <div class="meta">
         <div><strong>Receipt:</strong> ${escapeHtml(title)}</div>
@@ -124,23 +130,15 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
       </div>
       <table>
         <thead>
-          <tr>
-            <th>Item</th>
-            <th>Size</th>
-            <th>Qty</th>
-            <th>Unit</th>
-            <th>Total</th>
-          </tr>
+          <tr><th>Item</th><th>Qty</th><th>Amount</th></tr>
         </thead>
         <tbody>
           ${items
             .map(
               (item) => `
             <tr>
-              <td>${escapeHtml(item.itemName || "Item")}</td>
-              <td>${escapeHtml(item.size || "")}</td>
+              <td>${escapeHtml(item.itemName || "Item")}<span class="item-size">${escapeHtml(item.size || "")} · ${money(item.unitPrice || 0)} EGP each</span></td>
               <td>${money(item.qty || 0)}</td>
-              <td>${money(item.unitPrice || 0)} EGP</td>
               <td>${money(item.total || 0)} EGP</td>
             </tr>`,
             )
@@ -152,7 +150,7 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         <div><span>Discount</span><strong>${money(data.discountPercentage || 0)}%</strong></div>
         <div class="strong"><span>Total</span><strong>${money(data.total || 0)} EGP</strong></div>
         <div><span>Paid</span><strong>${money(data.paidAmount || 0)} EGP</strong></div>
-        <div><span>Remaining</span><strong>${money(data.outstandingAmount || 0)} EGP</strong></div>
+        <div class="remaining"><span>Remaining</span><strong>${money(data.outstandingAmount || 0)} EGP</strong></div>
         ${
           data.changeAmount
             ? `<div><span>Change</span><strong>${money(data.changeAmount)} EGP</strong></div>`
@@ -160,8 +158,8 @@ export function buildReceiptPrintHtml(data: ReceiptPrintData) {
         }
         <div><span>Status</span><strong>${escapeHtml(data.paymentStatus || "")}</strong></div>
       </div>
-      ${data.notes ? `<div class="totals"><div><span>Notes</span><strong>${escapeHtml(data.notes)}</strong></div></div>` : ""}
-      <p class="footer-note">Thank you for choosing Joy Corner. Your time, your coffee.</p>
+      ${data.notes ? `<div class="note"><strong>Order note:</strong> ${escapeHtml(data.notes)}</div>` : ""}
+      <p class="footer-note">Serving coffee lovers every day.<br />Your time, your coffee, your story.</p>
       <div class="actions">
         <button onclick="window.print()">Save as PDF</button>
         <button onclick="window.close()">Close</button>

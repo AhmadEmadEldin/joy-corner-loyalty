@@ -4,6 +4,7 @@ import {
   BookOpenText,
   CircleDollarSign,
   Coffee,
+  Dices,
   CookingPot,
   Gift,
   House,
@@ -27,6 +28,7 @@ export type AppIconName =
   | "cart"
   | "cashier"
   | "customers"
+  | "game"
   | "end-day"
   | "home"
   | "kitchen"
@@ -48,6 +50,7 @@ const icons: Record<AppIconName, LucideIcon> = {
   cart: ShoppingCart,
   cashier: WalletCards,
   customers: UsersRound,
+  game: Dices,
   "end-day": PackageCheck,
   home: House,
   kitchen: CookingPot,

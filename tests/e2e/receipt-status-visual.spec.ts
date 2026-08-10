@@ -43,13 +43,13 @@ test("receipt status colors and finished slash are scoped by view", async ({
 
   await expect(
     page.locator(".barista-receipt.status-accepted").first(),
-  ).toHaveCSS("border-left-color", "rgb(249, 115, 22)");
+  ).toHaveCSS("border-left-color", "rgba(96, 112, 190, 0.72)");
   await expect(
     page.locator(".barista-receipt.status-picked-up").first(),
-  ).toHaveCSS("border-left-color", "rgb(185, 28, 28)");
-  await expect(page.locator("#paid")).toHaveCSS("color", "rgb(22, 101, 52)");
-  await expect(page.locator("#unpaid")).toHaveCSS("color", "rgb(153, 27, 27)");
-  await expect(page.locator("#partial")).toHaveCSS("color", "rgb(154, 52, 18)");
+  ).toHaveCSS("border-left-color", "rgba(45, 148, 151, 0.72)");
+  await expect(page.locator("#paid")).toHaveCSS("color", "rgb(217, 245, 227)");
+  await expect(page.locator("#unpaid")).toHaveCSS("color", "rgb(224, 112, 104)");
+  await expect(page.locator("#partial")).toHaveCSS("color", "rgb(198, 138, 44)");
 
   const baristaSlash = await page
     .locator(".barista-receipt.is-finished")

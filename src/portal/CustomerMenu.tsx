@@ -66,6 +66,8 @@ export function CustomerMenu({
   }, [category, menu, query]);
   const quantity = cart.reduce((sum, line) => sum + line.quantity, 0);
   const total = cart.reduce((sum, line) => sum + lineTotal(line), 0);
+  const showCategoryLanding =
+    category === "All" && !query.trim() && menu.length > 12;
 
   function saveLine(line: CartLine) {
     if (editing) {
@@ -114,7 +116,7 @@ export function CustomerMenu({
               />
             </label>
           </header>
-          {category === "All" && !query.trim() ? (
+          {category === "All" && !query.trim() && menu.length ? (
             <MenuCategoryGallery
               categories={categories.filter((name) => name !== "All")}
               items={menu}
@@ -145,7 +147,7 @@ export function CustomerMenu({
               <strong>No menu items available.</strong>
               <p>Please check back later.</p>
             </div>
-          ) : visible.length ? (
+          ) : showCategoryLanding ? null : visible.length ? (
             <div className="kiosk-product-grid">
               {visible.map((item) => {
                 const isUnavailable = item.availability_state !== "available";
@@ -228,7 +230,6 @@ export function CustomerMenu({
             className="customer-brand-story"
             aria-label="The Joy Corner story"
           >
-            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
             <div>
               <p className="eyebrow">From farm to cup</p>
               <h3>Every cup tells a story</h3>
@@ -366,7 +367,6 @@ function CartPanel({
           ))
         ) : (
           <div className="empty-cart-state">
-            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
             <p>Your favorite Joy Corner order will appear here.</p>
           </div>
         )}

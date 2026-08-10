@@ -86,7 +86,7 @@ export async function restoreSession(): Promise<SessionUser | null> {
 
 export function subscribeToEvents(
   topics: string[],
-  onChange: () => void,
+  onChange: (event?: { entityId?: string; topic?: string }) => void,
 ): () => void {
   const controller = new AbortController();
 
@@ -106,7 +106,22 @@ export function subscribeToEvents(
         const frames = buffer.split("\n\n");
         buffer = frames.pop() || "";
         for (const frame of frames) {
-          if (frame.includes("event: change")) onChange();
+          if (!frame.includes("event: change")) continue;
+          const dataLine = frame
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+          if (!dataLine) {
+            onChange();
+            continue;
+          }
+          try {
+            onChange(JSON.parse(dataLine.slice(6)) as {
+              entityId?: string;
+              topic?: string;
+            });
+          } catch {
+            onChange();
+          }
         }
       }
     })

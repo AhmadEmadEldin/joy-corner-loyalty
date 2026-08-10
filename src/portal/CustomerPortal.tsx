@@ -4,6 +4,8 @@ import { BrandLogo } from "./BrandLogo";
 import { CustomerMenu } from "./CustomerMenu";
 import { CustomerNavigation, CustomerSection } from "./CustomerNavigation";
 import { CustomerOrders } from "./CustomerOrders";
+import { CoffeeWorldGame } from "./CoffeeWorldGame";
+import { VoucherCard, shareVoucherArtwork } from "./VoucherCard";
 import { restoreSession, subscribeToSession, type SessionUser } from "./client";
 import {
   clearCartDraft,
@@ -111,7 +113,7 @@ function CustomerAccess() {
         aria-label="Joy Corner customer access"
       >
         <aside className="auth-story-panel">
-          <BrandLogo stacked />
+          <BrandLogo markOnly showName stacked />
           <div>
             <p className="eyebrow">Coffee & story · Est. 2016</p>
             <h2>
@@ -124,7 +126,7 @@ function CustomerAccess() {
           <small>Joy Corner Loyalty</small>
         </aside>
         <section className="auth-card">
-          <BrandLogo compact />
+          <BrandLogo compact markOnly showName />
           <p className="eyebrow">Joy Corner Loyalty</p>
           <h1>
             {mode === "login" ? "Welcome back" : "Create your customer account"}
@@ -303,13 +305,14 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
     let refreshTimer: number | undefined;
     const unsubscribe = subscribeToCustomerChanges(
       user.id,
-      () => {
+      (event) => {
         window.clearTimeout(refreshTimer);
         refreshTimer = window.setTimeout(() => {
-          void refreshDashboard();
-          void loadMenu()
-            .then(setMenu)
-            .catch(() => undefined);
+          if (event?.topic === "menu") {
+            void loadMenu().then(setMenu).catch(() => undefined);
+          } else {
+            void refreshDashboard();
+          }
         }, 150);
       },
       (connected) => setRealtimeState(connected ? "connected" : "reconnecting"),
@@ -453,12 +456,29 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
       ) : null}
       {section === "home" ? (
         <CustomerHome
+          onGame={() => setSection("game")}
           onMenu={() => setSection("menu")}
           orders={orders}
           profile={profile}
           rewards={rewards}
           vouchers={activeVouchers}
         />
+      ) : null}
+      {section === "game" ? <CoffeeWorldGame /> : null}
+      {section === "menu" ? (
+        <button
+          className="customer-game-invite customer-game-invite--menu"
+          onClick={() => setSection("game")}
+          type="button"
+        >
+          <span className="customer-game-invite-dice">🎲</span>
+          <span>
+            <small>Waiting for your coffee?</small>
+            <strong>Connect the coffee countries</strong>
+            <em>Roll, find the matching cards, and collect beans.</em>
+          </span>
+          <b>Click here to play →</b>
+        </button>
       ) : null}
       {section === "menu" || section === "cart" ? (
         <CustomerMenu
@@ -552,12 +572,14 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
 }
 
 function CustomerHome({
+  onGame,
   onMenu,
   orders,
   profile,
   rewards,
   vouchers,
 }: {
+  onGame: () => void;
   onMenu: () => void;
   orders: CustomerOrder[];
   profile: CustomerProfile;
@@ -596,6 +618,19 @@ function CustomerHome({
           <p>From farm to cup, with love.</p>
         </div>
       </div>
+      <button
+        className="customer-game-invite"
+        onClick={onGame}
+        type="button"
+      >
+        <span className="customer-game-invite-dice">🎲</span>
+        <span>
+          <small>While your coffee is being made</small>
+          <strong>Connect the coffee countries</strong>
+          <em>Challenge your friends on the same phone.</em>
+        </span>
+        <b>Click here to play →</b>
+      </button>
       <div className="home-summary-grid">
         <article>
           <small>Reward points</small>
@@ -751,25 +786,39 @@ function CustomerVoucherCard({
         ? "FREE DRINK"
         : voucher.voucher_type.replace(/_/g, " ").toUpperCase();
   return (
-    <article className={`voucher-premium-card voucher-premium-card--${state}`}>
-      <header>
-        <BrandLogo compact />
-        <span>{state}</span>
-      </header>
-      <div className="voucher-premium-body">
-        <p>A little joy, from our corner to yours</p>
-        <strong>{value}</strong>
-        <small>{voucher.voucher_type.replace(/_/g, " ")}</small>
+    <div className={`voucher-premium-card voucher-premium-card--${state}`}>
+      <VoucherCard
+        data={{
+          code: voucher.voucher_code,
+          expiresAt: voucher.expires_at,
+          reward: value,
+          status: state,
+        }}
+        variant="compact"
+      />
+      <div className="voucher-card-actions">
+        <button
+          onClick={() => void navigator.clipboard.writeText(voucher.voucher_code)}
+          type="button"
+        >
+          Copy code
+        </button>
+        {state === "active" ? (
+          <button
+            onClick={() =>
+              void shareVoucherArtwork({
+                code: voucher.voucher_code,
+                expiresAt: voucher.expires_at,
+                reward: value,
+              })
+            }
+            type="button"
+          >
+            Share
+          </button>
+        ) : null}
       </div>
-      <footer>
-        <span>
-          {voucher.expires_at
-            ? `Valid until ${new Date(voucher.expires_at).toLocaleDateString("en-EG")}`
-            : "A timeless Joy Corner reward"}
-        </span>
-        <code>{voucher.voucher_code}</code>
-      </footer>
-    </article>
+    </div>
   );
 }
 

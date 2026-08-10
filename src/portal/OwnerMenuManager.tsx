@@ -44,7 +44,7 @@ export function OwnerMenuManager() {
     const normalized = query.trim().toLowerCase();
     return items.filter(
       (item) =>
-        (!missingOnly || !item.image_url) &&
+        (!missingOnly || item.image_source !== "owner") &&
         (!normalized ||
           item.name.toLowerCase().includes(normalized) ||
           item.category.toLowerCase().includes(normalized)),
@@ -66,13 +66,16 @@ export function OwnerMenuManager() {
         );
         return {
           ...category,
-          missing: categoryItems.filter((item) => !item.image_url).length,
+          missing: categoryItems.filter((item) => item.image_source !== "owner")
+            .length,
           total: categoryItems.length,
         };
       }),
     [categories, items],
   );
-  const missingImageCount = items.filter((item) => !item.image_url).length;
+  const missingImageCount = items.filter(
+    (item) => item.image_source !== "owner",
+  ).length;
 
   return (
     <section className="portal-section owner-menu-manager">
@@ -81,7 +84,7 @@ export function OwnerMenuManager() {
           <p className="eyebrow">Owner catalog tools</p>
           <h2>Menu and product images</h2>
           <p className="muted">
-            {items.length} products · {missingImageCount} missing images
+            {items.length} products · {missingImageCount} using Joy Corner defaults
           </p>
           {missingImageCount ? (
             <details className="owner-image-coverage">
@@ -163,7 +166,9 @@ export function OwnerMenuManager() {
                   </small>
                 ) : null}
               </span>
-              {!item.image_url ? <em>Image needed</em> : null}
+              {item.image_source !== "owner" ? (
+                <em>Joy Corner default image</em>
+              ) : null}
             </button>
           ))}
           {!filtered.length ? (
@@ -178,7 +183,7 @@ export function OwnerMenuManager() {
           />
         ) : (
           <div className="owner-menu-empty">
-            <img alt="" src="/assets/joy-corner-emblem-v2.png" />
+            <img alt="" src="/assets/joy-corner-logo-mark.png" />
             <p>Select a product to manage its details and image.</p>
           </div>
         )}
@@ -230,7 +235,7 @@ function OwnerMenuEditor({
     setBusy(true);
     setMessage("Uploading image…");
     try {
-      await uploadOwnerMenuImage(item.id, file, item.image_url);
+      await uploadOwnerMenuImage(item.id, file, item.owner_image_url || null);
       await onChanged();
       setMessage("Product image updated.");
     } catch (error) {
@@ -241,12 +246,13 @@ function OwnerMenuEditor({
   }
 
   async function removeImage() {
-    if (!window.confirm(`Remove the image for ${item.name}?`)) return;
+    if (!window.confirm(`Restore the Joy Corner default for ${item.name}?`))
+      return;
     setBusy(true);
     try {
-      await removeOwnerMenuImage(item.id, item.image_url);
+      await removeOwnerMenuImage(item.id, item.owner_image_url || null);
       await onChanged();
-      setMessage("Product image removed.");
+      setMessage("Joy Corner default image restored.");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -258,13 +264,13 @@ function OwnerMenuEditor({
     <form className="owner-menu-editor" onSubmit={save}>
       <div className="owner-menu-image-preview">
         <ProductImage
-          alt={item.image_url ? item.name : `${item.name} image missing`}
+          alt={item.name}
           size="lg"
           src={item.image_url}
         />
         <div>
           <label className="button-like">
-            {item.image_url ? "Replace image" : "Upload image"}
+            {item.image_source === "owner" ? "Replace image" : "Upload image"}
             <input
               accept="image/avif,image/jpeg,image/png,image/webp"
               disabled={busy}
@@ -272,17 +278,21 @@ function OwnerMenuEditor({
               type="file"
             />
           </label>
-          {item.image_url ? (
+          {item.image_source === "owner" ? (
             <button
               className="button-danger"
               disabled={busy}
               onClick={() => void removeImage()}
               type="button"
             >
-              Remove image
+              Restore default image
             </button>
           ) : null}
-          <small>JPG, PNG, WebP, or AVIF · maximum 5 MB</small>
+          <small>
+            {item.image_source === "owner"
+              ? "Owner image overrides the Joy Corner default."
+              : "Joy Corner default image · JPG, PNG, WebP, or AVIF · maximum 5 MB"}
+          </small>
         </div>
       </div>
       <label>

@@ -42,6 +42,7 @@ export function ProductImage({
   const x = Math.max(0, Math.min(100, positionX));
   const y = Math.max(0, Math.min(100, positionY));
   const z = Math.max(1, Math.min(2.5, zoom));
+  const isBrandedCup = Boolean(src?.includes("joy-cold-cup") || src?.includes("joy-hot-cup"));
 
   const wrapperStyle: React.CSSProperties = {
     "--img-x": `${x}%`,
@@ -104,7 +105,7 @@ export function ProductImage({
           style={{
             animation: "kiosk-pulse 1.4s ease-in-out infinite",
             background:
-              "linear-gradient(110deg, #eadfce 20%, #fff7eb 40%, #eadfce 60%)",
+              "linear-gradient(110deg, #1a100b 20%, #38251a 40%, #1a100b 60%)",
             backgroundSize: "220% 100%",
             height: "100%",
             position: "absolute",
@@ -114,6 +115,7 @@ export function ProductImage({
       ) : null}
       <img
         alt={alt}
+        decoding="async"
         loading="lazy"
         onError={() => setState("error")}
         onLoad={() => setState("loaded")}
@@ -128,6 +130,11 @@ export function ProductImage({
           width: "100%",
         }}
       />
+      {isBrandedCup && state !== "error" ? (
+        <span className="cold-cup-brand" aria-hidden="true">
+          <img alt="" src="/assets/brand/joy-corner-logo-black-transparent-v1.png" />
+        </span>
+      ) : null}
       {state === "error" ? (
         <div
           aria-label={alt}

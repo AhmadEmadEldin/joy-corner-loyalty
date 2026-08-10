@@ -7,6 +7,7 @@ export type CustomerSection =
   | "home"
   | "menu"
   | "cart"
+  | "game"
   | "orders"
   | "receipts"
   | "unpaid"
@@ -32,6 +33,7 @@ type CustomerNavigationProps = {
 const items: Array<Omit<NavigationItem, "badge">> = [
   { id: "home", icon: "home", label: "Home" },
   { id: "menu", icon: "menu", label: "Menu" },
+  { id: "game", icon: "game", label: "Coffee game" },
   { id: "cart", icon: "cart", label: "My cart" },
   { id: "orders", icon: "orders", label: "My orders" },
   { id: "receipts", icon: "receipts", label: "Receipts" },
@@ -43,7 +45,7 @@ const items: Array<Omit<NavigationItem, "badge">> = [
 ];
 
 const mobileItems = items.filter(({ id }) =>
-  ["home", "menu", "orders", "rewards", "profile"].includes(id),
+  ["home", "menu", "game", "orders", "rewards"].includes(id),
 );
 
 export function CustomerNavigation({
@@ -140,7 +142,7 @@ export function CustomerNavigation({
             role="dialog"
           >
             <header>
-              <BrandLogo compact />
+              <BrandLogo compact markOnly />
             </header>
             <nav aria-label="Mobile customer sections">
               {items.map((item) => (

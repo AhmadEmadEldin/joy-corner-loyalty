@@ -4,14 +4,9 @@
   "display": "standalone",
   "icons": [
     {
-      "src": "/assets/joy-corner-mark.png",
-      "sizes": "192x192",
+      "src": "/assets/joy-corner-logo-mark.png",
+      "sizes": "220x220",
       "type": "image/png"
-    },
-    {
-      "src": "/assets/joy-corner-logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
     }
   ],
   "name": "Joy Corner Cafe Management",
