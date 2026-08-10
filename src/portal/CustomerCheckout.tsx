@@ -59,6 +59,15 @@ export function CustomerCheckout({
       voucher.status === "active" &&
       (!voucher.expires_at || new Date(voucher.expires_at).getTime() > Date.now()),
   );
+  const selectedVoucher = validVouchers.find(
+    (voucher) =>
+      voucher.voucher_code.toLocaleUpperCase() ===
+      voucherCode.trim().toLocaleUpperCase(),
+  );
+  const voucherDiscount = selectedVoucher
+    ? calculateVoucherDiscount(selectedVoucher, subtotal)
+    : 0;
+  const estimatedTotal = Math.max(0, subtotal - voucherDiscount);
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -130,6 +139,26 @@ export function CustomerCheckout({
               <section>
                 <h2>Voucher & rewards</h2>
                 <div className="reward-checkout-banner"><strong>{freeRewards}</strong><span>free rewards available</span></div>
+                <label className="voucher-code-entry">
+                  Voucher ID / code
+                  <input
+                    autoComplete="off"
+                    list="customer-voucher-codes"
+                    onChange={(event) =>
+                      setVoucherCode(event.target.value.toLocaleUpperCase())
+                    }
+                    placeholder="JC-XXXXXX"
+                    value={voucherCode}
+                  />
+                  <datalist id="customer-voucher-codes">
+                    {validVouchers.map((voucher) => (
+                      <option key={voucher.id} value={voucher.voucher_code} />
+                    ))}
+                  </datalist>
+                  <small>
+                    Enter the unique code or select one saved to your account.
+                  </small>
+                </label>
                 {validVouchers.length ? (
                   <div className="checkout-vouchers">
                     {validVouchers.map((voucher) => (
@@ -142,6 +171,18 @@ export function CustomerCheckout({
                     <button className="text-button" onClick={() => setVoucherCode("")} type="button">Do not use a voucher</button>
                   </div>
                 ) : <p className="empty-inline">You do not have an eligible voucher right now.</p>}
+                {selectedVoucher ? (
+                  <dl className="voucher-calculation-preview">
+                    <div><dt>Subtotal</dt><dd>{money.format(subtotal)}</dd></div>
+                    <div><dt>{voucherBenefit(selectedVoucher)}</dt><dd>− {money.format(voucherDiscount)}</dd></div>
+                    <div><dt>Estimated total</dt><dd>{money.format(estimatedTotal)}</dd></div>
+                  </dl>
+                ) : voucherCode.trim() ? (
+                  <p className="empty-inline">
+                    This code is not in your active account vouchers. It will
+                    be checked securely before the order is created.
+                  </p>
+                ) : null}
                 <p className="muted">Voucher ownership, expiry, and final discount are verified securely when the cashier confirms the order.</p>
               </section>
             ) : null}
@@ -174,7 +215,8 @@ export function CustomerCheckout({
                   <div><dt>Payment</dt><dd>{paymentMethod.replace(/_/g, " ")}</dd></div>
                   <div><dt>Voucher</dt><dd>{voucherCode || "None"}</dd></div>
                   <div><dt>Subtotal</dt><dd>{money.format(subtotal)}</dd></div>
-                  <div className="grand-total"><dt>Estimated total</dt><dd>{money.format(subtotal)}</dd></div>
+                  {voucherDiscount ? <div><dt>Voucher discount</dt><dd>− {money.format(voucherDiscount)}</dd></div> : null}
+                  <div className="grand-total"><dt>Estimated total</dt><dd>{money.format(estimatedTotal)}</dd></div>
                 </dl>
                 <p className="muted">The secure server revalidates availability, prices, and any voucher before creating your order. The cashier will confirm the final payable amount.</p>
               </section>
@@ -199,4 +241,19 @@ function voucherBenefit(voucher: CustomerVoucher): string {
   if (voucher.voucher_type === "fixed" && voucher.fixed_value) return `${money.format(voucher.fixed_value)} off`;
   if (voucher.voucher_type === "percentage" && voucher.percentage_value) return `${voucher.percentage_value}% off`;
   return "Free eligible item";
+}
+
+function calculateVoucherDiscount(
+  voucher: CustomerVoucher,
+  subtotal: number,
+): number {
+  if (voucher.voucher_type === "fixed" && voucher.fixed_value)
+    return Math.min(subtotal, Number(voucher.fixed_value));
+  if (voucher.voucher_type === "percentage" && voucher.percentage_value)
+    return Math.min(
+      subtotal,
+      Math.round((subtotal * Number(voucher.percentage_value)) / 100 * 100) /
+        100,
+    );
+  return 0;
 }

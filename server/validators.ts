@@ -1,9 +1,8 @@
 export function normalizePhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, "");
+  let digits = raw.replace(/\D/g, "");
   if (digits.length < 8 || digits.length > 15) return null;
-  if (digits.startsWith("20") && digits.length >= 11) {
-    return `+${digits}`;
-  }
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (/^01[0125]\d{8}$/.test(digits)) digits = `20${digits.slice(1)}`;
   return `+${digits}`;
 }
 

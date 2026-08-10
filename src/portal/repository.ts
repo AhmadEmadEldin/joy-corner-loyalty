@@ -6,6 +6,10 @@ import {
   type SessionUser,
 } from "./client";
 import type { OperationalOrderStatus } from "./workflow";
+import {
+  resolveMenuImage,
+  type MenuImageSource,
+} from "./generatedMenuImages";
 
 export type CustomerProfile = {
   customer_number: string | null;
@@ -30,6 +34,8 @@ export type MenuItem = {
   description: string;
   id: string;
   image_url: string | null;
+  image_source?: MenuImageSource;
+  owner_image_url?: string | null;
   loyalty_eligible: boolean;
   modifiers: MenuModifier[];
   name: string;
@@ -42,26 +48,18 @@ export type OwnerMenuItem = MenuItem & {
   sort_order: number;
 };
 
-const GENERATED_MENU_IMAGES: Record<string, string> = {
-  "Corto Classic": "/assets/menu/generated/corto-classic.png",
-  Espresso: "/assets/menu/generated/espresso.png",
-  "Espresso Affogato": "/assets/menu/generated/espresso-affogato.png",
-  "Espresso con panna": "/assets/menu/generated/espresso-con-panna.png",
-  "French Coffee": "/assets/menu/generated/french-coffee.png",
-  "Hazelnut Coffee": "/assets/menu/generated/hazelnut-coffee.png",
-  "Hazelnut Coffee Nutella":
-    "/assets/menu/generated/hazelnut-coffee-nutella.png",
-  "Iced Coffee": "/assets/menu/generated/iced-coffee.png",
-  "Nutella Coffee": "/assets/menu/generated/nutella-coffee.png",
-  Macchiato: "/assets/menu/generated/macchiato.png",
-  Ristretto: "/assets/menu/generated/ristretto.png",
-  "Turkish Coffee": "/assets/menu/generated/turkish-coffee.png",
-};
-
 function withGeneratedMenuImage<T extends MenuItem>(item: T): T {
+  const ownerImageUrl = item.image_url;
+  const resolved = resolveMenuImage({
+    category: item.category,
+    name: item.name,
+    ownerImageUrl,
+  });
   return {
     ...item,
-    image_url: item.image_url || GENERATED_MENU_IMAGES[item.name] || null,
+    image_source: resolved.source,
+    image_url: resolved.src,
+    owner_image_url: ownerImageUrl,
   };
 }
 export type CustomerOrder = {
@@ -372,7 +370,7 @@ export async function runEndDay(): Promise<EndDayReport> {
 
 export function subscribeToStaffQueues(
   role: StaffProfile["role"],
-  onChange: () => void,
+  onChange: (event?: { entityId?: string; topic?: string }) => void,
 ): () => void {
   return subscribeToEvents(staffQueueTables(role), onChange);
 }
@@ -536,6 +534,25 @@ export async function createCustomerVoucher(input: {
   );
 }
 
+export type VoucherCampaignRecipient = OwnerVoucher & {
+  customerId: string;
+  customerName: string;
+  phone: string | null;
+};
+
+export async function createVoucherCampaign(input: {
+  audience: "all" | "subscribed";
+  description?: string;
+  expiresInDays?: number;
+  value: number;
+  voucherType: "fixed" | "percentage";
+}): Promise<{ audience: string; issued: VoucherCampaignRecipient[] }> {
+  return apiRequest("/owner/voucher-campaigns", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+
 export function buildWhatsAppVoucherLink(
   phone: string | null,
   code: string,
@@ -558,6 +575,12 @@ export function buildWhatsAppVoucherLink(
 export async function revokeVoucher(voucherId: string): Promise<void> {
   await apiRequest(`/owner/vouchers/${encodeURIComponent(voucherId)}/revoke`, {
     method: "POST",
+  });
+}
+
+export async function removeRedeemedVoucher(voucherId: string): Promise<void> {
+  await apiRequest(`/owner/vouchers/${encodeURIComponent(voucherId)}`, {
+    method: "DELETE",
   });
 }
 
@@ -717,6 +740,7 @@ export async function createStaffOrder(input: {
     | "instapay"
     | "manual_transfer";
   pickupName: string;
+  voucherCode: string;
 }): Promise<{
   changeDue: number;
   orderId: string;
@@ -730,6 +754,22 @@ export async function createStaffOrder(input: {
       items: cartPayload(input.cart),
       idempotencyKey: crypto.randomUUID(),
     }),
+    method: "POST",
+  });
+}
+
+export async function previewVoucher(input: {
+  code: string;
+  customerId?: string | null;
+  subtotal: number;
+}): Promise<{
+  code: string;
+  discount: number;
+  total: number;
+  voucherType: string;
+}> {
+  return apiRequest("/vouchers/preview", {
+    body: JSON.stringify(input),
     method: "POST",
   });
 }
@@ -988,7 +1028,7 @@ export async function overrideItemPrice(input: {
 
 export function subscribeToCustomerChanges(
   _customerId: string,
-  onChange: () => void,
+  onChange: (event?: { entityId?: string; topic?: string }) => void,
   onConnectionChange?: (connected: boolean) => void,
 ): () => void {
   onConnectionChange?.(true);

@@ -1,20 +1,20 @@
 import type { MenuItem } from "./repository";
 
 const CATEGORY_COVERS: Record<string, string> = {
-  Cocktails: "/assets/menu/categories-v2/cocktails.png",
-  Dessert: "/assets/menu/categories-v2/desserts.png",
-  Desserts: "/assets/menu/categories-v2/desserts.png",
-  "Extra Boba": "/assets/menu/categories-v2/extras.png",
-  Extras: "/assets/menu/categories-v2/extras.png",
-  Frappes: "/assets/menu/categories-v2/frappes.png",
-  "Hot Beverages": "/assets/menu/categories-v2/hot-beverages.png",
-  "Iced Drinks": "/assets/menu/categories-v2/iced-drinks.png",
-  Juices: "/assets/menu/categories-v2/juices.png",
-  Matcha: "/assets/menu/categories-v2/matcha.png",
-  Sandwiches: "/assets/menu/categories-v2/sandwiches.png",
-  Shakes: "/assets/menu/categories-v2/shakes.png",
-  Smoothies: "/assets/menu/categories-v2/smoothies.png",
-  "Soft Drinks": "/assets/menu/categories-v2/soft-drinks.png",
+  Cocktails: "/assets/menu/categories-v3/cocktails.webp",
+  Dessert: "/assets/menu/categories-v3/desserts.webp",
+  Desserts: "/assets/menu/categories-v3/desserts.webp",
+  "Extra Boba": "/assets/menu/categories-v3/extra-boba.webp",
+  Extras: "/assets/menu/categories-v3/extras.webp",
+  Frappes: "/assets/menu/categories-v3/frappes.webp",
+  "Hot Beverages": "/assets/menu/categories-v3/hot-beverages.webp",
+  "Iced Drinks": "/assets/menu/categories-v3/iced-drinks.webp",
+  Juices: "/assets/menu/categories-v3/juices.webp",
+  Matcha: "/assets/menu/categories-v3/matcha.webp",
+  Sandwiches: "/assets/menu/categories-v3/sandwiches.webp",
+  Shakes: "/assets/menu/categories-v3/shakes.webp",
+  Smoothies: "/assets/menu/categories-v3/smoothies.webp",
+  "Soft Drinks": "/assets/menu/categories-v3/soft-drinks.webp",
 };
 
 export function MenuCategoryGallery({

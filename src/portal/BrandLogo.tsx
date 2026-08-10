@@ -1,26 +1,31 @@
 type BrandLogoProps = {
   compact?: boolean;
   light?: boolean;
+  markOnly?: boolean;
+  showName?: boolean;
   stacked?: boolean;
 };
 
 export function BrandLogo({
   compact = false,
   light = true,
+  markOnly = false,
+  showName = false,
   stacked = false,
 }: BrandLogoProps) {
   return (
     <span
-      aria-label="Joy Corner Coffee and Story"
-      className={`joy-brand-lockup${compact ? " joy-brand-lockup--compact" : ""}${stacked ? " joy-brand-lockup--stacked" : ""}${light ? " joy-brand-lockup--light" : ""}`}
+      aria-label="Joy Corner Coffee"
+      className={`joy-brand-lockup${compact ? " joy-brand-lockup--compact" : ""}${markOnly ? " joy-brand-lockup--mark-only" : ""}${stacked ? " joy-brand-lockup--stacked" : ""}${light ? " joy-brand-lockup--light" : ""}`}
       role="img"
     >
-      <img alt="" src="/assets/joy-corner-emblem-v2.png" />
-      <span>
-        <strong>JOY CORNER</strong>
-        <small>COFFEE &amp; STORY</small>
-        {!compact ? <em>EST. 2016</em> : null}
-      </span>
+      <img
+        alt=""
+        src={markOnly
+          ? "/assets/joy-corner-logo-mark.png"
+          : "/assets/joy-corner-logo-white-wordmark.png"}
+      />
+      {showName ? <strong className="joy-brand-lockup__auth-name">Joy Corner Coffee</strong> : null}
     </span>
   );
 }

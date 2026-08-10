@@ -2,20 +2,28 @@ import { normalizePhone } from "./validators";
 
 describe("normalizePhone", () => {
   it("normalizes Egyptian mobile with leading zero", () => {
-    expect(normalizePhone("01234567890")).toBe("+01234567890");
+    expect(normalizePhone("01012345678")).toBe("+201012345678");
   });
 
   it("normalizes Egyptian mobile with country code", () => {
-    expect(normalizePhone("+201234567890")).toBe("+201234567890");
+    expect(normalizePhone("+201012345678")).toBe("+201012345678");
   });
 
   it("normalizes Egyptian mobile without plus", () => {
-    expect(normalizePhone("201234567890")).toBe("+201234567890");
+    expect(normalizePhone("201012345678")).toBe("+201012345678");
   });
 
   it("strips dashes and spaces", () => {
-    expect(normalizePhone("+20-123-456-7890")).toBe("+201234567890");
-    expect(normalizePhone("+20 123 456 7890")).toBe("+201234567890");
+    expect(normalizePhone("+20-10-1234-5678")).toBe("+201012345678");
+    expect(normalizePhone("+20 10 1234 5678")).toBe("+201012345678");
+  });
+
+  it("treats common Egyptian representations as the same phone", () => {
+    expect(new Set([
+      normalizePhone("01012345678"),
+      normalizePhone("201012345678"),
+      normalizePhone("+201012345678"),
+    ])).toEqual(new Set(["+201012345678"]));
   });
 
   it("returns null for too short input", () => {

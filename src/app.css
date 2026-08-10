@@ -2716,6 +2716,333 @@ tbody tr:hover {
   }
 }
 
+/* Responsive polish: prevent viewport flashes, clipped copy, and dead space. */
+html,
+body,
+#root {
+  background: #100a06;
+  min-height: 100%;
+  overflow-wrap: anywhere;
+}
+
+body {
+  min-height: 100dvh;
+  overscroll-behavior-x: none;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+:where(button, input, select, textarea) {
+  max-width: 100%;
+}
+
+:where(.portal-section, .auth-card, .queue-ticket, .voucher-card, .product-card-main) {
+  contain: layout paint;
+}
+
+.product-image-wrap,
+.product-image-placeholder {
+  background: radial-gradient(circle at 50% 35%, #342219, #0f0a07);
+  max-width: 100%;
+}
+
+@media (max-width: 1100px) {
+  :where(.owner-command-grid, .staff-order-layout, .profile-grid, .dashboard-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :where(.portal-header, .portal-section > header, .voucher-card-actions) {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  :where(.auth-shell, .joy-portal, .customer-app-shell, .staff-portal-shell) {
+    min-height: 100dvh;
+    width: 100%;
+  }
+
+  :where(.auth-experience, .auth-card, .portal-section, .customer-hero) {
+    border-radius: clamp(0px, 2.5vw, 18px);
+    max-width: 100%;
+  }
+
+  :where(.portal-section, .auth-card, .customer-hero) {
+    padding-inline: clamp(14px, 4vw, 22px);
+  }
+
+  :where(h1, h2, h3, p, strong, small, label, code, td, th) {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.staff-table, .order-table-wrap, .customer-directory-table) {
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 430px) {
+  :where(.kiosk-product-grid, .product-grid, .menu-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .joy-brand-lockup__auth-name {
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.cold-cup-brand {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 51%;
+  transform: translate(-50%, -50%);
+  width: 31%;
+  z-index: 2;
+}
+
+.cold-cup-brand > img {
+  aspect-ratio: 470 / 274;
+  filter: none;
+  height: auto !important;
+  object-fit: contain !important;
+  transform: none !important;
+  width: 100% !important;
+}
+
+@media (max-width: 900px) {
+  :where(.owner-command-grid, .staff-order-layout, .customer-dashboard-grid, .profile-grid) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(.portal-header, .staff-role-banner, .customer-topbar) {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  :where(.portal-header, .staff-role-banner, .voucher-card-actions, .checkout-actions) > * {
+    min-width: 0;
+  }
+
+  :where(.portal-header, .staff-role-banner, .checkout-actions) button,
+  :where(.portal-header, .staff-role-banner, .checkout-actions) a {
+    width: 100%;
+  }
+
+  :where(.product-card-main, .queue-ticket, .joy-voucher) {
+    width: 100%;
+  }
+}
+
+/* Production hardening: official monochrome identity, reusable vouchers, and
+   root-level overflow containment. Intentional rails/tables remain scrollable. */
+html,
+body,
+#root {
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+html {
+  overflow-x: clip;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  height: auto;
+  max-width: 100%;
+}
+
+:is(.joy-portal, .customer-app-shell, .staff-portal-shell, .portal-section) :is(
+    div,
+    section,
+    article,
+    aside,
+    form,
+    nav,
+    header,
+    footer
+  ) {
+  min-width: 0;
+}
+
+.joy-brand-lockup > img {
+  background: #fff;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.joy-brand-lockup small {
+  letter-spacing: 0.13em;
+}
+
+.joy-brand-lockup em {
+  color: var(--jc-muted, #9d958c);
+  font-style: normal;
+}
+
+.joy-voucher {
+  background: linear-gradient(145deg, #090909, #24160f);
+  border: 1px solid rgba(201, 146, 69, 0.65);
+  border-radius: 20px;
+  color: #f3eee5;
+  display: grid;
+  gap: 22px;
+  overflow: hidden;
+  padding: 22px;
+  position: relative;
+}
+
+.joy-voucher::after {
+  background: linear-gradient(90deg, transparent, #c99245, transparent);
+  bottom: 0;
+  content: "";
+  height: 2px;
+  left: 10%;
+  position: absolute;
+  width: 80%;
+}
+
+.joy-voucher > header,
+.joy-voucher > footer,
+.voucher-card-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.joy-voucher > header > span {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
+.joy-voucher__reward {
+  display: grid;
+  gap: 5px;
+}
+
+.joy-voucher__reward p,
+.joy-voucher__reward small {
+  color: #bdb3a9;
+  margin: 0;
+}
+
+.joy-voucher__reward strong {
+  color: #fff;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(2rem, 7vw, 3.8rem);
+  line-height: 1;
+}
+
+.joy-voucher code {
+  color: #fff;
+  font-size: 1rem;
+  letter-spacing: 0.16em;
+}
+
+.joy-voucher--compact {
+  gap: 14px;
+  padding: 16px;
+}
+
+.joy-voucher--compact .joy-voucher__reward strong {
+  font-size: clamp(1.55rem, 8vw, 2.4rem);
+}
+
+.voucher-card-actions {
+  margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+  .customer-app-shell {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .staff-order-layout {
+    display: block;
+  }
+
+  .staff-order-form {
+    margin-top: 16px;
+    max-height: min(72dvh, 720px);
+    overflow-y: auto;
+    position: static;
+    width: 100%;
+  }
+
+  .customer-directory-filters,
+  .voucher-create-row {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .staff-table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .customer-topbar {
+    min-height: 62px;
+  }
+
+  .kiosk-product-grid,
+  .compact-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kiosk-product-card,
+  .compact-menu > button {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 340px) {
+  .kiosk-product-grid,
+  .compact-menu {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Role-aware staff action banner, shared across every staff page. */
 .staff-portal-shell .portal-header.staff-role-banner {
   align-items: flex-end;
@@ -4014,6 +4341,7 @@ tbody tr:hover {
   display: flex;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .product-image-wrap img {
@@ -6450,7 +6778,7 @@ body {
   width: 190px;
   height: 150px;
   opacity: 0.32;
-  background: url("../public/assets/joy-corner-emblem-v2.png") center / contain
+  background: url("../public/assets/joy-corner-logo-mark.png") center / contain
     no-repeat;
   content: "";
   filter: sepia(1) saturate(1.8);
@@ -8255,6 +8583,444 @@ body {
   border-top: 2px solid rgba(185, 120, 61, 0.6);
 }
 
+/* Owner command centre: concise, live analysis on the overview page. */
+.owner-command-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.owner-analysis-card,
+.owner-insight-card,
+.owner-end-day-card {
+  background:
+    radial-gradient(circle at 100% 0, rgba(214, 167, 86, 0.13), transparent 38%),
+    linear-gradient(145deg, rgba(43, 27, 20, 0.95), rgba(12, 8, 5, 0.98));
+  border: 1px solid rgba(214, 167, 86, 0.28);
+  border-radius: 18px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+  min-width: 0;
+  padding: 20px;
+}
+
+.owner-analysis-card > header {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.owner-analysis-card h3,
+.owner-insight-card h3,
+.owner-end-day-card h3 {
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  margin: 2px 0 0;
+}
+
+.owner-analysis-card > header > strong {
+  color: var(--jc-gold-light);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.owner-flow-bar,
+.owner-payment-progress {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  display: flex;
+  height: 14px;
+  margin: 24px 0 17px;
+  overflow: hidden;
+}
+
+.owner-flow-segment { min-width: 7px; }
+.owner-flow-segment--waiting,
+.owner-flow-dot--waiting { background: #d6a756; }
+.owner-flow-segment--active,
+.owner-flow-dot--active { background: #cf7736; }
+.owner-flow-segment--ready,
+.owner-flow-dot--ready { background: #69a85d; }
+.owner-flow-segment--finished,
+.owner-flow-dot--finished { background: #6d8297; }
+
+.owner-flow-legend {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.owner-flow-legend button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(214, 167, 86, 0.12);
+  border-radius: 10px;
+  color: var(--jc-sand);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr auto;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.owner-flow-dot {
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.owner-payment-progress > span {
+  background: linear-gradient(90deg, #b9783d, #d6a756 58%, #70a65e);
+  border-radius: inherit;
+  display: block;
+  transition: width 280ms ease;
+}
+
+.owner-money-summary {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.owner-money-summary > div {
+  align-items: baseline;
+  border-bottom: 1px dashed rgba(214, 167, 86, 0.18);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.owner-money-summary :is(dt, dd) { margin: 0; }
+.owner-money-summary dt { color: var(--jc-muted); }
+.owner-money-summary dd { color: var(--jc-ivory); font-weight: 800; }
+
+.owner-insight-card,
+.owner-end-day-card {
+  align-items: end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.owner-insight-card p,
+.owner-end-day-card p { color: var(--jc-muted); margin-bottom: 0; }
+.owner-insight-card button,
+.owner-end-day-card button { flex: 0 0 auto; }
+.owner-insight-card { grid-column: 1 / -1; }
+
+/* Clear, tactile tickets without harsh boxes or clipped financial data. */
+.staff-portal-shell .queue-ticket,
+.staff-portal-shell .receipt-ticket {
+  border: 1px solid rgba(214, 167, 86, 0.3);
+  border-inline-start-width: 4px;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.035),
+    0 12px 28px rgba(0, 0, 0, 0.3);
+  min-width: 0;
+}
+
+.queue-payment-summary :is(dt, dd),
+.queue-ticket :is(select, input, button) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.queue-payment-summary dd {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Customer receipt is shown at the same proportion as an 80 mm thermal roll. */
+.digital-receipt {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)),
+    url("../public/brand/joy-corner-receipt-farm.svg") center bottom / 100% auto no-repeat;
+  border: 1px solid #b9b2a9;
+  border-radius: 3px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+  color: #151515;
+  margin: 20px auto;
+  max-width: 420px;
+  padding: clamp(18px, 4vw, 30px);
+  position: relative;
+}
+
+.digital-receipt::before,
+.digital-receipt::after {
+  border-top: 1px dashed #777;
+  content: "";
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+.digital-receipt::before { top: 7px; }
+.digital-receipt::after { bottom: 7px; }
+
+.digital-receipt > header {
+  border-color: #222;
+  gap: 8px;
+  grid-template-columns: 1fr;
+  padding-bottom: 14px;
+}
+
+.digital-receipt :is(strong, dt, dd, small, p, footer) { color: #151515; }
+.digital-receipt > header small,
+.digital-receipt .receipt-item small { color: #555; }
+.digital-receipt .grand-total { border-block: 2px solid #111; padding-block: 8px; }
+.digital-receipt .receipt-customer-note { background: rgba(0, 0, 0, 0.045); }
+.digital-receipt > footer { border-color: #555; color: #333; font-family: var(--jc-font-display); }
+
+/* Mobile scroll performance: one document scroller, no nested menu trap. */
+@media (max-width: 900px) {
+  html { scroll-behavior: auto !important; }
+  body {
+    overscroll-behavior-y: contain;
+    overflow-x: clip;
+    touch-action: pan-y;
+  }
+  .compact-menu {
+    max-height: none;
+    overflow: visible;
+  }
+  .kiosk-product-card,
+  .queue-ticket,
+  .customer-order-card {
+    contain: layout paint style;
+    content-visibility: auto;
+    contain-intrinsic-size: 280px;
+  }
+  .owner-command-grid { grid-template-columns: 1fr; }
+  .owner-insight-card { grid-column: auto; }
+  .owner-insight-card,
+  .owner-end-day-card { align-items: stretch; flex-direction: column; }
+  .owner-insight-card button,
+  .owner-end-day-card button { width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .owner-analysis-card,
+  .owner-insight-card,
+  .owner-end-day-card { border-radius: 14px; padding: 16px; }
+  .owner-analysis-card > header { display: grid; }
+  .owner-flow-legend { grid-template-columns: 1fr; }
+  .digital-receipt { width: min(100%, 80mm); }
+}
+
+/* 2026-08 identity, fast navigation and voucher campaign refinement. */
+.joy-brand-lockup > img,
+img[src$="/assets/joy-corner-logo-mark.png"] {
+  background: transparent;
+  border-radius: 50%;
+  clip-path: none;
+  filter: none;
+  object-fit: contain;
+  object-position: center;
+}
+
+.staff-metric-grid button {
+  background:
+    radial-gradient(circle at 100% 0, rgba(214, 167, 86, 0.18), transparent 36%),
+    linear-gradient(145deg, rgba(43, 27, 20, 0.98), rgba(10, 7, 5, 0.98));
+  border: 1px solid rgba(214, 167, 86, 0.34);
+  border-radius: 24px 8px 24px 8px;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 38px rgba(0, 0, 0, 0.3);
+  color: var(--jc-cream);
+  overflow: hidden;
+  position: relative;
+}
+
+.staff-metric-grid button::after {
+  border: 1px solid rgba(214, 167, 86, 0.12);
+  border-radius: 50%;
+  content: "";
+  height: 96px;
+  position: absolute;
+  right: -42px;
+  top: -42px;
+  width: 96px;
+}
+
+.staff-metric-grid button small { color: var(--jc-gold-light); }
+.staff-metric-grid button strong { color: var(--jc-ivory); }
+.staff-metric-grid button span { color: var(--jc-muted); }
+
+.menu-category-prompt {
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgba(8, 5, 3, 0.9), rgba(26, 18, 12, 0.7)),
+    url("../public/assets/brand/joy-coffee-farm-sketch.png") right center / 520px auto no-repeat;
+  border: 1px solid var(--jc-border-soft);
+  border-radius: 18px;
+  display: flex;
+  gap: 18px;
+  margin-top: 14px;
+  min-height: 112px;
+  padding: 20px 24px;
+}
+
+.menu-category-prompt img { height: 70px; width: 70px; }
+.menu-category-prompt strong {
+  color: var(--jc-gold-light);
+  font-family: var(--jc-font-display);
+  font-size: 1.35rem;
+}
+.menu-category-prompt p { color: var(--jc-sand); margin: 5px 0 0; }
+
+.queue-section > .staff-queue-header {
+  backdrop-filter: blur(16px) saturate(120%);
+  background: rgba(12, 8, 5, 0.9);
+  border: 1px solid rgba(214, 167, 86, 0.2);
+  border-radius: 14px;
+  padding: 12px;
+  position: sticky;
+  top: 78px;
+  z-index: 24;
+}
+
+.staff-category-rail {
+  backdrop-filter: blur(14px);
+  background: rgba(12, 8, 5, 0.9);
+  border-block: 1px solid rgba(214, 167, 86, 0.16);
+  padding-block: 7px;
+  position: sticky;
+  top: 78px;
+  z-index: 22;
+}
+
+.staff-voucher-entry {
+  background: rgba(214, 167, 86, 0.065);
+  border: 1px solid rgba(214, 167, 86, 0.24);
+  border-radius: 12px;
+  padding: 12px;
+}
+.staff-voucher-entry label > div { display: flex; gap: 8px; margin-top: 6px; }
+.staff-voucher-entry label > div input { flex: 1; min-width: 0; }
+.staff-voucher-entry small { color: var(--jc-muted); }
+.staff-voucher-entry dl { display: grid; gap: 6px; margin: 10px 0 0; }
+.staff-voucher-entry dl > div { display: flex; justify-content: space-between; }
+.staff-voucher-entry :is(dt, dd) { margin: 0; }
+.staff-voucher-entry dd { color: var(--jc-gold-light); font-weight: 800; }
+
+.voucher-campaign-studio {
+  background:
+    linear-gradient(90deg, rgba(8, 5, 3, 0.94), rgba(23, 15, 10, 0.82)),
+    url("../public/brand/joy-corner-receipt-farm.svg") right center / auto 135% no-repeat;
+  border: 1px solid rgba(214, 167, 86, 0.4);
+  border-radius: 22px 8px 22px 8px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3);
+  display: grid;
+  gap: 18px;
+  margin: 18px 0;
+  padding: 20px;
+}
+.voucher-campaign-intro h3 { margin: 2px 0 5px; }
+.voucher-campaign-intro p:last-child { color: var(--jc-muted); margin: 0; }
+.voucher-campaign-controls {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1.2fr 1fr .75fr .75fr;
+}
+.voucher-campaign-description { grid-column: span 3; }
+.voucher-campaign-controls label { color: var(--jc-sand); display: grid; gap: 5px; font-size: .78rem; }
+.voucher-campaign-controls :is(input, select) { width: 100%; }
+.voucher-campaign-results { border-top: 1px dashed rgba(214, 167, 86, 0.3); padding-top: 14px; }
+.voucher-campaign-results > header { display: flex; gap: 10px; justify-content: space-between; }
+.voucher-campaign-results > header span { color: var(--jc-muted); }
+.voucher-campaign-results > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  margin-top: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.voucher-campaign-results :is(a, button) {
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(214,167,86,.2);
+  border-radius: 10px;
+  color: var(--jc-cream);
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  text-decoration: none;
+  text-align: left;
+  width: 100%;
+}
+.voucher-campaign-results :is(a, button) strong { color: var(--jc-gold-light); letter-spacing: .1em; }
+.voucher-campaign-results :is(a, button) small { color: #78b96d; }
+
+.joy-voucher {
+  background:
+    linear-gradient(90deg, rgba(9, 6, 4, 0.96), rgba(20, 13, 8, 0.72)),
+    url("../public/assets/brand/joy-corner-coffee-farm-v2.jpg") 68% center / cover;
+  border-color: rgba(214, 167, 86, 0.7);
+  border-radius: 26px 8px 26px 8px;
+  box-shadow:
+    inset 0 0 0 5px rgba(8, 5, 3, 0.4),
+    0 20px 46px rgba(0, 0, 0, 0.36);
+}
+.joy-voucher::before {
+  border: 1px solid rgba(214, 167, 86, 0.2);
+  border-radius: 21px 5px 21px 5px;
+  content: "";
+  inset: 6px;
+  pointer-events: none;
+  position: absolute;
+}
+.joy-voucher__reward strong { color: var(--jc-gold-light); text-shadow: 0 3px 18px #000; }
+.joy-voucher code {
+  background: rgba(8, 5, 3, 0.66);
+  border: 1px dashed var(--jc-gold);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.voucher-code-entry { display: grid; gap: 7px; margin: 14px 0; }
+.voucher-code-entry small { color: var(--jc-muted); }
+.voucher-calculation-preview {
+  background: rgba(214, 167, 86, 0.07);
+  border: 1px solid rgba(214, 167, 86, 0.25);
+  border-radius: 12px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+.voucher-calculation-preview > div { display: flex; justify-content: space-between; }
+.voucher-calculation-preview :is(dt, dd) { margin: 0; }
+.voucher-calculation-preview > div:last-child { border-top: 1px dashed rgba(214,167,86,.3); color: var(--jc-gold-light); font-weight: 800; padding-top: 7px; }
+
+@media (max-width: 900px) {
+  .joy-portal.customer-app-shell {
+    background:
+      linear-gradient(180deg, rgba(9, 7, 5, 0.62), rgba(9, 7, 5, 0.86)),
+      url("../public/assets/brand/joy-corner-coffee-farm-v2.jpg") 66% top / auto 100vh scroll;
+  }
+  .staff-order-form { max-height: none; overflow: visible; }
+  .queue-section > .staff-queue-header { top: 66px; }
+  .staff-category-rail { top: 66px; }
+  .voucher-campaign-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voucher-campaign-description { grid-column: 1 / -1; }
+  .voucher-campaign-controls > button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .staff-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .staff-metric-grid button { border-radius: 18px 6px 18px 6px; min-height: 140px; padding: 16px; }
+  .staff-metric-grid button strong { font-size: 40px; }
+  .queue-section > .staff-queue-header { position: static; }
+  .queue-view-tabs { position: sticky; top: 64px; z-index: 25; }
+  .voucher-campaign-controls { grid-template-columns: 1fr; }
+  .voucher-campaign-description,
+  .voucher-campaign-controls > button { grid-column: auto; }
+  .menu-category-prompt { align-items: flex-start; padding: 16px; }
+  .menu-category-prompt img { height: 52px; width: 52px; }
+}
+
 .staff-portal-shell .queue-ticket :is(strong, li, p, dt, dd) {
   color: var(--jc-cream);
 }
@@ -9156,6 +9922,13 @@ body {
   filter: none;
 }
 
+img[src$="/assets/joy-corner-logo-mark.png"] {
+  background: transparent;
+  border-radius: 50%;
+  clip-path: none;
+  object-fit: contain;
+}
+
 .walk-in-customer-note {
   background: rgba(214, 167, 86, 0.1);
   border: 1px solid rgba(214, 167, 86, 0.3);
@@ -9248,4 +10021,230 @@ body {
   background: linear-gradient(135deg, #555c51, #777f71);
   border-color: #9da695;
   color: #fff;
+}
+
+/* Official owner-supplied master lockup. The artwork already includes its
+   typography, so large identity placements display it without rebuilding it. */
+.joy-brand-lockup > img,
+.joy-brand-lockup--compact > img,
+.joy-brand-lockup--stacked > img {
+  aspect-ratio: 965 / 711;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  width: clamp(150px, 13vw, 210px);
+}
+
+.joy-brand-lockup--compact > img {
+  width: clamp(118px, 10vw, 158px);
+}
+
+.joy-brand-lockup--stacked > img,
+.auth-story-panel > .joy-brand-lockup--stacked > img,
+.customer-hero-brand .joy-brand-lockup > img,
+.order-confirmation-hero > .joy-brand-lockup > img {
+  height: auto;
+  width: clamp(210px, 25vw, 330px);
+}
+
+.customer-topbar .customer-brand .joy-brand-lockup > img {
+  height: auto;
+  width: clamp(132px, 12vw, 178px);
+}
+
+.staff-sidebar-brand .joy-brand-lockup > img {
+  height: auto;
+  width: 190px;
+}
+
+.auth-card > .joy-brand-lockup--compact > img {
+  height: auto;
+  width: clamp(190px, 24vw, 285px);
+}
+
+/* The compact floating drawer uses only the official circular J mark. */
+.joy-brand-lockup--mark-only > img,
+.auth-story-panel > .joy-brand-lockup--mark-only > img,
+.auth-card > .joy-brand-lockup--mark-only > img {
+  aspect-ratio: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  clip-path: none;
+  filter: none;
+  height: clamp(108px, 12vw, 168px);
+  object-fit: contain;
+  width: clamp(108px, 12vw, 168px);
+}
+
+.joy-brand-lockup__auth-name {
+  color: #fff;
+  display: block;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+  letter-spacing: 0.08em;
+  margin-top: 10px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.joy-brand-lockup--mark-only:has(.joy-brand-lockup__auth-name) {
+  display: inline-grid;
+  justify-items: center;
+}
+
+.auth-card > .joy-brand-lockup--mark-only > img {
+  height: clamp(82px, 9vw, 118px);
+  width: clamp(82px, 9vw, 118px);
+}
+
+.customer-drawer header .joy-brand-lockup--mark-only > img {
+  aspect-ratio: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  clip-path: none;
+  filter: none;
+  height: 76px;
+  object-fit: contain;
+  width: 76px;
+}
+
+@media (max-width: 700px) {
+  .joy-brand-lockup > img { width: 154px; }
+  .joy-brand-lockup--compact > img { width: 126px; }
+  .customer-topbar .customer-brand .joy-brand-lockup > img { width: 132px; }
+  .auth-card > .joy-brand-lockup--compact > img { width: min(230px, 72vw); }
+  .customer-drawer header .joy-brand-lockup--mark-only > img {
+    height: 76px;
+    width: 76px;
+  }
+}
+/* Coffee World — same-device waiting game */
+.customer-game-invite { align-items: center; background: linear-gradient(110deg,#283225,#445337); border: 1px solid rgba(216,178,94,.55); border-radius: 1.15rem; box-shadow: 0 12px 35px rgba(0,0,0,.22); color: #fff8e8; display: grid; gap: 1rem; grid-template-columns: auto 1fr auto; margin: 1rem 0; overflow: hidden; padding: 1rem 1.25rem; position: relative; text-align: left; width: 100%; }
+.customer-game-invite::after { color: rgba(255,255,255,.04); content: "COFFEE WORLD"; font: 800 3rem Georgia,serif; position: absolute; right: 12%; white-space: nowrap; }
+.customer-game-invite:hover { border-color: #e1b95f; transform: translateY(-2px); }
+.customer-game-invite-dice { align-items: center; background: #f5e8cd; border-radius: .85rem; display: flex; font-size: 2rem; height: 3.6rem; justify-content: center; width: 3.6rem; }
+.customer-game-invite > span:nth-child(2) { display: grid; position: relative; z-index: 1; }
+.customer-game-invite small { color: #d9b45c; font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.customer-game-invite strong { font: 700 1.25rem Georgia,serif; }
+.customer-game-invite em { color: #d7cfbd; font-size: .75rem; font-style: normal; }
+.customer-game-invite > b { color: #e7c271; font-size: .78rem; position: relative; white-space: nowrap; z-index: 1; }
+.customer-game-invite--menu { margin: 1rem auto; max-width: 1180px; }
+.coffee-game { --game-ink: #202118; --game-cream: #f4ead7; color: var(--game-ink); background: radial-gradient(circle at 85% 8%, rgba(203,159,68,.2), transparent 25%), #f7f0e3; border: 1px solid rgba(69,76,49,.16); overflow: hidden; }
+.coffee-game h2 { font-family: Georgia, serif; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -.045em; margin: .15rem 0; }
+.coffee-game-kicker { color: #64704c; font-size: .78rem; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+.coffee-game-lead { font-family: Georgia, serif; font-size: 1.2rem; line-height: 1.5; max-width: 42rem; }
+.coffee-game-setup { min-height: 72vh; padding: clamp(1.4rem, 5vw, 4.5rem); position: relative; }
+.coffee-game-setup::after { color: rgba(82,91,57,.1); content: "☕"; font-size: 18rem; position: absolute; right: 3%; top: 2%; transform: rotate(-12deg); pointer-events: none; }
+.coffee-game-rule-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); background: #283225; color: #fff8e9; margin: 2rem 0; max-width: 56rem; position: relative; z-index: 1; }
+.coffee-game-rule-strip span { border-right: 1px solid rgba(255,255,255,.14); padding: 1rem; text-align: center; }
+.coffee-game-rule-strip b { color: #d7aa4f; display: block; font: 700 1.7rem Georgia, serif; }
+.coffee-player-setup { background: rgba(255,255,255,.68); border: 1px solid rgba(69,76,49,.18); border-radius: 1.25rem; max-width: 38rem; padding: 1.25rem; position: relative; z-index: 1; }
+.coffee-player-setup h3 { font: 700 1.35rem Georgia, serif; margin-top: 0; }
+.coffee-player-setup label { align-items: center; display: grid; gap: .65rem; grid-template-columns: 2rem 1fr auto; margin: .6rem 0; }
+.coffee-player-setup label > span { align-items: center; background: #65704d; border-radius: 50%; color: white; display: flex; height: 2rem; justify-content: center; }
+.coffee-player-setup label button { background: transparent; color: #8d3d30; padding: .45rem .7rem; }
+.coffee-setup-actions { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1rem; }
+.coffee-game-header { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 1rem; }
+.coffee-game-header p:last-child { color: #6e624e; margin: .3rem 0; }
+.coffee-scoreboard { display: grid; gap: .65rem; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); margin: 1rem 0; }
+.coffee-scoreboard > div { background: #eee3cf; border: 1px solid transparent; border-radius: .9rem; display: grid; padding: .7rem .9rem; }
+.coffee-scoreboard > div.current { background: #fffaf0; border-color: #b88d3f; box-shadow: 0 5px 20px rgba(74,58,31,.1); }
+.coffee-scoreboard span { color: #756a58; font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
+.coffee-scoreboard b { color: #4f5f3b; font-weight: 400; margin-top: .25rem; }
+.coffee-scoreboard small { color: #756a58; margin-left: .25rem; }
+.coffee-game-layout { display: grid; gap: 1rem; grid-template-columns: minmax(420px,1fr) minmax(520px,1.15fr); }
+.coffee-route { background: #283225; border-radius: 1.1rem; color: white; display: flex; flex-direction: column; overflow: hidden; }
+.coffee-route-title { align-items: center; display: flex; justify-content: space-between; padding: 1rem; }
+.coffee-route-title span { color: #d9b258; font-size: .72rem; font-weight: 800; letter-spacing: .14em; }
+.coffee-route-title small { opacity: .65; }
+.coffee-route-map { aspect-ratio: 2 / 1; background-color: #e8dcc3; background-image: linear-gradient(rgba(232,220,195,.12),rgba(232,220,195,.12)), url("../public/assets/brand/coffee-world-map.png"); background-position: center; background-repeat: no-repeat; background-size: 100% 100%; position: relative; }
+.coffee-route-map > div { left: var(--pin-x); position: absolute; top: var(--pin-y); transform: translate(-50%,-50%); transition: opacity .4s, transform .4s; }
+.coffee-route-map > div i { align-items: center; background: var(--pin-color); border: 2px solid white; border-radius: 50% 50% 50% 0; box-shadow: 0 3px 8px #6a5b43; display: flex; font-style: normal; height: 2.2rem; justify-content: center; transform: rotate(-45deg); width: 2.2rem; }
+.coffee-route-map > div i::first-letter { transform: rotate(45deg); }
+.coffee-route-map > div span { background: #fff8e8; border-radius: 1rem; color: #31372a; display: block; font-size: .63rem; font-weight: 700; margin-top: .25rem; padding: .2rem .45rem; }
+.coffee-route-map > div:nth-child(5) span { transform: translate(1.4rem,-.25rem); }
+.coffee-route-map > div:nth-child(6) span { transform: translate(-1.55rem,.1rem); }
+.coffee-route-map > div.collected { opacity: .25; transform: translate(-50%,-50%) scale(.65); }
+.coffee-route-map > div.target i { animation: target-pulse 1s ease-in-out infinite; box-shadow: 0 0 0 5px rgba(255,248,232,.8), 0 0 0 9px var(--pin-color); }
+.coffee-route-map > div.target span { background: #283225; color: #fff8e8; font-size: .72rem; }
+.coffee-dice { align-items: center; display: grid; gap: .7rem; grid-template-columns: 3.5rem 1fr; padding: 1rem; }
+.coffee-dice > span { align-items: center; background: #faf3e5; border-radius: .75rem; color: #283225; display: flex; font: 800 1.8rem Georgia,serif; height: 3.5rem; justify-content: center; }
+.coffee-dice > span.rolled { animation: dice-pop .35s ease-out; }
+.coffee-dice button { background: #c89d48; color: #202118; }
+.coffee-dice small { grid-column: 1/-1; opacity: .65; text-align: center; }
+@keyframes dice-pop { 50% { transform: rotate(8deg) scale(1.18); } }
+@keyframes target-pulse { 50% { transform: rotate(-45deg) scale(1.16); } }
+.coffee-memory-board { display: grid; gap: clamp(.45rem,1vw,.8rem); grid-template-columns: repeat(4,minmax(0,1fr)); }
+.coffee-memory-board > button { aspect-ratio: .78; background: transparent; border: 0; border-radius: .9rem; color: inherit; padding: 0; perspective: 900px; position: relative; }
+.coffee-memory-board > button > span { backface-visibility: hidden; border-radius: .9rem; inset: 0; position: absolute; transition: transform .45s; }
+.coffee-memory-board .card-back { align-items: center; background: #35412e; border: 3px double #d6ae5c; color: #f8edd8; display: flex; flex-direction: column; justify-content: center; transform: rotateY(0); }
+.card-back::after { border: 1px solid rgba(214,174,92,.35); border-radius: .55rem; content: ""; inset: .55rem; position: absolute; }
+.card-back i { border: 1px solid #d6ae5c; border-radius: 50%; color: #d6ae5c; font: 700 1rem Georgia,serif; margin-bottom: .45rem; padding: .45rem; }
+.card-back b { font: 700 clamp(.75rem,1.4vw,1rem)/1.1 Georgia,serif; letter-spacing: .08em; }
+.card-back small { color: #d6ae5c; font-size: .55rem; margin-top: .55rem; text-transform: uppercase; }
+.coffee-memory-board .card-face { align-items: center; background: #fff9ec; border: 3px solid var(--country-accent); box-shadow: 0 7px 20px rgba(50,40,22,.15); display: flex; flex-direction: column; justify-content: center; padding: .5rem; transform: rotateY(180deg); }
+.card-face i { font-size: clamp(1.3rem,3vw,2.3rem); font-style: normal; }
+.card-face b { font: 700 clamp(.78rem,1.5vw,1.15rem) Georgia,serif; }
+.card-face small { color: var(--country-accent); font-size: .58rem; font-weight: 800; text-transform: uppercase; }
+.card-face em { color: #786b56; font-size: clamp(.5rem,1vw,.7rem); font-style: normal; line-height: 1.2; margin-top: .45rem; }
+.coffee-memory-board > button.revealed .card-back { transform: rotateY(-180deg); }
+.coffee-memory-board > button.revealed .card-face { transform: rotateY(0); }
+.coffee-memory-board > button.matched { opacity: .3; transform: scale(.92); }
+.coffee-memory-board > button:disabled:not(.matched) { cursor: not-allowed; filter: saturate(.7); }
+.coffee-winners { background: #283225; border-radius: 1.2rem; color: white; margin: 2rem auto; max-width: 34rem; padding: 2rem; text-align: center; }
+.coffee-trophy { font-size: 4rem; }
+.coffee-winners h3 { color: #e0bb65; font: 700 1.7rem Georgia,serif; }
+.coffee-winners ol { list-style: none; padding: 0; }
+.coffee-winners li { align-items: center; border-top: 1px solid rgba(255,255,255,.13); display: grid; gap: .7rem; grid-template-columns: 2rem 1fr auto; padding: .8rem; text-align: left; }
+.coffee-winners li span { color: #e0bb65; font: 700 1.2rem Georgia,serif; }
+.coffee-winners button { background: #d2a64f; color: #202118; margin-top: 1rem; }
+@media (max-width: 1120px) { .coffee-game-layout { grid-template-columns: 1fr; } .coffee-route { max-width: 760px; width: 100%; } }
+@media (max-width: 820px) { .coffee-route { max-width: none; } .coffee-route-map > div i { height: 2.55rem; width: 2.55rem; } .coffee-route-map > div span { font-size: .7rem; } }
+@media (max-width: 560px) {
+  .customer-game-invite { gap: .7rem; grid-template-columns: auto 1fr; padding: .85rem; }
+  .customer-game-invite::after { display: none; }
+  .customer-game-invite-dice { font-size: 1.55rem; height: 3rem; width: 3rem; }
+  .customer-game-invite strong { font-size: 1rem; }
+  .customer-game-invite em { font-size: .67rem; }
+  .customer-game-invite > b { grid-column: 1/-1; text-align: center; width: 100%; }
+  .coffee-game { border-radius: 0; margin-inline: -.75rem; padding: .75rem; }
+  .coffee-game-setup { min-height: auto; padding: 1.15rem; }
+  .coffee-game-setup::after { display: none; }
+  .coffee-game-rule-strip { grid-template-columns: repeat(2,1fr); margin: 1.25rem 0; }
+  .coffee-game-rule-strip span { font-size: .75rem; padding: .75rem .4rem; }
+  .coffee-player-setup { padding: .9rem; }
+  .coffee-setup-actions { align-items: stretch; flex-direction: column; }
+  .coffee-setup-actions button { min-height: 3rem; width: 100%; }
+  .coffee-game-header { align-items: stretch; flex-direction: column; gap: .75rem; }
+  .coffee-game-header h2 { font-size: 2rem; }
+  .coffee-game-header > button { min-height: 2.8rem; width: 100%; }
+  .coffee-scoreboard { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .coffee-scoreboard > div { min-width: 0; padding: .65rem; }
+  .coffee-route-title { align-items: flex-start; gap: .4rem; }
+  .coffee-route-map { aspect-ratio: 1.72 / 1; background-size: 100% 100%; }
+  .coffee-route-map > div i { border-width: 1px; height: 2rem; width: 2rem; }
+  .coffee-route-map > div span { display: none; }
+  .coffee-route-map > div.target span { display: block; font-size: .66rem; left: 50%; position: absolute; transform: translate(-50%,.25rem); white-space: nowrap; }
+  .coffee-route-map > div:nth-child(5) span,
+  .coffee-route-map > div:nth-child(6) span { transform: translate(-50%,.25rem); }
+  .coffee-dice { grid-template-columns: 3.25rem 1fr; padding: .8rem; }
+  .coffee-dice > span { height: 3.25rem; }
+  .coffee-dice button { min-height: 3.25rem; padding: .65rem; }
+  .coffee-memory-board { gap: .65rem; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .coffee-memory-board > button { min-height: 180px; }
+  .card-back b { font-size: 1rem; }
+  .card-back small { font-size: .62rem; }
+  .card-face i { font-size: 2.4rem; }
+  .card-face b { font-size: 1.15rem; }
+  .card-face small { font-size: .68rem; }
+  .card-face em { display: block; font-size: .68rem; }
 }

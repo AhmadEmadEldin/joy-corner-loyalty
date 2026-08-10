@@ -359,74 +359,86 @@ app.post(
     if (password.length < 8 || password.length > 200)
       throw new HttpError(400, "Password must be at least 8 characters.");
     const passwordHash = await hashPassword(password);
-    const existingEmail = await query<Record<string, unknown>>(
-      "select * from accounts where email=$1 limit 1",
-      [email],
-    );
-    if (existingEmail[0]) {
-      if (
-        String(existingEmail[0].password_hash).startsWith("migrated$") &&
-        String(existingEmail[0].phone || "") === phone
-      ) {
-        if (
-          isProduction &&
-          process.env.ALLOW_MIGRATED_ACCOUNT_CLAIM !== "true"
-        ) {
+    const result = await transaction(async (client) => {
+      const existingEmail = await client.query<Record<string, unknown>>(
+        "select * from accounts where email=$1 limit 1 for update",
+        [email],
+      );
+      if (existingEmail.rows[0]) {
+        const imported = String(
+          existingEmail.rows[0].password_hash || "",
+        ).startsWith("migrated$");
+        if (imported && String(existingEmail.rows[0].phone || "") === phone) {
+          if (
+            isProduction &&
+            process.env.ALLOW_MIGRATED_ACCOUNT_CLAIM !== "true"
+          ) {
+            throw new HttpError(
+              409,
+              "This imported account needs an administrator password reset.",
+            );
+          }
+          const claimed = await client.query<Record<string, unknown>>(
+            `update accounts set password_hash=$2,full_name=$3,phone=$4,account_status='registered'
+             where id=$1 returning *`,
+            [existingEmail.rows[0].id, passwordHash, fullName, phone],
+          );
+          return { account: claimed.rows[0], created: false };
+        }
+        throw new HttpError(409, "An account already exists for this email.");
+      }
+
+      const existingPhone = await client.query<Record<string, unknown>>(
+        "select * from accounts where phone=$1 and role='customer' limit 1 for update",
+        [phone],
+      );
+      if (existingPhone.rows[0]) {
+        if (String(existingPhone.rows[0].account_status) !== "guest") {
           throw new HttpError(
             409,
-            "This imported account needs an administrator password reset.",
+            "A registered customer account already exists with this phone number.",
           );
         }
-        const claimed = await query<Record<string, unknown>>(
-          `update accounts set password_hash=$2,full_name=$3,phone=$4
-         where id=$1 returning *`,
-          [existingEmail[0].id, passwordHash, fullName, phone],
+        const linked = await client.query<Record<string, unknown>>(
+          `update accounts set email=$2,password_hash=$3,full_name=$4,
+             account_status='registered',marketing_consent=$5,
+             marketing_consent_at=case when $5 then now() else null end
+           where id=$1 returning *`,
+          [existingPhone.rows[0].id, email, passwordHash, fullName, marketingConsent],
         );
-        await query(
-          "insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)",
-          [claimed[0]?.id],
+        await client.query(
+          "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
+          [existingPhone.rows[0].id],
         );
-        res
-          .status(200)
-          .json(sessionResponse(claimed[0] as Record<string, unknown>, res));
-        return;
+        return { account: linked.rows[0], created: false };
       }
-      throw new HttpError(409, "An account already exists for this email.");
-    }
-    const existingPhone = await query<Record<string, unknown>>(
-      "select * from accounts where phone=$1 and role='customer' limit 1",
-      [phone],
-    );
-    if (existingPhone[0]) {
-      throw new HttpError(
-        409,
-        "A customer account already exists with this phone number.",
+
+      const inserted = await client.query<Record<string, unknown>>(
+        `insert into accounts(email,password_hash,full_name,phone,role,customer_number,account_status,marketing_consent,marketing_consent_at)
+         values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'),'registered',$5,$6)
+         returning *`,
+        [
+          email,
+          passwordHash,
+          fullName,
+          phone,
+          marketingConsent,
+          marketingConsent ? new Date().toISOString() : null,
+        ],
       );
-    }
-    const rows = await query<Record<string, unknown>>(
-      `insert into accounts(email,password_hash,full_name,phone,role,customer_number,marketing_consent,marketing_consent_at)
-     values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'),$5,$6)
-     on conflict(email) do nothing returning *`,
-      [
-        email,
-        passwordHash,
-        fullName,
-        phone,
-        marketingConsent,
-        marketingConsent ? new Date().toISOString() : null,
-      ],
-    );
-    if (!rows[0])
-      throw new HttpError(409, "An account already exists for this email.");
-    await query(
-      "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
-      [rows[0].id],
-    );
+      await client.query(
+        "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
+        [inserted.rows[0]?.id],
+      );
+      return { account: inserted.rows[0], created: true };
+    });
     await query(
       "insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)",
-      [rows[0].id],
+      [result.account?.id],
     );
-    res.status(201).json(sessionResponse(rows[0], res));
+    res
+      .status(result.created ? 201 : 200)
+      .json(sessionResponse(result.account as Record<string, unknown>, res));
   }),
 );
 
@@ -1059,6 +1071,7 @@ app.post(
         pickupName:
           String(req.body?.pickupName || "").trim().slice(0, 120) ||
           "Walk-in customer",
+        voucherCode: String(req.body?.voucherCode || "").trim() || undefined,
       }),
     );
     publish("cashier_order_queue", result.orderId);
@@ -1102,6 +1115,26 @@ async function queueRows(where: string, values: unknown[]) {
   );
 }
 
+function withoutFinancialQueueFields(
+  rows: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => {
+    const {
+      discount_total: _discountTotal,
+      paid_amount: _paidAmount,
+      payment_method: _paymentMethod,
+      payment_status: _paymentStatus,
+      remaining_amount: _remainingAmount,
+      subtotal: _subtotal,
+      tax_total: _taxTotal,
+      total: _total,
+      voucher_discount: _voucherDiscount,
+      ...serviceFields
+    } = row;
+    return serviceFields;
+  });
+}
+
 app.get(
   "/api/staff/queues",
   authenticate,
@@ -1130,7 +1163,13 @@ app.get(
           )
         : [],
     ]);
-    res.json({ cashier, kitchen });
+    const mayViewFinancials = role
+      ? ["owner", "manager", "cashier"].includes(role)
+      : false;
+    res.json({
+      cashier: mayViewFinancials ? cashier : withoutFinancialQueueFields(cashier),
+      kitchen: mayViewFinancials ? kitchen : withoutFinancialQueueFields(kitchen),
+    });
   }),
 );
 
@@ -1141,12 +1180,16 @@ app.get(
   asyncRoute(async (_req, res) => {
     const rows = await query<Record<string, unknown>>(
       `select a.id,a.full_name as "fullName",a.email,a.phone,a.customer_number as "customerNumber",
+            a.account_status as "accountStatus",a.notes,
             a.marketing_consent as "marketingConsent",
             a.marketing_consent_at as "marketingConsentAt",
             a.created_at as "createdAt",
             coalesce(s.order_count,0)::int as "orderCount",
             coalesce(s.total_spend,0)::numeric as "totalSpend",
             coalesce(s.outstanding_balance,0)::numeric as "outstandingBalance",
+            coalesce(s.unpaid_receipt_count,0)::int as "unpaidReceiptCount",
+            coalesce((select count(*) from vouchers v where v.customer_id=a.id and v.status='active'
+              and (v.expires_at is null or v.expires_at > now())),0)::int as "activeVoucherCount",
             s.last_order_at as "lastOrderAt",
             (select o2.customer_notes from orders o2 where o2.customer_id=a.id
               and o2.customer_notes like '%[Car type:%' order by o2.created_at desc limit 1) as "lastOrderNotes",
@@ -1159,7 +1202,10 @@ app.get(
                 where p.order_id=o.id and not coalesce(p.is_refund,false) and not coalesce(p.voided,false))),0)::numeric as total_spend,
               coalesce(sum(greatest(o.total-(select coalesce(sum(p.amount),0) from payments p
                 where p.order_id=o.id and not coalesce(p.is_refund,false) and not coalesce(p.voided,false)),0))
-                filter (where o.status not in ('cancelled','rejected')),0)::numeric as outstanding_balance,
+                filter (where o.status='closed' and not coalesce(o.archived,false)),0)::numeric as outstanding_balance,
+              count(*) filter (where o.status='closed' and not coalesce(o.archived,false)
+                and greatest(o.total-(select coalesce(sum(p.amount),0) from payments p
+                  where p.order_id=o.id and not coalesce(p.is_refund,false) and not coalesce(p.voided,false)),0) > 0.009)::int as unpaid_receipt_count,
               max(o.created_at) as last_order_at
        from orders o where o.customer_id=a.id
      ) s on true
@@ -1180,9 +1226,13 @@ app.get(
     if (!phone) throw new HttpError(400, "Enter a valid phone number.");
     const rows = await query<Record<string, unknown>>(
       `select a.id,a.full_name as "fullName",a.email,a.phone,a.customer_number as "customerNumber",
+              a.account_status as "accountStatus",a.notes,
               coalesce(s.order_count,0)::int as "orderCount",
               coalesce(s.total_spend,0)::numeric as "totalSpend",
               coalesce(s.outstanding_balance,0)::numeric as "outstandingBalance",
+              coalesce(s.unpaid_receipt_count,0)::int as "unpaidReceiptCount",
+              coalesce((select count(*) from vouchers v where v.customer_id=a.id and v.status='active'
+                and (v.expires_at is null or v.expires_at > now())),0)::int as "activeVoucherCount",
               s.last_order_at as "lastOrderAt",
               (select o2.customer_notes from orders o2 where o2.customer_id=a.id
                 and o2.customer_notes like '%[Car type:%' order by o2.created_at desc limit 1) as "lastOrderNotes",
@@ -1195,7 +1245,10 @@ app.get(
                   where p.order_id=o.id and not p.is_refund and not p.voided)),0)::numeric as total_spend,
                 coalesce(sum(greatest(o.total-(select coalesce(sum(p.amount),0) from payments p
                   where p.order_id=o.id and not coalesce(p.is_refund,false) and not coalesce(p.voided,false)),0))
-                  filter (where o.status not in ('cancelled','rejected')),0)::numeric as outstanding_balance,
+                  filter (where o.status='closed' and not coalesce(o.archived,false)),0)::numeric as outstanding_balance,
+                count(*) filter (where o.status='closed' and not coalesce(o.archived,false)
+                  and greatest(o.total-(select coalesce(sum(p.amount),0) from payments p
+                    where p.order_id=o.id and not coalesce(p.is_refund,false) and not coalesce(p.voided,false)),0) > 0.009)::int as unpaid_receipt_count,
                 max(o.created_at) filter (where o.status not in ('cancelled','rejected')) as last_order_at
          from orders o where o.customer_id=a.id
        ) s on true
@@ -1238,32 +1291,111 @@ app.post(
         );
         return { customer: updated.rows[0] };
       }
-      const email =
-        emailRaw || `customer-${phone.replace(/\D/g, "")}@joycorner.local`;
       const insertResult = await client.query<Record<string, unknown>>(
-        `insert into accounts(email,password_hash,full_name,phone,role,customer_number)
-       values($1,$2,$3,$4,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'))
-       on conflict(email) do nothing returning id,full_name as "fullName",email,phone,customer_number as "customerNumber"`,
-        [email, await hashPassword(crypto.randomUUID()), fullName, phone],
+        `insert into accounts(email,password_hash,full_name,phone,role,customer_number,account_status,notes)
+       values($1,null,$2,$3,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'),'guest',$4)
+       returning id,full_name as "fullName",email,phone,customer_number as "customerNumber",account_status as "accountStatus",notes`,
+        [emailRaw || null, fullName, phone, String(req.body?.notes || "").trim().slice(0, 1000) || null],
       );
-      if (!insertResult.rows[0]) {
-        const fallback = await client.query<Record<string, unknown>>(
-          'select id,full_name as "fullName",email,phone,customer_number as "customerNumber" from accounts where phone=$1 and role=\'customer\' limit 1',
-          [phone],
-        );
-        return { customer: fallback.rows[0] };
-      }
+      const customer = insertResult.rows[0];
+      if (!customer) throw new HttpError(500, "Customer creation did not return a record.");
       await client.query(
         "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
-        [insertResult.rows[0].id],
+        [customer.id],
       );
       await client.query(
         "insert into reporting_outbox(topic,entity_id,payload) values('accounts',$1,'{}'::jsonb)",
-        [insertResult.rows[0].id],
+        [customer.id],
       );
-      return { customer: insertResult.rows[0] };
+      return { customer };
     });
     res.status(201).json(result);
+  }),
+);
+
+app.get(
+  "/api/staff/customers/:id",
+  authenticate,
+  requireRoles("owner", "manager", "cashier"),
+  asyncRoute(async (req, res) => {
+    const [profile] = await query<Record<string, unknown>>(
+      `select id,full_name as "fullName",email,phone,customer_number as "customerNumber",
+              account_status as "accountStatus",marketing_consent as "marketingConsent",notes,created_at as "createdAt"
+       from accounts where id=$1 and role='customer' and active=true`,
+      [req.params.id],
+    );
+    if (!profile) throw new HttpError(404, "Customer not found.");
+    const [orders, vouchers, payments] = await Promise.all([
+      query<Record<string, unknown>>(
+        `select o.id,o.order_number as "orderNumber",o.created_at as "createdAt",o.status,
+                o.payment_status as "paymentStatus",o.total::numeric,
+                coalesce(sum(p.amount) filter (where not p.is_refund and not p.voided),0)::numeric as "paidAmount",
+                greatest(o.total-coalesce(sum(p.amount) filter (where not p.is_refund and not p.voided),0),0)::numeric as "remainingAmount"
+         from orders o left join payments p on p.order_id=o.id
+         where o.customer_id=$1 and not coalesce(o.archived,false)
+         group by o.id order by o.created_at desc limit 100`,
+        [req.params.id],
+      ),
+      query<Record<string, unknown>>(
+        `select id,voucher_code as "voucherCode",voucher_type as "voucherType",status,
+                fixed_value as "fixedValue",percentage_value as "percentageValue",
+                issued_at as "issuedAt",expires_at as "expiresAt"
+         from vouchers where customer_id=$1 order by issued_at desc`,
+        [req.params.id],
+      ),
+      query<Record<string, unknown>>(
+        `select p.id,p.payment_number as "paymentNumber",p.amount::numeric,p.payment_method as "paymentMethod",
+                p.created_at as "createdAt",o.order_number as "orderNumber"
+         from payments p join orders o on o.id=p.order_id
+         where o.customer_id=$1 and not p.voided order by p.created_at desc limit 100`,
+        [req.params.id],
+      ),
+    ]);
+    res.json({ customer: profile, orders, payments, vouchers });
+  }),
+);
+
+app.patch(
+  "/api/staff/customers/:id",
+  authenticate,
+  requireRoles("owner", "manager", "cashier"),
+  asyncRoute(async (req, res) => {
+    const fullName = nonEmpty(req.body?.fullName);
+    const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
+    if (!phone) throw new HttpError(400, "Enter a valid phone number.");
+    const email = String(req.body?.email || "").trim().toLowerCase() || null;
+    if (email && !isValidEmail(email))
+      throw new HttpError(400, "Enter a valid email address.");
+    const updated = await transaction(async (client) => {
+      const current = await client.query<Record<string, unknown>>(
+        "select id,account_status from accounts where id=$1 and role='customer' for update",
+        [req.params.id],
+      );
+      if (!current.rows[0]) throw new HttpError(404, "Customer not found.");
+      const conflict = await client.query<{ id: string }>(
+        `select id from accounts where role='customer' and id<>$1 and (phone=$2 or ($3::text is not null and email=$3)) limit 1`,
+        [req.params.id, phone, email],
+      );
+      if (conflict.rows[0]) {
+        throw new HttpError(
+          409,
+          "That phone or email belongs to another customer. Review both records before merging.",
+        );
+      }
+      const row = await client.query<Record<string, unknown>>(
+        `update accounts set full_name=$2,phone=$3,email=$4,notes=$5 where id=$1
+         returning id,full_name as "fullName",email,phone,account_status as "accountStatus",notes`,
+        [
+          req.params.id,
+          fullName,
+          phone,
+          email,
+          String(req.body?.notes || "").trim().slice(0, 1000) || null,
+        ],
+      );
+      return row.rows[0];
+    });
+    res.json({ customer: updated });
   }),
 );
 
@@ -1988,6 +2120,49 @@ function generateVoucherCode(): string {
   return code;
 }
 
+app.post(
+  "/api/vouchers/preview",
+  authenticate,
+  requireRoles("customer", "owner", "manager", "cashier", "waiter"),
+  asyncRoute(async (req, res) => {
+    const code = String(req.body?.code || "").trim();
+    const subtotal = Number(req.body?.subtotal);
+    if (!code) throw new HttpError(400, "Enter a voucher code.");
+    if (!Number.isFinite(subtotal) || subtotal < 0)
+      throw new HttpError(400, "Voucher subtotal is invalid.");
+    const customerId =
+      req.auth?.role === "customer"
+        ? req.auth.sub
+        : String(req.body?.customerId || "").trim();
+    if (!customerId)
+      throw new HttpError(400, "Select a saved customer before using a voucher.");
+    const rows = await query<Record<string, unknown>>(
+      `select id,voucher_code,voucher_type,fixed_value,percentage_value,expires_at
+       from vouchers where voucher_code=$1 and customer_id=$2 and status='active'
+         and (expires_at is null or expires_at > now()) limit 1`,
+      [code, customerId],
+    );
+    const voucher = rows[0];
+    if (!voucher)
+      throw new HttpError(400, "Voucher is invalid, expired, or already used.");
+    const discount =
+      voucher.fixed_value != null
+        ? Math.min(subtotal, Number(voucher.fixed_value))
+        : voucher.percentage_value != null
+          ? Math.min(
+              subtotal,
+              (subtotal * Number(voucher.percentage_value)) / 100,
+            )
+          : 0;
+    res.json({
+      code: voucher.voucher_code,
+      discount: Math.round(discount * 100) / 100,
+      total: Math.max(0, Math.round((subtotal - discount) * 100) / 100),
+      voucherType: voucher.voucher_type,
+    });
+  }),
+);
+
 app.get(
   "/api/owner/customers/:id/vouchers",
   authenticate,
@@ -2101,6 +2276,104 @@ app.post(
 );
 
 app.post(
+  "/api/owner/voucher-campaigns",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const audience = String(req.body?.audience || "subscribed").trim();
+    if (!new Set(["subscribed", "all"]).has(audience))
+      throw new HttpError(400, "Select subscribed customers or all customers.");
+    const voucherType = String(req.body?.voucherType || "fixed").trim();
+    if (!new Set(["fixed", "percentage"]).has(voucherType))
+      throw new HttpError(400, "Campaign vouchers must be fixed or percentage.");
+    const numericValue = Number(req.body?.value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0)
+      throw new HttpError(400, "Voucher value must be greater than zero.");
+    if (voucherType === "percentage" && numericValue > 100)
+      throw new HttpError(400, "Percentage must be between 1 and 100.");
+    const description =
+      String(req.body?.description || "")
+        .trim()
+        .slice(0, 200) || null;
+    const expiresInDays = Number(req.body?.expiresInDays);
+    const expiresAt =
+      Number.isFinite(expiresInDays) && expiresInDays > 0
+        ? new Date(Date.now() + expiresInDays * 86400_000).toISOString()
+        : null;
+    const recipients = await query<{
+      full_name: string;
+      id: string;
+      phone: string | null;
+    }>(
+      `select id,full_name,phone from accounts
+       where role='customer' and active=true
+         and ($1='all' or marketing_consent=true)
+       order by created_at asc limit 1000`,
+      [audience],
+    );
+    if (!recipients.length)
+      throw new HttpError(400, "No customers match this campaign audience.");
+
+    const issued = await transaction(async (client) => {
+      const results: Array<Record<string, unknown>> = [];
+      for (const customer of recipients) {
+        const code = generateVoucherCode();
+        const inserted = await client.query<Record<string, unknown>>(
+          `insert into vouchers(customer_id,voucher_code,voucher_type,fixed_value,percentage_value,expires_at,description)
+           values($1,$2,$3,$4,$5,$6,$7)
+           returning id,voucher_code as "voucherCode",voucher_type as "voucherType",
+             fixed_value as "fixedValue",percentage_value as "percentageValue",
+             status,expires_at as "expiresAt",issued_at as "issuedAt",description`,
+          [
+            customer.id,
+            code,
+            voucherType,
+            voucherType === "fixed" ? numericValue : null,
+            voucherType === "percentage" ? numericValue : null,
+            expiresAt,
+            description,
+          ],
+        );
+        const voucher = inserted.rows[0];
+        if (!voucher)
+          throw new HttpError(500, "Failed to create a campaign voucher.");
+        await client.query(
+          `insert into notifications(user_id,type,title,message)
+           values($1,'voucher','New Joy Corner voucher',$2)`,
+          [
+            customer.id,
+            `${description || "A special Joy Corner reward"}. Code: ${code}`,
+          ],
+        );
+        await client.query(
+          "insert into reporting_outbox(topic,entity_id,payload) values('vouchers',$1,'{}'::jsonb)",
+          [voucher.id],
+        );
+        results.push({
+          ...voucher,
+          customerId: customer.id,
+          customerName: customer.full_name,
+          phone: customer.phone,
+        });
+      }
+      await client.query(
+        "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'create_campaign','voucher_campaign',$3,$4::jsonb)",
+        [
+          req.auth?.sub,
+          req.auth?.role,
+          `campaign-${Date.now()}`,
+          JSON.stringify({ audience, recipientCount: results.length, voucherType }),
+        ],
+      );
+      return results;
+    });
+    publish("vouchers", "campaign");
+    publish("notifications", "campaign");
+    res.status(201).json({ audience, issued });
+  }),
+);
+
+app.post(
   "/api/owner/vouchers/:id/revoke",
   authenticate,
   requireRoles("owner"),
@@ -2124,6 +2397,44 @@ app.post(
       "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'revoke','voucher',$3,$4::jsonb)",
       [req.auth?.sub, req.auth?.role, voucherId, JSON.stringify({})],
     );
+    res.json({ ok: true });
+  }),
+);
+
+app.delete(
+  "/api/owner/vouchers/:id",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const voucherId = req.params.id;
+    await transaction(async (client) => {
+      const rows = await client.query<Record<string, unknown>>(
+        "select id,status,voucher_code,customer_id from vouchers where id=$1 for update",
+        [voucherId],
+      );
+      const voucher = rows.rows[0];
+      if (!voucher) throw new HttpError(404, "Voucher not found.");
+      if (voucher.status !== "redeemed")
+        throw new HttpError(400, "Only redeemed vouchers can be removed.");
+      await client.query(
+        "insert into audit_logs(actor_id,actor_role,action,entity_type,entity_id,details) values($1,$2,'confirm_redemption_and_remove','voucher',$3,$4::jsonb)",
+        [
+          req.auth?.sub,
+          req.auth?.role,
+          voucherId,
+          JSON.stringify({
+            customerId: voucher.customer_id,
+            voucherCode: voucher.voucher_code,
+            status: voucher.status,
+          }),
+        ],
+      );
+      await client.query(
+        "update voucher_requests set created_voucher_id=null,updated_at=now() where created_voucher_id=$1",
+        [voucherId],
+      );
+      await client.query("delete from vouchers where id=$1", [voucherId]);
+    });
     res.json({ ok: true });
   }),
 );
@@ -2784,13 +3095,12 @@ app.get(
          case when count(*) filter (where o.status='closed' and not o.archived) > 0
            then (coalesce(sum(o.total) filter (where o.status='closed' and not o.archived),0) / count(*) filter (where o.status='closed' and not o.archived))::numeric(12,2)
            else 0 end as avg_order_value,
-         coalesce(sum(oi.quantity) filter (where o.status='closed' and not o.archived),0)::int as total_items_sold,
+         coalesce(sum((select sum(oi.quantity) from order_items oi where oi.order_id=o.id)) filter (where o.status='closed' and not o.archived),0)::int as total_items_sold,
          count(distinct o.customer_id) filter (where o.status='closed' and not o.archived and o.customer_id is not null)::int as unique_customers,
          count(distinct o.customer_id) filter (where o.status='closed' and not o.archived and o.customer_id is not null and
            (select count(*) from orders o3 where o3.customer_id=o.customer_id and o3.created_at < o.created_at) > 0)::int as returning_customers,
          count(*) filter (where o.status='closed' and not o.archived and o.customer_id is null)::int as guest_orders
        from orders o
-       left join order_items oi on oi.order_id=o.id
        where ${dateCondition}`,
           params,
         ),
@@ -2806,16 +3116,17 @@ app.get(
           params,
         ),
         query<Record<string, unknown>>(
-          `select oi.item_name_snapshot as product, oi.quantity, oi.total_price
+          `select oi.category_name_snapshot as name, sum(oi.quantity)::int as qty
        from order_items oi join orders o on o.id=oi.order_id
-       where o.status='closed' and not o.archived and ${dateCondition}`,
+       where o.status='closed' and not o.archived and ${dateCondition}
+       group by oi.category_name_snapshot order by qty desc`,
           params,
         ),
         query<Record<string, unknown>>(
-          `select oi.item_name_snapshot as product, sum(oi.quantity)::int as units_sold
+          `select oi.size_name as name, sum(oi.quantity)::int as qty
        from order_items oi join orders o on o.id=oi.order_id
        where o.status='closed' and not o.archived and ${dateCondition}
-       group by oi.item_name_snapshot order by units_sold desc`,
+       group by oi.size_name order by qty desc`,
           params,
         ),
         query<Record<string, unknown>>(
@@ -2826,24 +3137,11 @@ app.get(
         ),
       ]);
 
-    const catMap = new Map<string, number>();
-    const sizeMap = new Map<string, number>();
-    categories.forEach((r) => {
-      catMap.set(String(r.product), Number(r.units_sold));
-    });
-    sizes.forEach((r) => {
-      sizeMap.set(String(r.product), Number(r.units_sold));
-    });
-
     res.json({
       stats: stats[0] || {},
       topProducts,
-      categories: Array.from(catMap.entries())
-        .map(([name, qty]) => ({ name, qty }))
-        .sort((a, b) => b.qty - a.qty),
-      sizes: Array.from(sizeMap.entries())
-        .map(([name, qty]) => ({ name, qty }))
-        .sort((a, b) => b.qty - a.qty),
+      categories,
+      sizes,
       paymentMethods: modifiers,
     });
   }),
