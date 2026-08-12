@@ -4893,6 +4893,15 @@ canvas {
   gap: 4px;
 }
 
+.checkout-line-copy { min-width: 0; overflow-wrap: anywhere; }
+.checkout-line-copy small { line-height: 1.45; }
+.checkout-line-end { align-items: flex-end; flex: 0 0 auto; text-align: right; }
+.checkout-line-end .text-button { min-height: 36px; padding: 4px 0; }
+.checkout-confirm-items { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; display: grid; margin-top: 18px; padding: 4px 18px; }
+.checkout-confirm-items > div { align-items: start; display: flex; gap: 18px; justify-content: space-between; padding: 13px 0; }
+.checkout-confirm-items > div + div { border-top: 1px solid var(--line); }
+.checkout-confirm-items span { display: grid; gap: 3px; min-width: 0; }
+
 .pickup-summary,
 .confirmation-summary,
 .receipt-totals {
@@ -5504,6 +5513,9 @@ canvas {
   .checkout-content {
     padding: 8px 16px 28px;
   }
+  .checkout-lines article { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto; }
+  .checkout-line-end { gap: 2px; }
+  .checkout-confirm-items { padding: 4px 12px; }
   .checkout-actions {
     padding: 12px;
   }

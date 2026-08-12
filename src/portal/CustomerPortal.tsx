@@ -562,6 +562,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
           error={message}
           freeRewards={rewards.free_rewards_available}
           onClose={() => !busy && setCheckoutOpen(false)}
+          onCartChange={setCart}
           onSubmit={submitOrder}
           profile={profile}
           vouchers={vouchers}

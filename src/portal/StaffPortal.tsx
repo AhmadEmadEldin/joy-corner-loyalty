@@ -2226,15 +2226,16 @@ function Queue({
                             }
                             value={replacementSizeByItem[item.id] || ""}
                           >
-                            <option value="">Replace with…</option>
-                            {editableMenu.flatMap((menuItem) =>
-                              menuItem.sizes.map((size) => (
-                                <option key={size.id} value={size.id}>
-                                  {menuItem.name} · {size.size_name} ·{" "}
-                                  {money.format(size.price)}
-                                </option>
-                              )),
-                            )}
+                            <option value="">Choose item and size…</option>
+                            {editableMenu.map((menuItem) => (
+                              <optgroup key={menuItem.id} label={menuItem.name}>
+                                {menuItem.sizes.map((size) => (
+                                  <option key={size.id} value={size.id}>
+                                    {size.size_name} — {money.format(size.price)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
                           </select>
                         </label>
                         <button
@@ -2264,7 +2265,7 @@ function Queue({
                           }}
                           type="button"
                         >
-                          Replace
+                          Apply edit
                         </button>
                         <button
                           aria-label={`Reduce ${item.itemName || item.name || "item"}`}

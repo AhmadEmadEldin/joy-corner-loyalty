@@ -273,6 +273,7 @@ export function CustomerMenu({
         <ProductCustomizer
           initial={editing || undefined}
           item={selected}
+          key={`${editing?.lineId || "new"}:${selected.id}`}
           onClose={() => {
             setEditing(null);
             setSelected(null);

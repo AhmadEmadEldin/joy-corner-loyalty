@@ -5,6 +5,7 @@ import type {
   CustomerProfile,
   CustomerVoucher,
 } from "./repository";
+import { ProductCustomizer } from "./ProductCustomizer";
 
 export type CheckoutSubmission = {
   customerNotes: string;
@@ -35,6 +36,7 @@ export function CustomerCheckout({
   error,
   freeRewards,
   onClose,
+  onCartChange,
   onSubmit,
   profile,
   vouchers,
@@ -44,6 +46,7 @@ export function CustomerCheckout({
   error: string;
   freeRewards: number;
   onClose: () => void;
+  onCartChange: (cart: CartLine[]) => void;
   onSubmit: (submission: CheckoutSubmission) => Promise<void>;
   profile: CustomerProfile;
   vouchers: CustomerVoucher[];
@@ -53,6 +56,7 @@ export function CustomerCheckout({
   const [paymentMethod, setPaymentMethod] =
     useState<CheckoutSubmission["paymentMethod"]>("cash_at_cashier");
   const [customerNotes, setCustomerNotes] = useState("");
+  const [editingLine, setEditingLine] = useState<CartLine | null>(null);
   const subtotal = cart.reduce((sum, line) => sum + lineTotal(line), 0);
   const validVouchers = vouchers.filter(
     (voucher) =>
@@ -105,16 +109,20 @@ export function CustomerCheckout({
             {step === 0 ? (
               <section>
                 <h2>Review your order</h2>
-                <p className="muted">Return to the menu to edit sizes, options, notes, or quantities.</p>
+                <p className="muted">Check every item, size, option, note, and quantity before sending your order.</p>
                 <div className="checkout-lines">
                   {cart.map((line) => (
                     <article key={line.lineId}>
-                      <div>
+                      <div className="checkout-line-copy">
                         <strong>{line.quantity} × {line.item.name}</strong>
-                        <small>{line.size.size_name}{line.modifiers.length ? ` · ${line.modifiers.map((modifier) => modifier.name).join(", ")}` : ""}</small>
+                        <small><b>Size:</b> {line.size.size_name}</small>
+                        {line.modifiers.length ? <small><b>Options:</b> {line.modifiers.map((modifier) => modifier.name).join(", ")}</small> : null}
                         {line.notes ? <small>Note: {line.notes}</small> : null}
                       </div>
-                      <strong>{money.format(lineTotal(line))}</strong>
+                      <div className="checkout-line-end">
+                        <strong>{money.format(lineTotal(line))}</strong>
+                        <button className="text-button" onClick={() => setEditingLine(line)} type="button">Edit item</button>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -209,6 +217,14 @@ export function CustomerCheckout({
             {step === 4 ? (
               <section>
                 <h2>Confirm order</h2>
+                <div className="checkout-confirm-items">
+                  {cart.map((line) => (
+                    <div key={line.lineId}>
+                      <span><strong>{line.quantity} × {line.item.name}</strong><small>{line.size.size_name}{line.modifiers.length ? ` · ${line.modifiers.map((modifier) => modifier.name).join(", ")}` : ""}</small></span>
+                      <strong>{money.format(lineTotal(line))}</strong>
+                    </div>
+                  ))}
+                </div>
                 <dl className="confirmation-summary">
                   <div><dt>Items</dt><dd>{cart.reduce((sum, line) => sum + line.quantity, 0)}</dd></div>
                   <div><dt>Pickup name</dt><dd>{profile.full_name}</dd></div>
@@ -233,6 +249,18 @@ export function CustomerCheckout({
           </footer>
         </form>
       </div>
+      {editingLine ? (
+        <ProductCustomizer
+          initial={editingLine}
+          item={editingLine.item}
+          key={editingLine.lineId}
+          onClose={() => setEditingLine(null)}
+          onSave={(updated) => {
+            onCartChange(cart.map((line) => line.lineId === updated.lineId ? updated : line));
+            setEditingLine(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
