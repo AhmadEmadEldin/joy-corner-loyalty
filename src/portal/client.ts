@@ -56,11 +56,29 @@ export async function apiRequest<T>(
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers,
-  });
+  const timeout = AbortSignal.timeout(20_000);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout;
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      credentials: "include",
+      headers,
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error(
+        "Joy Corner is taking too long to respond. Check your connection and try again.",
+        { cause: error },
+      );
+    }
+    throw new Error("Joy Corner could not connect. Please try again.", {
+      cause: error,
+    });
+  }
   const payload = (await response
     .json()
     .catch(() => ({}))) as T & ApiError;

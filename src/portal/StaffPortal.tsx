@@ -66,6 +66,10 @@ import {
   buildReceiptPrintHtml,
   type DailyReportData,
 } from "../receiptPrint";
+import {
+  isCancelledReceipt,
+  isOutstandingReceipt,
+} from "./receiptClassification";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -2074,7 +2078,7 @@ function Queue({
       if (view === "finished")
         return ["picked_up", "closed"].includes(order.status);
       if (view === "paid") return order.payment_status === "paid";
-      if (view === "unpaid") return order.payment_status !== "paid";
+      if (view === "unpaid") return isOutstandingReceipt(order);
       if (view === "cancelled")
         return ["cancelled", "rejected"].includes(order.status);
       return true;
@@ -2118,8 +2122,7 @@ function Queue({
       ).length;
     if (option === "paid")
       return orders.filter((order) => order.payment_status === "paid").length;
-    if (option === "unpaid")
-      return orders.filter((order) => order.payment_status !== "paid").length;
+    if (option === "unpaid") return orders.filter(isOutstandingReceipt).length;
     return orders.filter((order) =>
       ["cancelled", "rejected"].includes(order.status),
     ).length;
@@ -2386,9 +2389,7 @@ function StaffOverview({
   const pending = cashier.filter(
     (order) => order.status === "pending_confirmation",
   ).length;
-  const unpaid = cashier.filter(
-    (order) => order.payment_status !== "paid",
-  ).length;
+  const unpaid = cashier.filter(isOutstandingReceipt).length;
   const ready = kitchen.filter((order) => order.status === "ready").length;
   const orderTotal = cashier.reduce(
     (sum, order) => sum + Number(order.total || 0),
@@ -3016,7 +3017,12 @@ function StaffCustomerDirectory({
                 </span>
                 <span>
                   <strong>{formatCurrency(customer.outstandingBalance)}</strong>
-                  <small className="muted">{Number(customer.unpaidReceiptCount || 0)} receipts</small>
+                  <small className="customer-unpaid-count">
+                    {Number(customer.unpaidReceiptCount || 0)} unpaid{" "}
+                    {Number(customer.unpaidReceiptCount || 0) === 1
+                      ? "receipt"
+                      : "receipts"}
+                  </small>
                 </span>
                 <span>{Number(customer.activeVoucherCount || 0)}</span>
                 {canManageVouchers ? (
@@ -3597,6 +3603,7 @@ type OrdersTab =
   | "paid"
   | "unpaid"
   | "partially_paid"
+  | "cancelled"
   | "archived";
 
 type ReceiptDateScope = "today" | "previous" | "all";
@@ -3672,6 +3679,8 @@ function OwnerOrdersReceipts({
           else if (paymentFilter === "unpaid") params.paymentStatus = "unpaid";
           else if (paymentFilter === "partially_paid")
             params.paymentStatus = "partially_paid";
+          else if (paymentFilter === "cancelled")
+            params.status = "cancelled,rejected";
           else if (paymentFilter === "archived") params.includeArchived = true;
         }
         if (searchVal) params.search = searchVal;
@@ -3829,10 +3838,10 @@ function OwnerOrdersReceipts({
       orders: groupOrders,
       paid: groupOrders.filter((order) => order.payment_status === "paid")
         .length,
-      unpaid: groupOrders.filter((order) => order.payment_status === "unpaid")
-        .length,
+      unpaid: groupOrders.filter(isOutstandingReceipt).length,
       remaining: groupOrders.reduce(
-        (sum, order) => sum + order.remaining_amount,
+        (sum, order) =>
+          sum + (isOutstandingReceipt(order) ? order.remaining_amount : 0),
         0,
       ),
     }));
@@ -3882,6 +3891,7 @@ function OwnerOrdersReceipts({
             "paid",
             "unpaid",
             "partially_paid",
+            "cancelled",
             "archived",
           ] as const
         ).map((t) => (
@@ -3902,6 +3912,8 @@ function OwnerOrdersReceipts({
                     ? "Paid"
                     : t === "unpaid"
                       ? "Unpaid"
+                      : t === "cancelled"
+                        ? "Cancelled"
                       : t === "archived"
                         ? "Archived"
                         : "Partially Paid"}
@@ -4013,11 +4025,13 @@ function OwnerOrdersReceipts({
                                 order.status as OperationalOrderStatus,
                               )}
                             </span>
-                            <span
-                              className={`payment-badge payment-${order.payment_status}`}
-                            >
-                              {order.payment_status?.replace(/_/g, " ")}
-                            </span>
+                            {!isCancelledReceipt(order) ? (
+                              <span
+                                className={`payment-badge payment-${order.payment_status}`}
+                              >
+                                {order.payment_status?.replace(/_/g, " ")}
+                              </span>
+                            ) : null}
                           </div>
                         </header>
                         {selectedOrder?.id === order.id ? (

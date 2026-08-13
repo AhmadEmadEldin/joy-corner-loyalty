@@ -7167,6 +7167,14 @@ body {
   flex-wrap: wrap;
 }
 
+.customer-unpaid-count {
+  color: var(--accent);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
 .customer-directory-pagination {
   display: flex;
   align-items: center;
