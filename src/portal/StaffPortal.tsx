@@ -806,8 +806,10 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
                       `Items and totals updated for ${order.order_number}. The customer account was updated too.`,
                     );
                     if (profile) await refreshQueues(profile.role);
+                    return true;
                   } catch (error) {
                     setMessage(getMessage(error));
+                    return false;
                   }
                 }
           }
@@ -1953,23 +1955,32 @@ function StaffOrderForm({
       {message ? <p role="status">{message}</p> : null}
       {sizePickerItem ? (
         <div
-          className="payment-modal-overlay"
+          className="payment-modal-overlay size-picker-overlay"
           role="dialog"
           aria-modal="true"
+          aria-labelledby="staff-size-picker-title"
           onClick={() => setSizePickerItem(null)}
         >
-          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="payment-modal size-picker-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header>
-              <p className="eyebrow">Select size</p>
-              <h2>{sizePickerItem.name}</h2>
+              <div>
+                <p className="eyebrow">Choose a size</p>
+                <h2 id="staff-size-picker-title">{sizePickerItem.name}</h2>
+                <p className="muted">All available sizes are shown below.</p>
+              </div>
+              <button
+                aria-label="Close size picker"
+                className="size-picker-close"
+                onClick={() => setSizePickerItem(null)}
+                type="button"
+              >
+                ×
+              </button>
             </header>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-              }}
-            >
+            <div className="size-picker-options">
               {sizePickerItem.sizes.map((size) => (
                 <button
                   className="size-option-button"
@@ -1978,26 +1989,17 @@ function StaffOrderForm({
                     addWithSize(sizePickerItem, size);
                     setSizePickerItem(null);
                   }}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "0.75rem 1rem",
-                    borderRadius: "6px",
-                    border: "1px solid var(--border, #ccc)",
-                    background: "var(--surface, #fff)",
-                    cursor: "pointer",
-                  }}
                   type="button"
                 >
-                  <span>{size.size_name}</span>
-                  <strong>{money.format(size.price)}</strong>
+                  <span>
+                    <strong>{size.size_name}</strong>
+                    <small>Tap to add</small>
+                  </span>
+                  <b>{money.format(size.price)}</b>
                 </button>
               ))}
             </div>
-            <div
-              className="payment-modal-actions"
-              style={{ marginTop: "1rem" }}
-            >
+            <div className="payment-modal-actions size-picker-actions">
               <button
                 className="button-secondary"
                 onClick={() => setSizePickerItem(null)}
@@ -2030,7 +2032,7 @@ function Queue({
     itemId: string,
     quantity: number,
     replacementSizeId?: string,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   variant: "cashier" | "kitchen" | "waiter";
 }) {
   type QueueView =
@@ -2045,6 +2047,9 @@ function Queue({
   const [view, setView] = useState<QueueView>("all");
   const [busyItem, setBusyItem] = useState<string | null>(null);
   const [editableMenu, setEditableMenu] = useState<MenuItem[]>([]);
+  const [replacementItemByItem, setReplacementItemByItem] = useState<
+    Record<string, string>
+  >({});
   const [replacementSizeByItem, setReplacementSizeByItem] = useState<
     Record<string, string>
   >({});
@@ -2201,7 +2206,7 @@ function Queue({
               <ul className="queue-item-list">
                 {(order.item_summary || []).map((item, index) => (
                   <li key={item.id || index}>
-                    <span>
+                    <span className="queue-item-summary">
                       {item.quantity || 1} ×{" "}
                       {item.itemName || item.name || "Item"}{" "}
                       {item.size ? `· ${item.size}` : ""}
@@ -2214,13 +2219,38 @@ function Queue({
                     ) ? (
                       <span className="queue-item-editor">
                         <label>
-                          <span className="sr-only">
-                            Replacement for{" "}
-                            {item.itemName || item.name || "item"}
-                          </span>
+                          <span>Product</span>
                           <select
-                            aria-label={`Replacement for ${item.itemName || item.name || "item"}`}
+                            aria-label={`Replacement product for ${item.itemName || item.name || "item"}`}
                             disabled={busyItem === item.id}
+                            onChange={(event) => {
+                              setReplacementItemByItem((current) => ({
+                                ...current,
+                                [item.id as string]: event.target.value,
+                              }));
+                              setReplacementSizeByItem((current) => ({
+                                ...current,
+                                [item.id as string]: "",
+                              }));
+                            }}
+                            value={replacementItemByItem[item.id] || ""}
+                          >
+                            <option value="">Choose product…</option>
+                            {editableMenu.map((menuItem) => (
+                              <option key={menuItem.id} value={menuItem.id}>
+                                {menuItem.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Size</span>
+                          <select
+                            aria-label={`Replacement size for ${item.itemName || item.name || "item"}`}
+                            disabled={
+                              busyItem === item.id ||
+                              !replacementItemByItem[item.id]
+                            }
                             onChange={(event) =>
                               setReplacementSizeByItem((current) => ({
                                 ...current,
@@ -2229,19 +2259,22 @@ function Queue({
                             }
                             value={replacementSizeByItem[item.id] || ""}
                           >
-                            <option value="">Choose item and size…</option>
-                            {editableMenu.map((menuItem) => (
-                              <optgroup key={menuItem.id} label={menuItem.name}>
-                                {menuItem.sizes.map((size) => (
-                                  <option key={size.id} value={size.id}>
-                                    {size.size_name} — {money.format(size.price)}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
+                            <option value="">Choose size…</option>
+                            {editableMenu
+                              .find(
+                                (menuItem) =>
+                                  menuItem.id ===
+                                  replacementItemByItem[item.id as string],
+                              )
+                              ?.sizes.map((size) => (
+                                <option key={size.id} value={size.id}>
+                                  {size.size_name} — {money.format(size.price)}
+                                </option>
+                              ))}
                           </select>
                         </label>
                         <button
+                          className="queue-apply-edit"
                           disabled={
                             busyItem === item.id ||
                             !replacementSizeByItem[item.id]
@@ -2252,23 +2285,29 @@ function Queue({
                             if (!replacementSizeId) return;
                             setBusyItem(item.id || null);
                             try {
-                              await onEditItem(
+                              const updated = await onEditItem(
                                 order,
                                 item.id as string,
                                 Number(item.quantity || 1),
                                 replacementSizeId,
                               );
-                              setReplacementSizeByItem((current) => ({
-                                ...current,
-                                [item.id as string]: "",
-                              }));
+                              if (updated) {
+                                setReplacementItemByItem((current) => ({
+                                  ...current,
+                                  [item.id as string]: "",
+                                }));
+                                setReplacementSizeByItem((current) => ({
+                                  ...current,
+                                  [item.id as string]: "",
+                                }));
+                              }
                             } finally {
                               setBusyItem(null);
                             }
                           }}
                           type="button"
                         >
-                          Apply edit
+                          {busyItem === item.id ? "Updating…" : "Update item"}
                         </button>
                         <button
                           aria-label={`Reduce ${item.itemName || item.name || "item"}`}
