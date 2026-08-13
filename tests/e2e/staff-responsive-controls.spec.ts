@@ -38,7 +38,7 @@ test("phone size picker keeps every size visible and tappable", async ({
   expect(box!.y + box!.height).toBeLessThanOrEqual(740);
 });
 
-test("cashier ticket stays readable and exposes separate product and size controls", async ({
+test("cashier ticket keeps correction controls contained until requested", async ({
   page,
 }) => {
   await page.setViewportSize({ height: 800, width: 390 });
@@ -51,11 +51,14 @@ test("cashier ticket stays readable and exposes separate product and size contro
           <ul class="queue-item-list">
             <li>
               <span class="queue-item-summary">1 × Frappuccino · Standard</span>
-              <span class="queue-item-editor">
-                <label><span>Product</span><select aria-label="Replacement product"><option>Choose product…</option></select></label>
-                <label><span>Size</span><select aria-label="Replacement size"><option>Choose size…</option></select></label>
-                <button class="queue-apply-edit">Update item</button><button>−</button><button>+</button><button>Remove</button>
-              </span>
+              <details class="queue-item-correction">
+                <summary>Correct item</summary>
+                <span class="queue-item-editor">
+                  <label><span>Product</span><select aria-label="Replacement product"><option>Choose product…</option></select></label>
+                  <label><span>Size</span><select aria-label="Replacement size"><option>Choose size…</option></select></label>
+                  <button class="queue-apply-edit">Update item</button><button>−</button><button>+</button><button>Remove</button>
+                </span>
+              </details>
             </li>
           </ul>
         </article>
@@ -68,7 +71,39 @@ test("cashier ticket stays readable and exposes separate product and size contro
   const summaryBox = await summary.boundingBox();
   expect(summaryBox).not.toBeNull();
   expect(summaryBox!.width).toBeGreaterThan(200);
+  await expect(page.getByLabel("Replacement product")).toBeHidden();
+  await page.getByText("Correct item").click();
   await expect(page.getByLabel("Replacement product")).toBeVisible();
   await expect(page.getByLabel("Replacement size")).toBeVisible();
   await expect(page.getByRole("button", { name: "Update item" })).toBeVisible();
+});
+
+test("queue filter and receipt action labels never overlap", async ({ page }) => {
+  await page.setViewportSize({ height: 800, width: 768 });
+  await page.setContent(`
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>${css}</style>
+    <main class="joy-portal staff-portal-shell">
+      <header class="staff-queue-header">
+        <div><h2>Cashier confirmation and payment</h2></div>
+        <div class="queue-view-tabs">
+          ${["All Orders (6)", "Waiting (1)", "In Progress (1)", "Ready (0)", "Finished (2)", "Paid (3)", "Payment Due (2)", "Cancelled (2)"].map((label) => `<button>${label}</button>`).join("")}
+        </div>
+      </header>
+      <article class="queue-ticket"><footer><button>Record payment (EGP 200.00 due)</button><button>Print receipt</button><button>Cancel order</button></footer></article>
+    </main>
+  `);
+
+  const labels = page.locator(".queue-view-tabs button, .queue-ticket > footer > button");
+  await expect(labels).toHaveCount(11);
+  for (const element of await labels.all()) {
+    const metrics = await element.evaluate((node) => ({
+      clientHeight: node.clientHeight,
+      clientWidth: node.clientWidth,
+      scrollHeight: node.scrollHeight,
+      scrollWidth: node.scrollWidth,
+    }));
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+    expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1);
+  }
 });

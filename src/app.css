@@ -3418,6 +3418,50 @@ canvas {
   word-break: normal;
 }
 
+.queue-item-correction {
+  min-width: 0;
+  width: 100%;
+}
+
+.queue-item-correction > summary {
+  align-items: center;
+  border: 1px solid rgba(214, 167, 86, 0.3);
+  border-radius: 9px;
+  color: var(--jc-gold-light, #e8c77e);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 750;
+  gap: 6px;
+  justify-content: center;
+  list-style: none;
+  min-height: 36px;
+  padding: 7px 11px;
+  user-select: none;
+}
+
+.queue-item-correction > summary::-webkit-details-marker {
+  display: none;
+}
+
+.queue-item-correction > summary::before {
+  content: "✎";
+  font-size: 0.9rem;
+}
+
+.queue-item-correction[open] > summary {
+  background: rgba(214, 167, 86, 0.12);
+  margin-bottom: 10px;
+}
+
+.queue-item-correction > small {
+  color: var(--jc-muted, #b9a999);
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  margin-top: 8px;
+}
+
 .queue-item-editor {
   align-items: end;
   display: grid;
@@ -3485,6 +3529,10 @@ canvas {
   .queue-item-editor .queue-apply-edit {
     grid-column: 1 / -1;
     min-height: 44px;
+    width: 100%;
+  }
+
+  .queue-item-correction > summary {
     width: 100%;
   }
 }
@@ -5719,6 +5767,57 @@ canvas {
 .queue-view-tabs button[aria-pressed="true"] {
   background: #4e3021;
   color: white;
+}
+
+/* Queue filters occupy their own row and wrap predictably at every width. */
+.staff-queue-header {
+  align-items: start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.queue-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  min-width: 0;
+  overflow: visible;
+  width: 100%;
+}
+
+.queue-view-tabs button {
+  line-height: 1.2;
+  min-height: 44px;
+  min-width: 0;
+  overflow-wrap: normal;
+  padding: 9px 10px;
+  white-space: normal;
+  word-break: normal;
+}
+
+.queue-ticket > footer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  width: 100%;
+}
+
+.queue-ticket > footer > button {
+  line-height: 1.25;
+  min-height: 44px;
+  min-width: 0;
+  padding: 9px 11px;
+  white-space: normal;
+  width: 100%;
+}
+
+@media (max-width: 620px) {
+  .queue-view-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+  }
+
+  .queue-ticket > footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .queue-statuses {
