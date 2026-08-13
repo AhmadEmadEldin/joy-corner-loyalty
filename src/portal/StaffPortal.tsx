@@ -2593,6 +2593,9 @@ function StaffCustomerDirectory({
   const subscribedCount = customers.filter((c) =>
     Boolean(c.marketingConsent),
   ).length;
+  const registeredCount = customers.filter(
+    (customer) => customer.accountStatus === "registered",
+  ).length;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase();
@@ -2788,7 +2791,9 @@ function StaffCustomerDirectory({
           <p className="eyebrow">Customer directory</p>
           <h2>Customers</h2>
           <p className="muted">
-            {customers.length} total · {subscribedCount} subscribed
+            {customers.length} customers · {registeredCount} registered app account
+            {registeredCount === 1 ? "" : "s"} · {subscribedCount} marketing subscriber
+            {subscribedCount === 1 ? "" : "s"}
           </p>
         </div>
       </div>
@@ -2965,7 +2970,7 @@ function StaffCustomerDirectory({
               }}
               type="button"
             >
-              {option === "all" ? "All" : option === "guest" ? "Unsubscribed" : option === "unpaid" ? "Has unpaid balance" : option === "vouchers" ? "Has active vouchers" : "Registered"}
+              {option === "all" ? "All" : option === "guest" ? "Not registered" : option === "unpaid" ? "Has unpaid balance" : option === "vouchers" ? "Has active vouchers" : "Registered app users"}
             </button>
           ))}
         </div>
@@ -2979,8 +2984,8 @@ function StaffCustomerDirectory({
           </select>
         </label>
       </div>
-      <div className="staff-table">
-        <div className="staff-table-row heading">
+      <div className="staff-table customer-directory-table">
+        <div className={`staff-table-row customer-directory-row heading${canManageVouchers ? " customer-directory-row--actions" : ""}`}>
           <span>Customer</span>
           <span>Account</span>
           <span>Orders</span>
@@ -2994,28 +2999,37 @@ function StaffCustomerDirectory({
           return (
             <div key={cid}>
               <div
-                className={`staff-table-row ${isExpanded ? "expanded" : ""}`}
+                className={`staff-table-row customer-directory-row${canManageVouchers ? " customer-directory-row--actions" : ""} ${isExpanded ? "expanded" : ""}`}
               >
-                <div>
+                <div className="customer-directory-identity" data-label="Customer">
                   <strong>{String(customer.fullName || "")}</strong>
-                  <span
-                    className="muted"
-                    style={{ fontSize: "0.75rem", display: "block" }}
-                  >
-                    {String(customer.email || "—")}
-                    {customer.phone ? ` · ${String(customer.phone)}` : ""}
-                    {` · Last visit ${timeAgo(customer.lastOrderAt)}`}
+                  <span className="customer-directory-contact">
+                    {customer.phone ? (
+                      <a href={`tel:${String(customer.phone)}`}>
+                        {String(customer.phone)}
+                      </a>
+                    ) : null}
+                    {customer.email && !String(customer.email).endsWith("@legacy.joycorner.local") ? (
+                      <a href={`mailto:${String(customer.email)}`}>
+                        {String(customer.email)}
+                      </a>
+                    ) : (
+                      <span className="muted">No customer email</span>
+                    )}
+                    <small className="muted">
+                      Last visit {timeAgo(customer.lastOrderAt)}
+                    </small>
                   </span>
                 </div>
-                <span className={`consent-badge ${customer.accountStatus === "guest" ? "not-subscribed" : "subscribed"}`}>
-                  {customer.accountStatus === "guest" ? "Unsubscribed" : "Registered"}
+                <span data-label="Account" className={`consent-badge ${customer.accountStatus === "guest" ? "not-subscribed" : "subscribed"}`}>
+                  {customer.accountStatus === "guest" ? "Not registered" : "Registered"}
                 </span>
-                <span>
+                <span data-label="Orders">
                   <span className="stat-pill">
                     {Number(customer.orderCount || 0)}
                   </span>
                 </span>
-                <span>
+                <span data-label="Unpaid">
                   <strong>{formatCurrency(customer.outstandingBalance)}</strong>
                   <small className="customer-unpaid-count">
                     {Number(customer.unpaidReceiptCount || 0)} unpaid{" "}
@@ -3024,9 +3038,9 @@ function StaffCustomerDirectory({
                       : "receipts"}
                   </small>
                 </span>
-                <span>{Number(customer.activeVoucherCount || 0)}</span>
+                <span data-label="Vouchers">{Number(customer.activeVoucherCount || 0)}</span>
                 {canManageVouchers ? (
-                  <span>
+                  <span data-label="Actions">
                     <button
                       className="compact-menu-btn"
                       onClick={() => void toggleExpand(cid)}
