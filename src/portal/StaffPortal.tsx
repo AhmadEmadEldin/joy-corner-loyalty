@@ -47,7 +47,6 @@ import {
   StaffProfile,
   startBusinessDay,
   subscribeToStaffQueues,
-  updateCashierOrderItem,
   VoucherRequest,
   VoucherCampaignRecipient,
   voidReceipt,
@@ -791,28 +790,6 @@ function StaffWorkspace({ user }: { user: SessionUser }) {
           orders={cashier}
           busyOrder={busyOrder}
           variant={canWaiter ? "waiter" : "cashier"}
-          onEditItem={
-            canWaiter
-              ? undefined
-              : async (order, itemId, quantity, replacementSizeId) => {
-                  try {
-                    await updateCashierOrderItem({
-                      orderId: order.order_id,
-                      orderItemId: itemId,
-                      quantity,
-                      replacementSizeId,
-                    });
-                    setMessage(
-                      `Items and totals updated for ${order.order_number}. The customer account was updated too.`,
-                    );
-                    if (profile) await refreshQueues(profile.role);
-                    return true;
-                  } catch (error) {
-                    setMessage(getMessage(error));
-                    return false;
-                  }
-                }
-          }
           actions={(order) => (
             <>
               {!canWaiter && order.status === "pending_confirmation" ? (
@@ -2020,19 +1997,12 @@ function Queue({
   orders,
   actions,
   busyOrder,
-  onEditItem,
   variant,
 }: {
   title: string;
   orders: QueueOrder[];
   actions: (order: QueueOrder) => React.ReactNode;
   busyOrder: string | null;
-  onEditItem?: (
-    order: QueueOrder,
-    itemId: string,
-    quantity: number,
-    replacementSizeId?: string,
-  ) => Promise<boolean>;
   variant: "cashier" | "kitchen" | "waiter";
 }) {
   type QueueView =
@@ -2045,27 +2015,7 @@ function Queue({
     | "unpaid"
     | "cancelled";
   const [view, setView] = useState<QueueView>("all");
-  const [busyItem, setBusyItem] = useState<string | null>(null);
-  const [editableMenu, setEditableMenu] = useState<MenuItem[]>([]);
-  const [replacementItemByItem, setReplacementItemByItem] = useState<
-    Record<string, string>
-  >({});
-  const [replacementSizeByItem, setReplacementSizeByItem] = useState<
-    Record<string, string>
-  >({});
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (variant !== "cashier") return;
-    void loadMenu()
-      .then((items) =>
-        setEditableMenu(
-          items.filter(
-            (item) => item.available && item.availability_state === "available",
-          ),
-        ),
-      )
-      .catch(() => setEditableMenu([]));
-  }, [variant]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -2211,173 +2161,6 @@ function Queue({
                       {item.itemName || item.name || "Item"}{" "}
                       {item.size ? `· ${item.size}` : ""}
                     </span>
-                    {variant === "cashier" &&
-                    onEditItem &&
-                    item.id &&
-                    ["pending_confirmation", "confirmed"].includes(
-                      order.status,
-                    ) ? (
-                      <details className="queue-item-correction">
-                        <summary>Correct item</summary>
-                        <span className="queue-item-editor">
-                        <label>
-                          <span>Product</span>
-                          <select
-                            aria-label={`Replacement product for ${item.itemName || item.name || "item"}`}
-                            disabled={busyItem === item.id}
-                            onChange={(event) => {
-                              setReplacementItemByItem((current) => ({
-                                ...current,
-                                [item.id as string]: event.target.value,
-                              }));
-                              setReplacementSizeByItem((current) => ({
-                                ...current,
-                                [item.id as string]: "",
-                              }));
-                            }}
-                            value={replacementItemByItem[item.id] || ""}
-                          >
-                            <option value="">Choose product…</option>
-                            {editableMenu.map((menuItem) => (
-                              <option key={menuItem.id} value={menuItem.id}>
-                                {menuItem.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          <span>Size</span>
-                          <select
-                            aria-label={`Replacement size for ${item.itemName || item.name || "item"}`}
-                            disabled={
-                              busyItem === item.id ||
-                              !replacementItemByItem[item.id]
-                            }
-                            onChange={(event) =>
-                              setReplacementSizeByItem((current) => ({
-                                ...current,
-                                [item.id as string]: event.target.value,
-                              }))
-                            }
-                            value={replacementSizeByItem[item.id] || ""}
-                          >
-                            <option value="">Choose size…</option>
-                            {editableMenu
-                              .find(
-                                (menuItem) =>
-                                  menuItem.id ===
-                                  replacementItemByItem[item.id as string],
-                              )
-                              ?.sizes.map((size) => (
-                                <option key={size.id} value={size.id}>
-                                  {size.size_name} — {money.format(size.price)}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        <button
-                          className="queue-apply-edit"
-                          disabled={
-                            busyItem === item.id ||
-                            !replacementSizeByItem[item.id]
-                          }
-                          onClick={async () => {
-                            const replacementSizeId =
-                              replacementSizeByItem[item.id as string];
-                            if (!replacementSizeId) return;
-                            setBusyItem(item.id || null);
-                            try {
-                              const updated = await onEditItem(
-                                order,
-                                item.id as string,
-                                Number(item.quantity || 1),
-                                replacementSizeId,
-                              );
-                              if (updated) {
-                                setReplacementItemByItem((current) => ({
-                                  ...current,
-                                  [item.id as string]: "",
-                                }));
-                                setReplacementSizeByItem((current) => ({
-                                  ...current,
-                                  [item.id as string]: "",
-                                }));
-                              }
-                            } finally {
-                              setBusyItem(null);
-                            }
-                          }}
-                          type="button"
-                        >
-                          {busyItem === item.id ? "Updating…" : "Update item"}
-                        </button>
-                        <button
-                          aria-label={`Reduce ${item.itemName || item.name || "item"}`}
-                          disabled={busyItem === item.id}
-                          onClick={async () => {
-                            setBusyItem(item.id || null);
-                            try {
-                              await onEditItem(
-                                order,
-                                item.id as string,
-                                Math.max(0, Number(item.quantity || 1) - 1),
-                              );
-                            } finally {
-                              setBusyItem(null);
-                            }
-                          }}
-                          type="button"
-                        >
-                          −
-                        </button>
-                        <button
-                          aria-label={`Add another ${item.itemName || item.name || "item"}`}
-                          disabled={busyItem === item.id}
-                          onClick={async () => {
-                            setBusyItem(item.id || null);
-                            try {
-                              await onEditItem(
-                                order,
-                                item.id as string,
-                                Number(item.quantity || 1) + 1,
-                              );
-                            } finally {
-                              setBusyItem(null);
-                            }
-                          }}
-                          type="button"
-                        >
-                          +
-                        </button>
-                        <button
-                          aria-label={`Remove unavailable ${item.itemName || item.name || "item"}`}
-                          className="button-danger"
-                          disabled={busyItem === item.id}
-                          onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Remove ${item.itemName || item.name || "this item"} from ${order.order_number}?`,
-                              )
-                            )
-                              return;
-                            setBusyItem(item.id || null);
-                            try {
-                              await onEditItem(order, item.id as string, 0);
-                            } finally {
-                              setBusyItem(null);
-                            }
-                          }}
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                        </span>
-                        <small>
-                          Available before preparation starts. The receipt total
-                          and every live view update automatically.
-                        </small>
-                      </details>
-                    ) : null}
                   </li>
                 ))}
               </ul>
