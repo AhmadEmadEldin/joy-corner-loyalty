@@ -2217,7 +2217,9 @@ function Queue({
                     ["pending_confirmation", "confirmed"].includes(
                       order.status,
                     ) ? (
-                      <span className="queue-item-editor">
+                      <details className="queue-item-correction">
+                        <summary>Correct item</summary>
+                        <span className="queue-item-editor">
                         <label>
                           <span>Product</span>
                           <select
@@ -2369,7 +2371,12 @@ function Queue({
                         >
                           Remove
                         </button>
-                      </span>
+                        </span>
+                        <small>
+                          Available before preparation starts. The receipt total
+                          and every live view update automatically.
+                        </small>
+                      </details>
                     ) : null}
                   </li>
                 ))}
