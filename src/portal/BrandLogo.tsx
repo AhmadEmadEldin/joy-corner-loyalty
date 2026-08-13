@@ -21,9 +21,13 @@ export function BrandLogo({
     >
       <img
         alt=""
+        decoding="async"
+        fetchPriority={markOnly ? "high" : "auto"}
+        height={markOnly ? 192 : undefined}
         src={markOnly
-          ? "/assets/joy-corner-logo-mark.png"
+          ? "/assets/joy-corner-logo-mark-small.png"
           : "/assets/joy-corner-logo-white-wordmark.png"}
+        width={markOnly ? 192 : undefined}
       />
       {showName ? <strong className="joy-brand-lockup__auth-name">Joy Corner Coffee</strong> : null}
     </span>

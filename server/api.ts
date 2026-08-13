@@ -1205,7 +1205,8 @@ app.get(
   asyncRoute(async (_req, res) => {
     const rows = await query<Record<string, unknown>>(
       `select a.id,a.full_name as "fullName",a.email,a.phone,a.customer_number as "customerNumber",
-            a.account_status as "accountStatus",a.notes,
+            case when a.password_hash is not null and a.password_hash not like 'migrated$%'
+              then 'registered' else 'guest' end as "accountStatus",a.notes,
             a.marketing_consent as "marketingConsent",
             a.marketing_consent_at as "marketingConsentAt",
             a.created_at as "createdAt",
@@ -1251,7 +1252,8 @@ app.get(
     if (!phone) throw new HttpError(400, "Enter a valid phone number.");
     const rows = await query<Record<string, unknown>>(
       `select a.id,a.full_name as "fullName",a.email,a.phone,a.customer_number as "customerNumber",
-              a.account_status as "accountStatus",a.notes,
+              case when a.password_hash is not null and a.password_hash not like 'migrated$%'
+                then 'registered' else 'guest' end as "accountStatus",a.notes,
               coalesce(s.order_count,0)::int as "orderCount",
               coalesce(s.total_spend,0)::numeric as "totalSpend",
               coalesce(s.outstanding_balance,0)::numeric as "outstandingBalance",

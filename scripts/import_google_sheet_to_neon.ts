@@ -143,11 +143,12 @@ async function migrateCustomers(client: PoolClient, source: Row[]): Promise<numb
     const suppliedEmail = text(row, "email").toLowerCase();
     const email = suppliedEmail || `${key(customerNumber)}@legacy.joycorner.local`;
     const result = await client.query<{ id: string }>(
-      `insert into accounts(email,password_hash,full_name,phone,role,customer_number,date_of_birth,favorite_drink,active,created_at)
-       values($1,'migrated$',$2,$3,'customer',$4,$5,$6,$7,$8)
+      `insert into accounts(email,password_hash,full_name,phone,role,customer_number,date_of_birth,favorite_drink,active,created_at,account_status)
+       values($1,'migrated$',$2,$3,'customer',$4,$5,$6,$7,$8,'guest')
        on conflict(customer_number) do update set full_name=excluded.full_name,
        phone=coalesce(excluded.phone,accounts.phone),email=case when accounts.password_hash='migrated$' then excluded.email else accounts.email end,
-       date_of_birth=coalesce(excluded.date_of_birth,accounts.date_of_birth),favorite_drink=coalesce(excluded.favorite_drink,accounts.favorite_drink),active=excluded.active
+       date_of_birth=coalesce(excluded.date_of_birth,accounts.date_of_birth),favorite_drink=coalesce(excluded.favorite_drink,accounts.favorite_drink),active=excluded.active,
+       account_status=case when accounts.password_hash='migrated$' then 'guest' else accounts.account_status end
        returning id`,
       [email, text(row, "fullName") || `Customer ${customerNumber}`, phone, customerNumber,
        asDateOnly(row[key("birthday")]), text(row, "favoriteDrink") || null,
