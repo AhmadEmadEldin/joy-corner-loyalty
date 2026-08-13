@@ -5,6 +5,7 @@ import type {
 } from "./repository";
 import { BrandLogo } from "./BrandLogo";
 import { statusLabel } from "./workflow";
+import { isOutstandingReceipt } from "./receiptClassification";
 
 const money = new Intl.NumberFormat("en-EG", {
   currency: "EGP",
@@ -43,7 +44,7 @@ export function CustomerOrders({
   onSelectOrder: (orderId: string | null) => void;
 }) {
   const visible = orders.filter((order) => {
-    if (mode === "unpaid") return order.payment_status !== "paid";
+    if (mode === "unpaid") return isOutstandingReceipt(order);
     if (mode === "receipts")
       return ["picked_up", "closed"].includes(order.status);
     return true;

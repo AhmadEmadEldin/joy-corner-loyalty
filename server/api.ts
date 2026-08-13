@@ -64,7 +64,11 @@ if (isProduction && jwtSecret.length < 32) {
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "8mb" }));
+app.use(
+  "/api/owner/menu/items/:id/image",
+  express.json({ limit: "8mb" }),
+);
+app.use(express.json({ limit: "256kb" }));
 app.use((req, res, next) => {
   const origin = req.headers.origin?.replace(/\/$/, "");
   if (origin && allowedOrigins.has(origin)) {
@@ -82,6 +86,19 @@ app.use((req, res, next) => {
   }
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+  );
+  if (isProduction) {
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains",
+    );
+  }
   if (origin && !allowedOrigins.has(origin) && req.path.startsWith("/api/")) {
     return res.status(403).json({ error: "This origin is not allowed." });
   }
@@ -264,9 +281,19 @@ function sessionResponse(row: Record<string, unknown>, res: Response) {
 }
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const maxTrackedLoginSources = 10_000;
 function loginRateLimit(req: Request, res: Response, next: NextFunction): void {
   const key = req.ip || "unknown";
   const now = Date.now();
+  if (loginAttempts.size >= maxTrackedLoginSources) {
+    loginAttempts.forEach((attempt, source) => {
+      if (attempt.resetAt <= now) loginAttempts.delete(source);
+    });
+    if (loginAttempts.size >= maxTrackedLoginSources) {
+      const oldestSource = loginAttempts.keys().next().value;
+      if (oldestSource) loginAttempts.delete(oldestSource);
+    }
+  }
   const current = loginAttempts.get(key);
   if (!current || current.resetAt <= now) {
     loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60_000 });
@@ -301,10 +328,14 @@ class HttpError extends Error {
 
 type EventClient = { res: Response; topics: Set<string>; user: Claims };
 const eventClients = new Set<EventClient>();
+const maxEventClients = 1_000;
+const maxEventClientsPerUser = 3;
 function publish(topic: string, entityId: string): void {
-  const frame = `event: change\ndata: ${JSON.stringify({ entityId, topic })}\n\n`;
   eventClients.forEach((client) => {
-    if (client.topics.has(topic)) client.res.write(frame);
+    if (!client.topics.has(topic)) return;
+    const payload =
+      client.user.role === "customer" ? { topic } : { entityId, topic };
+    client.res.write(`event: change\ndata: ${JSON.stringify(payload)}\n\n`);
   });
 }
 
@@ -365,27 +396,10 @@ app.post(
         [email],
       );
       if (existingEmail.rows[0]) {
-        const imported = String(
-          existingEmail.rows[0].password_hash || "",
-        ).startsWith("migrated$");
-        if (imported && String(existingEmail.rows[0].phone || "") === phone) {
-          if (
-            isProduction &&
-            process.env.ALLOW_MIGRATED_ACCOUNT_CLAIM !== "true"
-          ) {
-            throw new HttpError(
-              409,
-              "This imported account needs an administrator password reset.",
-            );
-          }
-          const claimed = await client.query<Record<string, unknown>>(
-            `update accounts set password_hash=$2,full_name=$3,phone=$4,account_status='registered'
-             where id=$1 returning *`,
-            [existingEmail.rows[0].id, passwordHash, fullName, phone],
-          );
-          return { account: claimed.rows[0], created: false };
-        }
-        throw new HttpError(409, "An account already exists for this email.");
+        throw new HttpError(
+          409,
+          "An account already exists for this email. Use the secure password-reset or staff verification process.",
+        );
       }
 
       const existingPhone = await client.query<Record<string, unknown>>(
@@ -393,24 +407,12 @@ app.post(
         [phone],
       );
       if (existingPhone.rows[0]) {
-        if (String(existingPhone.rows[0].account_status) !== "guest") {
-          throw new HttpError(
-            409,
-            "A registered customer account already exists with this phone number.",
-          );
-        }
-        const linked = await client.query<Record<string, unknown>>(
-          `update accounts set email=$2,password_hash=$3,full_name=$4,
-             account_status='registered',marketing_consent=$5,
-             marketing_consent_at=case when $5 then now() else null end
-           where id=$1 returning *`,
-          [existingPhone.rows[0].id, email, passwordHash, fullName, marketingConsent],
+        throw new HttpError(
+          409,
+          String(existingPhone.rows[0].account_status) === "guest"
+            ? "A cashier-created customer record already uses this phone number. Ask staff to verify and register the account securely."
+            : "A registered customer account already exists with this phone number.",
         );
-        await client.query(
-          "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
-          [existingPhone.rows[0].id],
-        );
-        return { account: linked.rows[0], created: false };
       }
 
       const inserted = await client.query<Record<string, unknown>>(
@@ -514,6 +516,16 @@ app.get("/api/events", authenticate, (req: AuthedRequest, res) => {
       allowed.add("notifications");
     if (requested.has("menu")) allowed.add("menu");
   }
+  const userConnections = [...eventClients].filter(
+    (client) => client.user.sub === req.auth?.sub,
+  ).length;
+  if (
+    eventClients.size >= maxEventClients ||
+    userConnections >= maxEventClientsPerUser
+  ) {
+    res.status(429).json({ error: "Too many live-update connections." });
+    return;
+  }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
@@ -521,10 +533,14 @@ app.get("/api/events", authenticate, (req: AuthedRequest, res) => {
   const client = { res, topics: allowed, user: req.auth as Claims };
   eventClients.add(client);
   const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 25_000);
-  req.on("close", () => {
+  const maximumLifetime = setTimeout(() => res.end(), 30 * 60_000);
+  const cleanUp = () => {
     clearInterval(heartbeat);
+    clearTimeout(maximumLifetime);
     eventClients.delete(client);
-  });
+  };
+  req.on("close", cleanUp);
+  res.on("error", cleanUp);
 });
 
 async function menuItems(includeInactive: boolean) {
@@ -771,15 +787,24 @@ async function createOrder(
     voucherCode?: string;
   },
 ) {
-  const existing = await client.query<{ id: string; order_number: string }>(
-    "select id,order_number from orders where idempotency_key=$1",
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey))
+    throw new HttpError(400, "Invalid order request key.");
+  const existing = await client.query<{
+    created_by: string;
+    id: string;
+    order_number: string;
+  }>(
+    "select id,order_number,created_by from orders where idempotency_key=$1",
     [input.idempotencyKey],
   );
-  if (existing.rows[0])
+  if (existing.rows[0]) {
+    if (String(existing.rows[0].created_by) !== actor.sub)
+      throw new HttpError(409, "That order request key is already in use.");
     return {
       orderId: existing.rows[0].id,
       orderNumber: existing.rows[0].order_number,
     };
+  }
   if (
     !Array.isArray(input.items) ||
     input.items.length < 1 ||
@@ -1456,11 +1481,6 @@ app.post(
         throw new HttpError(
           403,
           "Only authorized operations staff can cancel an order.",
-        );
-      if (status === "closed" && row.payment_status !== "paid")
-        throw new HttpError(
-          409,
-          "The order must be fully paid before it can be closed.",
         );
       const confirmationStatus =
         status === "confirmed"
@@ -2935,6 +2955,7 @@ app.get(
         conditions.push(`o.payment_status = any($${paramIdx}::text[])`);
         params.push(pstatuses);
         paramIdx++;
+        conditions.push("o.status not in ('cancelled','rejected')");
       }
     }
     if (businessDayId) {
@@ -3266,6 +3287,10 @@ app.post(
         ],
       );
     });
+    publish("orders", String(req.params.id));
+    publish("notifications", String(req.params.id));
+    publish("cashier_order_queue", String(req.params.id));
+    publish("kitchen_order_queue", String(req.params.id));
     res.json({ ok: true });
   }),
 );
@@ -3285,6 +3310,15 @@ app.post(
       if (!order.rows[0]) throw new HttpError(404, "Order not found.");
       if (String(order.rows[0].status) === "cancelled")
         throw new HttpError(409, "Order is already cancelled/voided.");
+      const payments = await client.query<{ paid: string }>(
+        "select coalesce(sum(amount),0)::text as paid from payments where order_id=$1 and not coalesce(is_refund,false) and not coalesce(voided,false)",
+        [req.params.id],
+      );
+      if (Number(payments.rows[0]?.paid || 0) > 0.009)
+        throw new HttpError(
+          409,
+          "Refund or void the recorded payment before cancelling this receipt.",
+        );
       await client.query(
         `update orders set status='cancelled',cancellation_reason=$2 where id=$1`,
         [req.params.id, `VOIDED: ${reason}`],
@@ -3299,6 +3333,10 @@ app.post(
         ],
       );
     });
+    publish("orders", String(req.params.id));
+    publish("notifications", String(req.params.id));
+    publish("cashier_order_queue", String(req.params.id));
+    publish("kitchen_order_queue", String(req.params.id));
     res.json({ ok: true });
   }),
 );
@@ -3359,10 +3397,30 @@ app.post(
       throw new HttpError(400, "Override reason is required.");
     await transaction(async (client) => {
       const item = await client.query<Record<string, unknown>>(
-        "select * from order_items where id=$1 for update",
-        [orderItemId],
+        "select * from order_items where id=$1 and order_id=$2 for update",
+        [orderItemId, req.params.id],
       );
       if (!item.rows[0]) throw new HttpError(404, "Order item not found.");
+      const order = await client.query<Record<string, unknown>>(
+        "select * from orders where id=$1 for update",
+        [req.params.id],
+      );
+      if (!order.rows[0]) throw new HttpError(404, "Order not found.");
+      if (
+        !["pending_confirmation", "confirmed"].includes(
+          String(order.rows[0].status),
+        )
+      )
+        throw new HttpError(
+          409,
+          "Prices can only be adjusted before preparation starts.",
+        );
+      const payments = await client.query<{ paid: string }>(
+        "select coalesce(sum(amount),0)::text as paid from payments where order_id=$1 and not coalesce(is_refund,false) and not coalesce(voided,false)",
+        [req.params.id],
+      );
+      if (Number(payments.rows[0]?.paid || 0) > 0.009)
+        throw new HttpError(409, "A paid receipt price cannot be overridden.");
       const oldPrice = Number(item.rows[0].unit_price);
       const newPrice = Number(newUnitPrice);
       const qty = Number(item.rows[0].quantity);
@@ -3373,10 +3431,6 @@ app.post(
               override_reason=$4,overridden_by_user_id=$5,overridden_at=now()
        where id=$1`,
         [orderItemId, oldPrice, newPrice, String(reason).trim(), req.auth?.sub],
-      );
-      const order = await client.query<Record<string, unknown>>(
-        "select * from orders where id=$1 for update",
-        [item.rows[0].order_id],
       );
       if (order.rows[0]) {
         const newSubtotal = Number(order.rows[0].subtotal) + totalDiff;
@@ -3406,6 +3460,10 @@ app.post(
         ],
       );
     });
+    publish("orders", String(req.params.id));
+    publish("notifications", String(req.params.id));
+    publish("cashier_order_queue", String(req.params.id));
+    publish("kitchen_order_queue", String(req.params.id));
     res.json({ ok: true });
   }),
 );

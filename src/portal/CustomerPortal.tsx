@@ -38,6 +38,7 @@ import {
   subscribeToCustomerChanges,
   updateCustomerProfile,
 } from "./repository";
+import { isOutstandingReceipt } from "./receiptClassification";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -340,9 +341,7 @@ function CustomerWorkspace({ user }: { user: SessionUser }) {
   const unreadNotifications = notifications.filter(
     (notification) => !notification.read,
   );
-  const unpaidOrders = orders.filter(
-    (order) => order.payment_status !== "paid",
-  );
+  const unpaidOrders = orders.filter(isOutstandingReceipt);
 
   async function submitOrder(submission: CheckoutSubmission) {
     if (busy || !cart.length) return;

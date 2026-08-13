@@ -27,7 +27,10 @@ function fileForRequest(url) {
   const parsed = new URL(url || "/", `http://127.0.0.1:${port}`);
   const cleanPath = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
   const requested = path.resolve(root, cleanPath || "index.html");
-  if (!requested.startsWith(root)) return path.join(root, "index.html");
+  const relative = path.relative(root, requested);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return path.join(root, "index.html");
+  }
   if (fs.existsSync(requested) && fs.statSync(requested).isFile()) {
     return requested;
   }
@@ -35,7 +38,13 @@ function fileForRequest(url) {
 }
 
 const server = http.createServer((request, response) => {
-  const filePath = fileForRequest(request.url);
+  let filePath;
+  try {
+    filePath = fileForRequest(request.url);
+  } catch {
+    send(response, 400, "Bad request");
+    return;
+  }
   fs.readFile(filePath, (error, data) => {
     if (error) {
       send(response, 404, "Not found");
