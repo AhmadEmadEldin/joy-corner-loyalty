@@ -296,24 +296,6 @@ export async function confirmOrderPayment(input: {
   });
 }
 
-export async function updateCashierOrderItem(input: {
-  orderId: string;
-  orderItemId: string;
-  quantity: number;
-  replacementSizeId?: string;
-}): Promise<void> {
-  await apiRequest(
-    `/orders/${encodeURIComponent(input.orderId)}/items/${encodeURIComponent(input.orderItemId)}`,
-    {
-      body: JSON.stringify({
-        quantity: input.quantity,
-        replacementSizeId: input.replacementSizeId,
-      }),
-      method: "PATCH",
-    },
-  );
-}
-
 export async function loadCustomerDirectory(): Promise<
   Array<Record<string, unknown>>
 > {

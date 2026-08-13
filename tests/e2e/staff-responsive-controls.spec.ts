@@ -38,7 +38,7 @@ test("phone size picker keeps every size visible and tappable", async ({
   expect(box!.y + box!.height).toBeLessThanOrEqual(740);
 });
 
-test("cashier ticket keeps correction controls contained until requested", async ({
+test("cashier ticket uses the clean receipt layout without editing controls", async ({
   page,
 }) => {
   await page.setViewportSize({ height: 800, width: 390 });
@@ -51,14 +51,6 @@ test("cashier ticket keeps correction controls contained until requested", async
           <ul class="queue-item-list">
             <li>
               <span class="queue-item-summary">1 × Frappuccino · Standard</span>
-              <details class="queue-item-correction">
-                <summary>Correct item</summary>
-                <span class="queue-item-editor">
-                  <label><span>Product</span><select aria-label="Replacement product"><option>Choose product…</option></select></label>
-                  <label><span>Size</span><select aria-label="Replacement size"><option>Choose size…</option></select></label>
-                  <button class="queue-apply-edit">Update item</button><button>−</button><button>+</button><button>Remove</button>
-                </span>
-              </details>
             </li>
           </ul>
         </article>
@@ -71,11 +63,8 @@ test("cashier ticket keeps correction controls contained until requested", async
   const summaryBox = await summary.boundingBox();
   expect(summaryBox).not.toBeNull();
   expect(summaryBox!.width).toBeGreaterThan(200);
-  await expect(page.getByLabel("Replacement product")).toBeHidden();
-  await page.getByText("Correct item").click();
-  await expect(page.getByLabel("Replacement product")).toBeVisible();
-  await expect(page.getByLabel("Replacement size")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Update item" })).toBeVisible();
+  await expect(page.getByText("Correct item")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Update item" })).toHaveCount(0);
 });
 
 test("queue filter and receipt action labels never overlap", async ({ page }) => {
