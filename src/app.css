@@ -4177,8 +4177,76 @@ canvas {
   grid-template-columns: 1fr 1fr;
 }
 .section-actions {
+  gap: 1rem;
   justify-content: flex-end;
   margin-bottom: 1rem;
+}
+.schedule-day-title {
+  display: grid;
+  margin-right: auto;
+}
+.schedule-day-title span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+.daily-staffing-board {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 1rem;
+}
+.staffing-group {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+.staffing-group.working {
+  border-color: rgba(78, 154, 80, 0.42);
+}
+.staffing-group > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+.staffing-group > header h3,
+.staffing-group > header p {
+  margin: 0;
+}
+.staffing-group > header > strong {
+  align-items: center;
+  background: var(--joy-surface-muted);
+  border-radius: 50%;
+  color: var(--gold);
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.staffing-employee-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.staffing-employee-grid > button {
+  background: var(--joy-surface-muted);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  text-align: left;
+}
+.staffing-employee-grid > button:hover,
+.staffing-employee-grid > button.selected {
+  border-color: var(--employee-color, var(--gold));
+  box-shadow: var(--glow-gold);
+}
+.staffing-employee-grid > button > small {
+  color: var(--muted);
+  padding-left: 2.35rem;
 }
 .weekly-calendar {
   display: grid;
@@ -4194,14 +4262,28 @@ canvas {
   min-height: 260px;
   padding: 0.55rem;
 }
-.weekly-calendar > section > header {
+.weekly-calendar > section.selected-day {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(224, 170, 56, 0.3);
+}
+.weekly-calendar .calendar-day-header {
+  background: transparent;
   border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink);
   display: grid;
   margin-bottom: 0.6rem;
   padding: 0.35rem;
+  text-align: left;
+  width: 100%;
 }
-.weekly-calendar > section > header small {
+.weekly-calendar .calendar-day-header small,
+.weekly-calendar .calendar-day-header span {
   color: var(--muted);
+}
+.weekly-calendar .calendar-day-header span {
+  font-size: 0.65rem;
+  margin-top: 0.3rem;
 }
 .calendar-shift {
   background: var(--joy-surface-muted);
@@ -4447,6 +4529,13 @@ canvas {
   }
   .weekly-calendar {
     grid-template-columns: repeat(7, 150px);
+  }
+  .daily-staffing-board {
+    grid-template-columns: 1fr;
+  }
+  .section-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
   .team-member-card > dl {
     grid-template-columns: 1fr;
