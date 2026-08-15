@@ -1,4 +1,11 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   createCleaningTask,
   createTeamMember,
@@ -7,12 +14,14 @@ import {
   deleteCleaningTask,
   deleteTeamShift,
   loadTeamOperations,
+  savePayrollOverride,
   updateCleaningTask,
   updateTeamMember,
   updateShiftAttendance,
   type TeamMember,
   type TeamOperationsData,
   type TeamShift,
+  type PayrollOverride,
 } from "./repository";
 
 const DEFAULT_CLEANING = [
@@ -49,19 +58,54 @@ function formObject(form: HTMLFormElement) {
 function calculatePay(
   row: TeamOperationsData["payroll"][number],
   employee?: TeamMember,
+  override?: PayrollOverride,
 ) {
-  const hours = Number(row.worked_hours || 0);
-  const days = Number(row.days_worked || 0);
+  const hours = Number(override?.manual_hours ?? row.worked_hours ?? 0);
+  const days = Number(override?.manual_days ?? row.days_worked ?? 0);
   const rate = Number(row.pay_rate || 0);
-  if (row.pay_type === "daily") return days * rate;
-  if (["weekly", "monthly", "fixed"].includes(row.pay_type)) return rate;
-  const regularLimit = Number(employee?.max_weekly_hours || 40);
-  const regular = Math.min(hours, regularLimit);
+  let basePay = rate;
+  if (row.pay_type === "daily") basePay = days * rate;
+  if (row.pay_type === "hourly") {
+    const regularLimit = Number(employee?.max_weekly_hours || 40);
+    const regular = Math.min(hours, regularLimit);
+    basePay =
+      regular * rate +
+      Math.max(hours - regularLimit, 0) *
+        rate *
+        Number(row.overtime_multiplier || 1.5);
+  }
+  return Math.max(
+    basePay + Number(override?.bonus || 0) - Number(override?.deduction || 0),
+    0,
+  );
+}
+
+function EmployeeIdentity({
+  employee,
+  compact = false,
+}: {
+  employee?: TeamMember;
+  compact?: boolean;
+}) {
+  if (!employee)
+    return <span className="employee-identity missing">Unassigned</span>;
   return (
-    regular * rate +
-    Math.max(hours - regularLimit, 0) *
-      rate *
-      Number(row.overtime_multiplier || 1.5)
+    <div
+      className={`employee-identity${compact ? " compact" : ""}`}
+      style={{ "--employee-color": employee.calendar_color } as CSSProperties}
+    >
+      <span className="employee-identity-avatar">
+        {employee.full_name
+          .split(" ")
+          .map((part) => part[0])
+          .slice(0, 2)
+          .join("")}
+      </span>
+      <span className="employee-identity-copy">
+        <strong>{employee.full_name}</strong>
+        <small>{employee.position_name || "Team member"}</small>
+      </span>
+    </div>
   );
 }
 
@@ -82,6 +126,7 @@ export function TeamOperations({
   const [editingAttendance, setEditingAttendance] = useState<TeamShift | null>(
     null,
   );
+  const [editingPayroll, setEditingPayroll] = useState<TeamMember | null>(null);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -176,12 +221,18 @@ export function TeamOperations({
       `<table><thead><tr><th>Employee</th><th>Position</th><th>Pay type</th><th>Days worked</th><th>Approved hours</th><th>Overtime</th><th>Estimated salary</th><th>Signature</th></tr></thead><tbody>${data.payroll
         .map((row) => {
           const employee = data.employees.find((item) => item.id === row.id);
-          const hours = Number(row.worked_hours || 0);
+          const override = data.payrollOverrides.find(
+            (item) => item.employee_id === row.id,
+          );
+          const hours = Number(override?.manual_hours ?? row.worked_hours ?? 0);
+          const daysWorked = Number(
+            override?.manual_days ?? row.days_worked ?? 0,
+          );
           const overtime = Math.max(
             hours - Number(employee?.max_weekly_hours || 40),
             0,
           );
-          return `<tr><td><b>${row.full_name}</b></td><td>${employee?.position_name || "Team"}</td><td>${row.pay_type}</td><td>${row.days_worked}</td><td>${hours.toFixed(2)}</td><td>${overtime.toFixed(2)}</td><td><b>${money.format(calculatePay(row, employee))}</b></td><td></td></tr>`;
+          return `<tr><td><b>${row.full_name}</b></td><td>${employee?.position_name || "Team"}</td><td>${row.pay_type}</td><td>${daysWorked}</td><td>${hours.toFixed(2)}</td><td>${overtime.toFixed(2)}</td><td><b>${money.format(calculatePay(row, employee, override))}</b></td><td></td></tr>`;
         })
         .join("")}</tbody></table>`,
     );
@@ -237,17 +288,7 @@ export function TeamOperations({
                   key={employee.id}
                   style={{ borderTopColor: employee.calendar_color }}
                 >
-                  <div className="team-avatar">
-                    {employee.full_name
-                      .split(" ")
-                      .map((p) => p[0])
-                      .slice(0, 2)
-                      .join("")}
-                  </div>
-                  <div>
-                    <h3>{employee.full_name}</h3>
-                    <span>{employee.position_name || "No position"}</span>
-                  </div>
+                  <EmployeeIdentity employee={employee} />
                   <dl>
                     <div>
                       <dt>Phone</dt>
@@ -363,12 +404,16 @@ export function TeamOperations({
                       key={shift.id}
                       style={{ borderColor: shift.color }}
                     >
-                      <strong>{shift.full_name}</strong>
+                      <EmployeeIdentity
+                        compact
+                        employee={data.employees.find(
+                          (employee) => employee.id === shift.employee_id,
+                        )}
+                      />
                       <span>
                         {shift.scheduled_start.slice(0, 5)}–
                         {shift.scheduled_end.slice(0, 5)}
                       </span>
-                      <small>{shift.position_name || "Team"}</small>
                       <button
                         onClick={() => setEditingAttendance(shift)}
                         type="button"
@@ -451,7 +496,12 @@ export function TeamOperations({
                     {task.task_date.slice(0, 10)} · {task.task_time.slice(0, 5)}
                   </span>
                 </div>
-                <span>{task.full_name || "Unassigned"}</span>
+                <EmployeeIdentity
+                  compact
+                  employee={data.employees.find(
+                    (employee) => employee.id === task.employee_id,
+                  )}
+                />
                 <small>{task.checklist.length} cleaning checks</small>
                 <button
                   className={
@@ -538,17 +588,34 @@ export function TeamOperations({
               const employee = data.employees.find(
                 (item) => item.id === row.id,
               );
-              const hours = Number(row.worked_hours || 0);
+              const override = data.payrollOverrides.find(
+                (item) => item.employee_id === row.id,
+              );
+              const hours = Number(
+                override?.manual_hours ?? row.worked_hours ?? 0,
+              );
+              const daysWorked = Number(
+                override?.manual_days ?? row.days_worked ?? 0,
+              );
               const overtime = Math.max(
                 hours - Number(employee?.max_weekly_hours || 40),
                 0,
               );
               return (
-                <article key={row.id}>
-                  <span>{employee?.position_name || "Team"}</span>
-                  <h3>{row.full_name}</h3>
+                <article
+                  className={
+                    override ? "payroll-card adjusted" : "payroll-card"
+                  }
+                  key={row.id}
+                  style={
+                    {
+                      "--employee-color": employee?.calendar_color,
+                    } as CSSProperties
+                  }
+                >
+                  <EmployeeIdentity employee={employee} />
                   <div>
-                    <b>{row.days_worked}</b>
+                    <b>{daysWorked}</b>
                     <small>days worked</small>
                   </div>
                   <div>
@@ -560,9 +627,24 @@ export function TeamOperations({
                     <small>overtime hours</small>
                   </div>
                   <footer>
-                    <span>Estimated salary</span>
-                    <strong>{money.format(calculatePay(row, employee))}</strong>
+                    <span>
+                      {override ? "Owner-adjusted salary" : "Estimated salary"}
+                    </span>
+                    <strong>
+                      {money.format(calculatePay(row, employee, override))}
+                    </strong>
                   </footer>
+                  {override?.note ? (
+                    <p className="payroll-adjustment-note">{override.note}</p>
+                  ) : null}
+                  <button
+                    className="button-secondary payroll-edit-button"
+                    disabled={!employee}
+                    onClick={() => employee && setEditingPayroll(employee)}
+                    type="button"
+                  >
+                    Adjust payroll
+                  </button>
                 </article>
               );
             })}
@@ -829,6 +911,118 @@ export function TeamOperations({
           </form>
         </div>
       ) : null}
+      {editingPayroll
+        ? (() => {
+            const row = data.payroll.find(
+              (item) => item.id === editingPayroll.id,
+            );
+            const override = data.payrollOverrides.find(
+              (item) => item.employee_id === editingPayroll.id,
+            );
+            if (!row) return null;
+            return (
+              <div className="operations-modal-backdrop" role="presentation">
+                <form
+                  className="operations-modal payroll-adjustment-modal"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const employeeId = editingPayroll.id;
+                    void savePayrollOverride(employeeId, {
+                      ...formObject(event.currentTarget),
+                      periodStart: iso(weekStart),
+                      periodEnd: iso(weekEnd),
+                    })
+                      .then(async () => {
+                        setEditingPayroll(null);
+                        await load();
+                      })
+                      .catch((error: Error) => onError(error.message));
+                  }}
+                >
+                  <header>
+                    <div>
+                      <p className="eyebrow">Owner payroll correction</p>
+                      <EmployeeIdentity employee={editingPayroll} />
+                    </div>
+                    <button
+                      aria-label="Close"
+                      onClick={() => setEditingPayroll(null)}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </header>
+                  <p className="muted">
+                    Leave days or hours empty to use the approved automatic
+                    count.
+                  </p>
+                  <div className="operations-modal-grid">
+                    <label>
+                      Manual days
+                      <input
+                        defaultValue={override?.manual_days ?? ""}
+                        min="0"
+                        name="manualDays"
+                        placeholder={`Automatic: ${row.days_worked}`}
+                        step="0.5"
+                        type="number"
+                      />
+                    </label>
+                    <label>
+                      Manual hours
+                      <input
+                        defaultValue={override?.manual_hours ?? ""}
+                        min="0"
+                        name="manualHours"
+                        placeholder={`Automatic: ${row.worked_hours}`}
+                        step="0.25"
+                        type="number"
+                      />
+                    </label>
+                    <label>
+                      Bonus (EGP)
+                      <input
+                        defaultValue={override?.bonus ?? 0}
+                        min="0"
+                        name="bonus"
+                        step="0.01"
+                        type="number"
+                      />
+                    </label>
+                    <label>
+                      Deduction (EGP)
+                      <input
+                        defaultValue={override?.deduction ?? 0}
+                        min="0"
+                        name="deduction"
+                        step="0.01"
+                        type="number"
+                      />
+                    </label>
+                    <label className="wide">
+                      Reason or note
+                      <textarea
+                        defaultValue={override?.note || ""}
+                        name="note"
+                        rows={3}
+                      />
+                    </label>
+                  </div>
+                  <footer>
+                    <button
+                      className="button-secondary"
+                      onClick={() => setEditingPayroll(null)}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                    <button>Save payroll adjustment</button>
+                  </footer>
+                </form>
+              </div>
+            );
+          })()
+        : null}
     </section>
   );
 }
