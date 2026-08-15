@@ -6,10 +6,7 @@ import {
   type SessionUser,
 } from "./client";
 import type { OperationalOrderStatus } from "./workflow";
-import {
-  resolveMenuImage,
-  type MenuImageSource,
-} from "./generatedMenuImages";
+import { resolveMenuImage, type MenuImageSource } from "./generatedMenuImages";
 
 export type CustomerProfile = {
   customer_number: string | null;
@@ -947,6 +944,157 @@ export async function loadOwnerOverview(
   if (startDate) qs.set("startDate", startDate);
   if (endDate) qs.set("endDate", endDate);
   return apiRequest(`/owner/overview?${qs.toString()}`);
+}
+
+// ─── Team operations ─────────────────────────
+
+export type TeamPosition = {
+  color: string;
+  default_hourly_rate: number;
+  description: string;
+  id: string;
+  name: string;
+};
+export type TeamMember = {
+  address: string;
+  calendar_color: string;
+  email: string | null;
+  emergency_contact: string;
+  full_name: string;
+  government_id_last4: string;
+  id: string;
+  max_weekly_hours: number;
+  overtime_multiplier: number;
+  pay_rate: number;
+  pay_type: "hourly" | "daily" | "weekly" | "monthly" | "fixed";
+  phone: string | null;
+  position_id: string | null;
+  position_name: string | null;
+  private_notes: string;
+  start_date: string | null;
+  status: "active" | "on_leave" | "inactive";
+};
+export type TeamShift = {
+  actual_break_minutes: number | null;
+  actual_end: string | null;
+  actual_start: string | null;
+  approved: boolean;
+  attendance_status: string;
+  break_minutes: number;
+  color: string;
+  employee_id: string;
+  full_name: string;
+  id: string;
+  notes: string;
+  position_id: string | null;
+  position_name: string | null;
+  scheduled_end: string;
+  scheduled_start: string;
+  shift_date: string;
+  work_area: string;
+};
+export type CleaningTask = {
+  area: string;
+  checklist: string[];
+  completed_at: string | null;
+  employee_id: string | null;
+  full_name: string | null;
+  id: string;
+  manager_verified: boolean;
+  notes: string;
+  task_date: string;
+  task_time: string;
+};
+export type PayrollRow = {
+  days_worked: number;
+  full_name: string;
+  id: string;
+  overtime_multiplier: number;
+  pay_rate: number;
+  pay_type: TeamMember["pay_type"];
+  worked_hours: number;
+};
+export type TeamOperationsData = {
+  cleaning: CleaningTask[];
+  employees: TeamMember[];
+  payroll: PayrollRow[];
+  positions: TeamPosition[];
+  shifts: TeamShift[];
+};
+
+export async function loadTeamOperations(weekStart: string, weekEnd: string) {
+  return apiRequest<TeamOperationsData>(
+    `/owner/team-operations?weekStart=${encodeURIComponent(weekStart)}&weekEnd=${encodeURIComponent(weekEnd)}`,
+  );
+}
+export async function createTeamPosition(input: Record<string, unknown>) {
+  return apiRequest<TeamPosition>("/owner/team-positions", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+export async function createTeamMember(input: Record<string, unknown>) {
+  return apiRequest<TeamMember>("/owner/team-members", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+export async function updateTeamMember(
+  id: string,
+  input: Record<string, unknown>,
+) {
+  return apiRequest<TeamMember>(
+    `/owner/team-members/${encodeURIComponent(id)}`,
+    {
+      body: JSON.stringify(input),
+      method: "PATCH",
+    },
+  );
+}
+export async function createTeamShift(input: Record<string, unknown>) {
+  return apiRequest<TeamShift>("/owner/team-shifts", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+export async function updateShiftAttendance(
+  id: string,
+  input: Record<string, unknown>,
+) {
+  return apiRequest<TeamShift>(
+    `/owner/team-shifts/${encodeURIComponent(id)}/attendance`,
+    {
+      body: JSON.stringify(input),
+      method: "PATCH",
+    },
+  );
+}
+export async function deleteTeamShift(id: string) {
+  return apiRequest<{ ok: boolean }>(
+    `/owner/team-shifts/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+export async function createCleaningTask(input: Record<string, unknown>) {
+  return apiRequest<CleaningTask>("/owner/cleaning-tasks", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+}
+export async function updateCleaningTask(
+  id: string,
+  input: Record<string, unknown>,
+) {
+  return apiRequest<CleaningTask>(
+    `/owner/cleaning-tasks/${encodeURIComponent(id)}`,
+    { body: JSON.stringify(input), method: "PATCH" },
+  );
+}
+export async function deleteCleaningTask(id: string) {
+  return apiRequest<{ ok: boolean }>(
+    `/owner/cleaning-tasks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
 }
 
 // ─── Payment Collection ──────────────────────
