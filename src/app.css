@@ -4069,6 +4069,56 @@ canvas {
   gap: 0.75rem;
   grid-template-columns: auto 1fr;
 }
+.team-member-card > .employee-identity {
+  grid-column: 1/-1;
+}
+.employee-identity {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+}
+.employee-identity-avatar {
+  align-items: center;
+  background: color-mix(
+    in srgb,
+    var(--employee-color, var(--gold)) 18%,
+    transparent
+  );
+  border: 2px solid var(--employee-color, var(--gold));
+  border-radius: 50%;
+  color: var(--employee-color, var(--gold));
+  display: flex;
+  flex: 0 0 auto;
+  font-weight: 800;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+.employee-identity-copy {
+  display: grid;
+  min-width: 0;
+}
+.employee-identity-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.employee-identity-copy small {
+  color: var(--employee-color, var(--muted));
+}
+.employee-identity.compact {
+  gap: 0.45rem;
+}
+.employee-identity.compact .employee-identity-avatar {
+  border-width: 1px;
+  font-size: 0.68rem;
+  height: 30px;
+  width: 30px;
+}
+.employee-identity.missing {
+  color: var(--muted);
+}
 .team-avatar {
   align-items: center;
   background: rgba(224, 170, 56, 0.14);
@@ -4233,6 +4283,28 @@ canvas {
   display: grid;
   gap: 0.65rem;
   grid-template-columns: repeat(3, 1fr);
+}
+.payroll-card {
+  border-top: 4px solid var(--employee-color, var(--gold)) !important;
+}
+.payroll-card.adjusted {
+  box-shadow:
+    0 0 0 1px
+      color-mix(in srgb, var(--employee-color, var(--gold)) 40%, transparent),
+    var(--shadow);
+}
+.payroll-card > .employee-identity,
+.payroll-card .payroll-adjustment-note,
+.payroll-card .payroll-edit-button {
+  grid-column: 1/-1;
+}
+.payroll-adjustment-note {
+  background: rgba(224, 170, 56, 0.08);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 0;
+  padding: 0.55rem;
 }
 .payroll-grid article > span,
 .payroll-grid h3,

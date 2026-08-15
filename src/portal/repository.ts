@@ -1014,13 +1014,32 @@ export type PayrollRow = {
   pay_type: TeamMember["pay_type"];
   worked_hours: number;
 };
+export type PayrollOverride = {
+  bonus: number;
+  deduction: number;
+  employee_id: string;
+  manual_days: number | null;
+  manual_hours: number | null;
+  note: string;
+};
 export type TeamOperationsData = {
   cleaning: CleaningTask[];
   employees: TeamMember[];
   payroll: PayrollRow[];
+  payrollOverrides: PayrollOverride[];
   positions: TeamPosition[];
   shifts: TeamShift[];
 };
+
+export async function savePayrollOverride(
+  employeeId: string,
+  input: Record<string, unknown>,
+) {
+  return apiRequest<PayrollOverride>(
+    `/owner/payroll-overrides/${encodeURIComponent(employeeId)}`,
+    { body: JSON.stringify(input), method: "PUT" },
+  );
+}
 
 export async function loadTeamOperations(weekStart: string, weekEnd: string) {
   return apiRequest<TeamOperationsData>(

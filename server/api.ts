@@ -3533,8 +3533,8 @@ app.get(
   asyncRoute(async (req, res) => {
     const weekStart = String(req.query.weekStart || getCairoBusinessDate());
     const weekEnd = String(req.query.weekEnd || weekStart);
-    const [positions, employees, shifts, cleaning, payroll] = await Promise.all(
-      [
+    const [positions, employees, shifts, cleaning, payroll, payrollOverrides] =
+      await Promise.all([
         query<Record<string, unknown>>(
           "select * from team_positions where active=true order by sort_order,name",
         ),
@@ -3573,9 +3573,20 @@ app.get(
          group by tm.id order by tm.full_name`,
           [weekStart, weekEnd],
         ),
-      ],
-    );
-    res.json({ positions, employees, shifts, cleaning, payroll });
+        query<Record<string, unknown>>(
+          `select employee_id,manual_days,manual_hours,bonus,deduction,note
+           from payroll_overrides where period_start=$1::date and period_end=$2::date`,
+          [weekStart, weekEnd],
+        ),
+      ]);
+    res.json({
+      positions,
+      employees,
+      shifts,
+      cleaning,
+      payroll,
+      payrollOverrides,
+    });
   }),
 );
 
@@ -3783,6 +3794,61 @@ app.delete(
     );
     if (!rows[0]) throw new HttpError(404, "Cleaning task not found.");
     res.json({ ok: true });
+  }),
+);
+
+app.put(
+  "/api/owner/payroll-overrides/:employeeId",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const periodStart = String(req.body?.periodStart || "");
+    const periodEnd = String(req.body?.periodEnd || "");
+    const manualDays =
+      req.body?.manualDays === "" || req.body?.manualDays == null
+        ? null
+        : Number(req.body.manualDays);
+    const manualHours =
+      req.body?.manualHours === "" || req.body?.manualHours == null
+        ? null
+        : Number(req.body.manualHours);
+    const bonus = Number(req.body?.bonus || 0);
+    const deduction = Number(req.body?.deduction || 0);
+    if (
+      !periodStart ||
+      !periodEnd ||
+      (manualDays != null &&
+        (!Number.isFinite(manualDays) || manualDays < 0)) ||
+      (manualHours != null &&
+        (!Number.isFinite(manualHours) || manualHours < 0)) ||
+      !Number.isFinite(bonus) ||
+      bonus < 0 ||
+      !Number.isFinite(deduction) ||
+      deduction < 0
+    ) {
+      throw new HttpError(400, "Enter valid payroll adjustments.");
+    }
+    const rows = await query<Record<string, unknown>>(
+      `insert into payroll_overrides(employee_id,period_start,period_end,manual_days,
+       manual_hours,bonus,deduction,note,updated_by)
+       values($1,$2::date,$3::date,$4,$5,$6,$7,$8,$9)
+       on conflict(employee_id,period_start,period_end) do update set
+       manual_days=excluded.manual_days,manual_hours=excluded.manual_hours,
+       bonus=excluded.bonus,deduction=excluded.deduction,note=excluded.note,
+       updated_by=excluded.updated_by returning *`,
+      [
+        req.params.employeeId,
+        periodStart,
+        periodEnd,
+        manualDays,
+        manualHours,
+        bonus,
+        deduction,
+        String(req.body?.note || "").slice(0, 1000),
+        req.auth?.sub,
+      ],
+    );
+    res.json(rows[0]);
   }),
 );
 
