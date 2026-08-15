@@ -52,6 +52,15 @@ function addDays(date: Date, amount: number) {
   next.setDate(next.getDate() + amount);
   return next;
 }
+function timeMinutes(value: string) {
+  const [hours = 0, minutes = 0] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+function shiftBounds(shift: TeamShift) {
+  const start = timeMinutes(shift.scheduled_start);
+  const rawEnd = timeMinutes(shift.scheduled_end);
+  return { start, end: rawEnd <= start ? rawEnd + 24 * 60 : rawEnd };
+}
 function formObject(form: HTMLFormElement) {
   return Object.fromEntries(new FormData(form).entries());
 }
@@ -263,6 +272,21 @@ export function TeamOperations({
   const offEmployees = data.employees.filter(
     (employee) => !workingEmployeeIds.has(employee.id),
   );
+  const activeDayShifts = selectedDayShifts.filter(
+    (shift) => shift.attendance_status !== "absent",
+  );
+  const hourlyCoverage = Array.from({ length: 24 }, (_, hour) => {
+    const hourStart = hour * 60;
+    const hourEnd = hourStart + 60;
+    return new Set(
+      activeDayShifts
+        .filter((shift) => {
+          const { start, end } = shiftBounds(shift);
+          return start < hourEnd && end > hourStart;
+        })
+        .map((shift) => shift.employee_id),
+    ).size;
+  });
   return (
     <section className="portal-section team-operations">
       <header className="team-operations-header">
@@ -419,12 +443,40 @@ export function TeamOperations({
               Print colorful schedule
             </button>
           </div>
+          <div
+            className="schedule-day-tabs"
+            role="tablist"
+            aria-label="Week days"
+          >
+            {days.map((day) => {
+              const date = iso(day);
+              const dayShifts = data.shifts.filter(
+                (shift) => shift.shift_date.slice(0, 10) === date,
+              );
+              return (
+                <button
+                  aria-selected={selectedScheduleDate === date}
+                  className={selectedScheduleDate === date ? "active" : ""}
+                  key={date}
+                  onClick={() => setSelectedScheduleDate(date)}
+                  role="tab"
+                  type="button"
+                >
+                  <span>
+                    {day.toLocaleDateString("en", { weekday: "short" })}
+                  </span>
+                  <strong>{day.getDate()}</strong>
+                  <small>{dayShifts.length} shifts</small>
+                </button>
+              );
+            })}
+          </div>
           <div className="daily-staffing-board">
             <section className="staffing-group working">
               <header>
                 <div>
                   <p className="eyebrow">Working</p>
-                  <h3>On schedule</h3>
+                  <h3>Scheduled today</h3>
                 </div>
                 <strong>{workingEmployees.length}</strong>
               </header>
@@ -478,75 +530,122 @@ export function TeamOperations({
               </div>
             </section>
           </div>
-          <div className="weekly-calendar">
-            {days.map((day) => (
-              <section
-                className={
-                  selectedScheduleDate === iso(day) ? "selected-day" : ""
-                }
-                key={iso(day)}
-              >
-                <button
-                  className="calendar-day-header"
-                  onClick={() => setSelectedScheduleDate(iso(day))}
-                  type="button"
-                >
-                  <strong>
-                    {day.toLocaleDateString("en", { weekday: "long" })}
-                  </strong>
-                  <small>{day.toLocaleDateString()}</small>
-                  <span>
+          <section className="day-timeline-section">
+            <header>
+              <div>
+                <p className="eyebrow">24-hour staffing</p>
+                <h3>Who is working each hour</h3>
+              </div>
+              <span>{activeDayShifts.length} active shifts</span>
+            </header>
+            {workingEmployees.length ? (
+              <div className="timeline-scroll">
+                <div
+                  className="timeline-board"
+                  style={
                     {
-                      data.shifts.filter(
-                        (shift) => shift.shift_date.slice(0, 10) === iso(day),
-                      ).length
-                    }{" "}
-                    shifts
-                  </span>
-                </button>
-                {data.shifts
-                  .filter((s) => s.shift_date.slice(0, 10) === iso(day))
-                  .map((shift) => (
-                    <article
-                      className="calendar-shift"
-                      key={shift.id}
-                      style={{ borderColor: shift.color }}
-                    >
-                      <EmployeeIdentity
-                        compact
-                        employee={data.employees.find(
-                          (employee) => employee.id === shift.employee_id,
-                        )}
-                      />
-                      <span>
-                        {shift.scheduled_start.slice(0, 5)}–
-                        {shift.scheduled_end.slice(0, 5)}
-                      </span>
-                      <button
-                        onClick={() => setEditingAttendance(shift)}
-                        type="button"
-                      >
-                        {shift.approved ? "✓ Edit attendance" : "Record hours"}
-                      </button>
-                      <button
-                        className="shift-remove"
-                        onClick={() => {
-                          if (
-                            window.confirm(`Remove ${shift.full_name}'s shift?`)
-                          )
-                            void deleteTeamShift(shift.id)
-                              .then(load)
-                              .catch((e: Error) => onError(e.message));
-                        }}
-                        type="button"
-                      >
-                        Remove
-                      </button>
-                    </article>
+                      "--timeline-lanes": workingEmployees.length,
+                    } as CSSProperties
+                  }
+                >
+                  <div className="timeline-corner">Time · team</div>
+                  {workingEmployees.map((employee) => (
+                    <div className="timeline-employee-header" key={employee.id}>
+                      <EmployeeIdentity compact employee={employee} />
+                    </div>
                   ))}
-              </section>
-            ))}
-          </div>
+                  <div className="timeline-hours">
+                    {hourlyCoverage.map((count, hour) => (
+                      <div key={hour}>
+                        <span>{String(hour).padStart(2, "0")}:00</span>
+                        <b>{count}</b>
+                      </div>
+                    ))}
+                  </div>
+                  {workingEmployees.map((employee) => (
+                    <div className="timeline-lane" key={employee.id}>
+                      {selectedDayShifts
+                        .filter((shift) => shift.employee_id === employee.id)
+                        .map((shift) => {
+                          const { start, end } = shiftBounds(shift);
+                          const absent = shift.attendance_status === "absent";
+                          return (
+                            <article
+                              className={`timeline-shift${absent ? " absent" : ""}`}
+                              key={shift.id}
+                              style={
+                                {
+                                  "--shift-color": shift.color,
+                                  top: `${(start / 60) * 48}px`,
+                                  height: `${Math.max(((end - start) / 60) * 48, 54)}px`,
+                                } as CSSProperties
+                              }
+                            >
+                              <strong>{shift.full_name}</strong>
+                              <span>
+                                {shift.scheduled_start.slice(0, 5)}–
+                                {shift.scheduled_end.slice(0, 5)}
+                              </span>
+                              <div className="timeline-shift-actions">
+                                <button
+                                  onClick={() => setEditingAttendance(shift)}
+                                  type="button"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="shift-absent"
+                                  onClick={() =>
+                                    void updateShiftAttendance(shift.id, {
+                                      status: absent ? "scheduled" : "absent",
+                                      actualStart: "",
+                                      actualEnd: "",
+                                      actualBreakMinutes: Number(
+                                        shift.break_minutes || 0,
+                                      ),
+                                      approved: !absent,
+                                    })
+                                      .then(load)
+                                      .catch((error: Error) =>
+                                        onError(error.message),
+                                      )
+                                  }
+                                  type="button"
+                                >
+                                  {absent ? "Restore" : "Absent"}
+                                </button>
+                                <button
+                                  className="shift-remove"
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Remove ${shift.full_name}'s shift?`,
+                                      )
+                                    )
+                                      void deleteTeamShift(shift.id)
+                                        .then(load)
+                                        .catch((error: Error) =>
+                                          onError(error.message),
+                                        );
+                                  }}
+                                  type="button"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="timeline-empty">
+                Choose an available employee above, then add their shift below.
+              </div>
+            )}
+          </section>
           <form
             className="inline-operation-form"
             onSubmit={(e) => void submit(e, createTeamShift)}
