@@ -127,6 +127,10 @@ export function TeamOperations({
     null,
   );
   const [editingPayroll, setEditingPayroll] = useState<TeamMember | null>(null);
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState(() =>
+    iso(new Date()),
+  );
+  const [selectedScheduleEmployee, setSelectedScheduleEmployee] = useState("");
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -170,7 +174,11 @@ export function TeamOperations({
     }
   }
   function shiftWeek(amount: number) {
-    setWeekStart((current) => addDays(current, amount * 7));
+    setWeekStart((current) => {
+      const next = addDays(current, amount * 7);
+      setSelectedScheduleDate(iso(next));
+      return next;
+    });
   }
   function printSheet(title: string, body: string) {
     const popup = window.open("", "_blank", "width=1200,height=850");
@@ -243,6 +251,18 @@ export function TeamOperations({
         <p>{busy ? "Loading team operations…" : "No team data available."}</p>
       </section>
     );
+  const selectedDayShifts = data.shifts.filter(
+    (shift) => shift.shift_date.slice(0, 10) === selectedScheduleDate,
+  );
+  const workingEmployeeIds = new Set(
+    selectedDayShifts.map((shift) => shift.employee_id),
+  );
+  const workingEmployees = data.employees.filter((employee) =>
+    workingEmployeeIds.has(employee.id),
+  );
+  const offEmployees = data.employees.filter(
+    (employee) => !workingEmployeeIds.has(employee.id),
+  );
   return (
     <section className="portal-section team-operations">
       <header className="team-operations-header">
@@ -383,19 +403,107 @@ export function TeamOperations({
       {section === "schedule" ? (
         <>
           <div className="section-actions">
+            <div className="schedule-day-title">
+              <span>Staffing for</span>
+              <strong>
+                {new Date(
+                  `${selectedScheduleDate}T12:00:00`,
+                ).toLocaleDateString("en", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </strong>
+            </div>
             <button onClick={printSchedule} type="button">
               Print colorful schedule
             </button>
           </div>
+          <div className="daily-staffing-board">
+            <section className="staffing-group working">
+              <header>
+                <div>
+                  <p className="eyebrow">Working</p>
+                  <h3>On schedule</h3>
+                </div>
+                <strong>{workingEmployees.length}</strong>
+              </header>
+              <div className="staffing-employee-grid">
+                {workingEmployees.length ? (
+                  workingEmployees.map((employee) => (
+                    <button
+                      key={employee.id}
+                      onClick={() => setSelectedScheduleEmployee(employee.id)}
+                      type="button"
+                    >
+                      <EmployeeIdentity employee={employee} />
+                      <small>
+                        {selectedDayShifts
+                          .filter((shift) => shift.employee_id === employee.id)
+                          .map(
+                            (shift) =>
+                              `${shift.scheduled_start.slice(0, 5)}–${shift.scheduled_end.slice(0, 5)}`,
+                          )
+                          .join(" · ")}
+                      </small>
+                    </button>
+                  ))
+                ) : (
+                  <p className="muted">No employees scheduled yet.</p>
+                )}
+              </div>
+            </section>
+            <section className="staffing-group off">
+              <header>
+                <div>
+                  <p className="eyebrow">Available</p>
+                  <h3>Off today</h3>
+                </div>
+                <strong>{offEmployees.length}</strong>
+              </header>
+              <div className="staffing-employee-grid">
+                {offEmployees.map((employee) => (
+                  <button
+                    className={
+                      selectedScheduleEmployee === employee.id ? "selected" : ""
+                    }
+                    key={employee.id}
+                    onClick={() => setSelectedScheduleEmployee(employee.id)}
+                    type="button"
+                  >
+                    <EmployeeIdentity employee={employee} />
+                    <small>Click to add a shift</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
           <div className="weekly-calendar">
             {days.map((day) => (
-              <section key={iso(day)}>
-                <header>
+              <section
+                className={
+                  selectedScheduleDate === iso(day) ? "selected-day" : ""
+                }
+                key={iso(day)}
+              >
+                <button
+                  className="calendar-day-header"
+                  onClick={() => setSelectedScheduleDate(iso(day))}
+                  type="button"
+                >
                   <strong>
                     {day.toLocaleDateString("en", { weekday: "long" })}
                   </strong>
                   <small>{day.toLocaleDateString()}</small>
-                </header>
+                  <span>
+                    {
+                      data.shifts.filter(
+                        (shift) => shift.shift_date.slice(0, 10) === iso(day),
+                      ).length
+                    }{" "}
+                    shifts
+                  </span>
+                </button>
                 {data.shifts
                   .filter((s) => s.shift_date.slice(0, 10) === iso(day))
                   .map((shift) => (
@@ -444,7 +552,14 @@ export function TeamOperations({
             onSubmit={(e) => void submit(e, createTeamShift)}
           >
             <h3>Add custom shift</h3>
-            <select name="employeeId" required>
+            <select
+              name="employeeId"
+              onChange={(event) =>
+                setSelectedScheduleEmployee(event.target.value)
+              }
+              required
+              value={selectedScheduleEmployee}
+            >
               <option value="">Employee</option>
               {data.employees.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -464,8 +579,10 @@ export function TeamOperations({
               min={iso(weekStart)}
               max={iso(weekEnd)}
               name="shiftDate"
+              onChange={(event) => setSelectedScheduleDate(event.target.value)}
               required
               type="date"
+              value={selectedScheduleDate}
             />
             <input name="start" required type="time" />
             <input name="end" required type="time" />
