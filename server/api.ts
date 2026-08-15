@@ -64,10 +64,7 @@ if (isProduction && jwtSecret.length < 32) {
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-app.use(
-  "/api/owner/menu/items/:id/image",
-  express.json({ limit: "8mb" }),
-);
+app.use("/api/owner/menu/items/:id/image", express.json({ limit: "8mb" }));
 app.use(express.json({ limit: "256kb" }));
 app.use((req, res, next) => {
   const origin = req.headers.origin?.replace(/\/$/, "");
@@ -88,7 +85,10 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
@@ -793,10 +793,9 @@ async function createOrder(
     created_by: string;
     id: string;
     order_number: string;
-  }>(
-    "select id,order_number,created_by from orders where idempotency_key=$1",
-    [input.idempotencyKey],
-  );
+  }>("select id,order_number,created_by from orders where idempotency_key=$1", [
+    input.idempotencyKey,
+  ]);
   if (existing.rows[0]) {
     if (String(existing.rows[0].created_by) !== actor.sub)
       throw new HttpError(409, "That order request key is already in use.");
@@ -1094,8 +1093,9 @@ app.post(
         paidAmount: canReceivePayment ? requestedPaidAmount : 0,
         paymentMethod: nonEmpty(req.body?.paymentMethod, 40),
         pickupName:
-          String(req.body?.pickupName || "").trim().slice(0, 120) ||
-          "Walk-in customer",
+          String(req.body?.pickupName || "")
+            .trim()
+            .slice(0, 120) || "Walk-in customer",
         voucherCode: String(req.body?.voucherCode || "").trim() || undefined,
       }),
     );
@@ -1192,8 +1192,12 @@ app.get(
       ? ["owner", "manager", "cashier"].includes(role)
       : false;
     res.json({
-      cashier: mayViewFinancials ? cashier : withoutFinancialQueueFields(cashier),
-      kitchen: mayViewFinancials ? kitchen : withoutFinancialQueueFields(kitchen),
+      cashier: mayViewFinancials
+        ? cashier
+        : withoutFinancialQueueFields(cashier),
+      kitchen: mayViewFinancials
+        ? kitchen
+        : withoutFinancialQueueFields(kitchen),
     });
   }),
 );
@@ -1322,10 +1326,18 @@ app.post(
         `insert into accounts(email,password_hash,full_name,phone,role,customer_number,account_status,notes)
        values($1,null,$2,$3,'customer','JC-' || lpad(nextval('customer_number_seq')::text,6,'0'),'guest',$4)
        returning id,full_name as "fullName",email,phone,customer_number as "customerNumber",account_status as "accountStatus",notes`,
-        [emailRaw || null, fullName, phone, String(req.body?.notes || "").trim().slice(0, 1000) || null],
+        [
+          emailRaw || null,
+          fullName,
+          phone,
+          String(req.body?.notes || "")
+            .trim()
+            .slice(0, 1000) || null,
+        ],
       );
       const customer = insertResult.rows[0];
-      if (!customer) throw new HttpError(500, "Customer creation did not return a record.");
+      if (!customer)
+        throw new HttpError(500, "Customer creation did not return a record.");
       await client.query(
         "insert into rewards_accounts(customer_id) values($1) on conflict do nothing",
         [customer.id],
@@ -1390,7 +1402,10 @@ app.patch(
     const fullName = nonEmpty(req.body?.fullName);
     const phone = normalizePhone(nonEmpty(req.body?.phone, 30));
     if (!phone) throw new HttpError(400, "Enter a valid phone number.");
-    const email = String(req.body?.email || "").trim().toLowerCase() || null;
+    const email =
+      String(req.body?.email || "")
+        .trim()
+        .toLowerCase() || null;
     if (email && !isValidEmail(email))
       throw new HttpError(400, "Enter a valid email address.");
     const updated = await transaction(async (client) => {
@@ -1417,7 +1432,9 @@ app.patch(
           fullName,
           phone,
           email,
-          String(req.body?.notes || "").trim().slice(0, 1000) || null,
+          String(req.body?.notes || "")
+            .trim()
+            .slice(0, 1000) || null,
         ],
       );
       return row.rows[0];
@@ -2157,7 +2174,10 @@ app.post(
         ? req.auth.sub
         : String(req.body?.customerId || "").trim();
     if (!customerId)
-      throw new HttpError(400, "Select a saved customer before using a voucher.");
+      throw new HttpError(
+        400,
+        "Select a saved customer before using a voucher.",
+      );
     const rows = await query<Record<string, unknown>>(
       `select id,voucher_code,voucher_type,fixed_value,percentage_value,expires_at
        from vouchers where voucher_code=$1 and customer_id=$2 and status='active'
@@ -2307,7 +2327,10 @@ app.post(
       throw new HttpError(400, "Select subscribed customers or all customers.");
     const voucherType = String(req.body?.voucherType || "fixed").trim();
     if (!new Set(["fixed", "percentage"]).has(voucherType))
-      throw new HttpError(400, "Campaign vouchers must be fixed or percentage.");
+      throw new HttpError(
+        400,
+        "Campaign vouchers must be fixed or percentage.",
+      );
     const numericValue = Number(req.body?.value);
     if (!Number.isFinite(numericValue) || numericValue <= 0)
       throw new HttpError(400, "Voucher value must be greater than zero.");
@@ -2384,7 +2407,11 @@ app.post(
           req.auth?.sub,
           req.auth?.role,
           `campaign-${Date.now()}`,
-          JSON.stringify({ audience, recipientCount: results.length, voucherType }),
+          JSON.stringify({
+            audience,
+            recipientCount: results.length,
+            voucherType,
+          }),
         ],
       );
       return results;
@@ -3134,7 +3161,9 @@ app.get(
               sum(oi.total_price - oi.quantity * oi.unit_price)::numeric(12,2) as discounts
        from order_items oi
        join orders o on o.id=oi.order_id
-       where o.status='closed' and not o.archived and ${dateCondition}
+       left join menu_items mi on mi.id=oi.menu_item_id
+       where o.status='closed' and not o.archived
+         and coalesce(mi.preparation_station,'barista')='barista' and ${dateCondition}
        group by oi.item_name_snapshot order by units_sold desc limit 10`,
           params,
         ),
@@ -3490,6 +3519,270 @@ app.post(
       ok: true,
       assigned: (updated as unknown as { rowCount: number }).rowCount || 0,
     });
+  }),
+);
+
+// ─────────────────────────────────────────────────────
+// TEAM, SCHEDULE, CLEANING & PAYROLL
+// ─────────────────────────────────────────────────────
+
+app.get(
+  "/api/owner/team-operations",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const weekStart = String(req.query.weekStart || getCairoBusinessDate());
+    const weekEnd = String(req.query.weekEnd || weekStart);
+    const [positions, employees, shifts, cleaning, payroll] = await Promise.all(
+      [
+        query<Record<string, unknown>>(
+          "select * from team_positions where active=true order by sort_order,name",
+        ),
+        query<Record<string, unknown>>(
+          `select tm.*,tp.name as position_name,tp.color as position_color
+         from team_members tm left join team_positions tp on tp.id=tm.position_id
+         where tm.status != 'inactive' order by tm.full_name`,
+        ),
+        query<Record<string, unknown>>(
+          `select ts.*,tm.full_name,tp.name as position_name,
+                coalesce(tm.calendar_color,tp.color,'#e0aa38') as color
+         from team_shifts ts join team_members tm on tm.id=ts.employee_id
+         left join team_positions tp on tp.id=ts.position_id
+         where ts.shift_date between $1::date and $2::date
+         order by ts.shift_date,ts.scheduled_start,tm.full_name`,
+          [weekStart, weekEnd],
+        ),
+        query<Record<string, unknown>>(
+          `select ct.*,tm.full_name from cleaning_tasks ct
+         left join team_members tm on tm.id=ct.employee_id
+         where ct.task_date between $1::date and $2::date
+         order by ct.task_date,ct.task_time`,
+          [weekStart, weekEnd],
+        ),
+        query<Record<string, unknown>>(
+          `select tm.id,tm.full_name,tm.pay_type,tm.pay_rate,tm.overtime_multiplier,
+          count(distinct ts.shift_date) filter (where ts.attendance_status in ('worked','paid_leave'))::int as days_worked,
+          coalesce(sum(
+            case when ts.attendance_status='worked' then
+              greatest(extract(epoch from (coalesce(ts.actual_end,ts.scheduled_end)-coalesce(ts.actual_start,ts.scheduled_start)))/3600
+                - coalesce(ts.actual_break_minutes,ts.break_minutes)/60.0,0)
+            else 0 end),0)::numeric(8,2) as worked_hours
+         from team_members tm left join team_shifts ts on ts.employee_id=tm.id
+           and ts.shift_date between $1::date and $2::date and ts.approved=true
+         where tm.status != 'inactive'
+         group by tm.id order by tm.full_name`,
+          [weekStart, weekEnd],
+        ),
+      ],
+    );
+    res.json({ positions, employees, shifts, cleaning, payroll });
+  }),
+);
+
+app.post(
+  "/api/owner/team-positions",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const name = String(req.body?.name || "").trim();
+    if (!name) throw new HttpError(400, "Position name is required.");
+    const rows = await query<Record<string, unknown>>(
+      `insert into team_positions(name,color,default_hourly_rate,description)
+       values($1,$2,$3,$4) returning *`,
+      [
+        name,
+        String(req.body?.color || "#e0aa38"),
+        Number(req.body?.defaultHourlyRate || 0),
+        String(req.body?.description || ""),
+      ],
+    );
+    res.status(201).json(rows[0]);
+  }),
+);
+
+app.post(
+  "/api/owner/team-members",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const fullName = String(req.body?.fullName || "").trim();
+    if (!fullName) throw new HttpError(400, "Employee name is required.");
+    const idDigits = String(req.body?.governmentId || "").replace(/\D/g, "");
+    const rows = await query<Record<string, unknown>>(
+      `insert into team_members(full_name,email,phone,address,emergency_contact,
+        government_id_last4,start_date,position_id,pay_type,pay_rate,max_weekly_hours,
+        overtime_multiplier,calendar_color,private_notes)
+       values($1,nullif($2,''),nullif($3,''),$4,$5,$6,nullif($7,'')::date,nullif($8,'')::uuid,$9,$10,$11,$12,$13,$14)
+       returning *`,
+      [
+        fullName,
+        String(req.body?.email || "").trim(),
+        String(req.body?.phone || "").trim(),
+        String(req.body?.address || ""),
+        String(req.body?.emergencyContact || ""),
+        idDigits.slice(-4),
+        String(req.body?.startDate || ""),
+        String(req.body?.positionId || ""),
+        String(req.body?.payType || "hourly"),
+        Number(req.body?.payRate || 0),
+        Number(req.body?.maxWeeklyHours || 40),
+        Number(req.body?.overtimeMultiplier || 1.5),
+        String(req.body?.calendarColor || "#e0aa38"),
+        String(req.body?.privateNotes || ""),
+      ],
+    );
+    res.status(201).json(rows[0]);
+  }),
+);
+
+app.patch(
+  "/api/owner/team-members/:id",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const rows = await query<Record<string, unknown>>(
+      `update team_members set full_name=$2,email=nullif($3,''),phone=nullif($4,''),address=$5,
+       emergency_contact=$6,position_id=nullif($7,'')::uuid,pay_type=$8,pay_rate=$9,
+       max_weekly_hours=$10,overtime_multiplier=$11,calendar_color=$12,private_notes=$13,status=$14
+       where id=$1 returning *`,
+      [
+        req.params.id,
+        String(req.body?.fullName || "").trim(),
+        String(req.body?.email || "").trim(),
+        String(req.body?.phone || "").trim(),
+        String(req.body?.address || ""),
+        String(req.body?.emergencyContact || ""),
+        String(req.body?.positionId || ""),
+        String(req.body?.payType || "hourly"),
+        Number(req.body?.payRate || 0),
+        Number(req.body?.maxWeeklyHours || 40),
+        Number(req.body?.overtimeMultiplier || 1.5),
+        String(req.body?.calendarColor || "#e0aa38"),
+        String(req.body?.privateNotes || ""),
+        String(req.body?.status || "active"),
+      ],
+    );
+    if (!rows[0]) throw new HttpError(404, "Employee not found.");
+    res.json(rows[0]);
+  }),
+);
+
+app.post(
+  "/api/owner/team-shifts",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const rows = await query<Record<string, unknown>>(
+      `insert into team_shifts(employee_id,position_id,shift_date,scheduled_start,scheduled_end,
+       break_minutes,work_area,notes) values($1,nullif($2,'')::uuid,$3::date,$4::time,$5::time,$6,$7,$8) returning *`,
+      [
+        String(req.body?.employeeId || ""),
+        String(req.body?.positionId || ""),
+        String(req.body?.shiftDate || ""),
+        String(req.body?.start || ""),
+        String(req.body?.end || ""),
+        Number(req.body?.breakMinutes || 0),
+        String(req.body?.workArea || ""),
+        String(req.body?.notes || ""),
+      ],
+    );
+    res.status(201).json(rows[0]);
+  }),
+);
+
+app.patch(
+  "/api/owner/team-shifts/:id/attendance",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const rows = await query<Record<string, unknown>>(
+      `update team_shifts set attendance_status=$2,actual_start=nullif($3,'')::time,
+       actual_end=nullif($4,'')::time,actual_break_minutes=$5,approved=$6 where id=$1 returning *`,
+      [
+        req.params.id,
+        String(req.body?.status || "worked"),
+        String(req.body?.actualStart || ""),
+        String(req.body?.actualEnd || ""),
+        Number(req.body?.actualBreakMinutes || 0),
+        Boolean(req.body?.approved),
+      ],
+    );
+    if (!rows[0]) throw new HttpError(404, "Shift not found.");
+    res.json(rows[0]);
+  }),
+);
+
+app.delete(
+  "/api/owner/team-shifts/:id",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const rows = await query<Record<string, unknown>>(
+      "delete from team_shifts where id=$1 returning id",
+      [req.params.id],
+    );
+    if (!rows[0]) throw new HttpError(404, "Shift not found.");
+    res.json({ ok: true });
+  }),
+);
+
+app.post(
+  "/api/owner/cleaning-tasks",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const checklist = Array.isArray(req.body?.checklist)
+      ? req.body.checklist
+      : [];
+    const rows = await query<Record<string, unknown>>(
+      `insert into cleaning_tasks(task_date,task_time,area,employee_id,checklist,notes)
+       values($1::date,$2::time,$3,nullif($4,'')::uuid,$5::jsonb,$6) returning *`,
+      [
+        String(req.body?.taskDate || ""),
+        String(req.body?.taskTime || ""),
+        String(req.body?.area || "Bathroom"),
+        String(req.body?.employeeId || ""),
+        JSON.stringify(checklist),
+        String(req.body?.notes || ""),
+      ],
+    );
+    res.status(201).json(rows[0]);
+  }),
+);
+
+app.patch(
+  "/api/owner/cleaning-tasks/:id",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const completed = Boolean(req.body?.completed);
+    const rows = await query<Record<string, unknown>>(
+      `update cleaning_tasks set completed_at=case when $2 then now() else null end,
+       employee_initials=$3,manager_verified=$4,notes=$5 where id=$1 returning *`,
+      [
+        req.params.id,
+        completed,
+        String(req.body?.employeeInitials || ""),
+        Boolean(req.body?.managerVerified),
+        String(req.body?.notes || ""),
+      ],
+    );
+    if (!rows[0]) throw new HttpError(404, "Cleaning task not found.");
+    res.json(rows[0]);
+  }),
+);
+
+app.delete(
+  "/api/owner/cleaning-tasks/:id",
+  authenticate,
+  requireRoles("owner"),
+  asyncRoute(async (req, res) => {
+    const rows = await query<Record<string, unknown>>(
+      "delete from cleaning_tasks where id=$1 returning id",
+      [req.params.id],
+    );
+    if (!rows[0]) throw new HttpError(404, "Cleaning task not found.");
+    res.json({ ok: true });
   }),
 );
 
