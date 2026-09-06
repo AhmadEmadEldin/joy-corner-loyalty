@@ -3,7 +3,9 @@ name: Sync Neon Reporting to Google Sheets
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    # One daily export at 02:00 UTC; frequent queries prevent Neon sleeping.
+    # Use workflow_dispatch above for an additional on-demand export.
+    - cron: "0 2 * * *"
 
 permissions:
   contents: read
