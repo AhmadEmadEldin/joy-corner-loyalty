@@ -77,7 +77,7 @@ const config: Configuration & { devServer?: DevServerConfiguration } = {
     port,
     proxy: [
       {
-        context: ["/api", "/health"],
+        context: ["/api", "/health", "/ready"],
         target: `http://localhost:${process.env.API_PORT || 3001}`,
       },
     ],

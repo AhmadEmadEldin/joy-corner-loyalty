@@ -1097,8 +1097,9 @@ function OwnerSystemStatus() {
     }
 
     try {
-      const resp = await fetch(`${backendUrl}/ready`, {
-        signal: AbortSignal.timeout(8000),
+      const resp = await fetch(`${backendUrl}/ready/database`, {
+        // Allow the backend's 10-second connection timeout plus wake-up overhead.
+        signal: AbortSignal.timeout(15000),
       });
       const data = await resp.json();
       results.push({

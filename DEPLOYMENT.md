@@ -11,8 +11,10 @@ Deploy this repository as a Docker service. The included `Dockerfile` builds the
 - Build method: repository `Dockerfile`
 - Port: `3001` (HTTP, publicly exposed)
 - Health check: `GET /health`
-- Routine readiness probe: `GET /health` (process availability only)
-- Manual database diagnostic: `GET /ready` (queries Neon and wakes its compute; do not poll it)
+- Routine readiness probe: `GET /ready` (configuration checks only; does not query Neon)
+- Manual database diagnostic: `GET /ready/database` (queries Neon and wakes its compute; do not poll it)
+
+`/ready` confirms configuration, not live database availability. It can return 200 during a database outage; use `/ready/database` when investigating one. The owner System Status screen runs this diagnostic when opened or refreshed. Clients that previously read `checks.database` from `/ready` must use `/ready/database` instead. Deploy the frontend and API together so the diagnostic URL stays in sync.
 
 Required variables:
 
@@ -36,7 +38,7 @@ The GitHub Actions workflow exports once daily at 02:00 UTC, or on demand using 
 
 ## Staying within Neon's free compute allowance
 
-Keep scale-to-zero enabled (five idle minutes on Free). Start with 0.25 CU for a small workload and review performance before increasing the compute limit. All active branch computes contribute to project usage. Use `/health` for uptime monitors and Northflank probes; reserve `/ready` for manual diagnostics. The app's pool already releases idle connections after 30 seconds.
+Keep scale-to-zero enabled (five idle minutes on Free). Start with 0.25 CU for a small workload and review performance before increasing the compute limit. All active branch computes contribute to project usage. Use `/health` for uptime monitors and Northflank probes; reserve `/ready/database` for manual diagnostics. The app's pool already releases idle connections after 30 seconds.
 
 Sleeping preserves the database and wakes it on the next connection. It does not replenish an exhausted monthly quota. If Neon has suspended the project for quota exhaustion, wait for the quota reset or change plans before restarting the backend. Do not repeatedly restart it: startup applies migrations and synchronizes configured staff accounts, which requires database access.
 

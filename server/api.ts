@@ -14,6 +14,7 @@ import {
   applyNeonMigrations,
   closeNeonPool,
   neonHealth,
+  neonConfigured,
   query,
   transaction,
 } from "./neon";
@@ -348,6 +349,19 @@ app.get(
 
 app.get(
   "/ready",
+  asyncRoute(async (_req, res) => {
+    // Hosting probes must not wake an otherwise idle database.
+    const checks = {
+      databaseConfig: { ok: neonConfigured() },
+      config: { ok: Boolean(jwtSecret && jwtSecret.length >= 16) },
+    };
+    const allOk = Object.values(checks).every((check) => check.ok);
+    res.status(allOk ? 200 : 503).json({ ok: allOk, checks });
+  }),
+);
+
+app.get(
+  "/ready/database",
   asyncRoute(async (_req, res) => {
     const checks: Record<
       string,
